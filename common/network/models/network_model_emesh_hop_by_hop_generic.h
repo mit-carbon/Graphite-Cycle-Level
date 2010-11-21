@@ -6,8 +6,9 @@
 #include "fixed_types.h"
 #include "queue_model.h"
 #include "lock.h"
-#include "electrical_network_router_model.h"
-#include "electrical_network_link_model.h"
+#include "router_power_model.h"
+#include "electrical_link_performance_model.h"
+#include "electrical_link_power_model.h"
 
 class NetworkModelEMeshHopByHopGeneric : public NetworkModel
 {
@@ -32,8 +33,10 @@ class NetworkModelEMeshHopByHopGeneric : public NetworkModel
       UInt32 m_num_router_ports;
       UInt64 m_hop_latency;
 
-      ElectricalNetworkRouterModel* m_electrical_router_model;
-      ElectricalNetworkLinkModel* m_electrical_link_model;
+      // Router & Link models
+      RouterPowerModel* m_electrical_router_power_model;
+      ElectricalLinkPerformanceModel* m_electrical_link_performance_model;
+      ElectricalLinkPowerModel* m_electrical_link_power_model;
 
       QueueModel* m_queue_models[NUM_OUTPUT_DIRECTIONS];
       QueueModel* m_injection_port_queue_model;

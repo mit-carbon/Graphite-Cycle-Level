@@ -121,12 +121,12 @@ NetworkModelEMeshHopByHopGeneric::createRouterAndLinkModels()
    // Router & Link are clocked at the same frequency
    m_num_router_ports = 5;
 
-   m_electrical_router_model = ElectricalNetworkRouterModel::create(m_num_router_ports, \
+   m_electrical_router_power_model = RouterPowerModel::create(m_num_router_ports, \
          m_num_router_ports, m_num_flits_per_output_buffer, m_link_width);
-   m_electrical_link_model = ElectricalNetworkLinkModel::create(m_link_type, \
-         m_frequency, \
-         m_link_length, \
-         m_link_width);
+   m_electrical_link_performance_model = ElectricalLinkPerformanceModel::create(m_link_type, \
+         m_frequency, m_link_length, m_link_width, 1 /* fanout */);
+   m_electrical_link_power_model = ElectricalLinkPowerModel::create(m_link_type, \
+         m_frequency, m_link_length, m_link_width, 1 /* fanout */);
 
    // It is possible that one hop can be accomodated in one cycles by
    // intelligent circuit design but for simplicity, here we consider
@@ -134,7 +134,7 @@ NetworkModelEMeshHopByHopGeneric::createRouterAndLinkModels()
 
    // NetworkLinkModel::getDelay() gets delay in cycles (clock frequency is the link frequency)
    // The link frequency is the same as the network frequency here
-   UInt64 link_delay = m_electrical_link_model->getDelay();
+   UInt64 link_delay = m_electrical_link_performance_model->getDelay();
    LOG_ASSERT_WARNING(link_delay <= 1, "Network Link Delay(%llu) exceeds 1 cycle", link_delay);
    
    m_hop_latency = m_router_delay + link_delay;
@@ -164,8 +164,9 @@ NetworkModelEMeshHopByHopGeneric::initializeActivityCounters()
 void
 NetworkModelEMeshHopByHopGeneric::destroyRouterAndLinkModels()
 {
-   delete m_electrical_router_model;
-   delete m_electrical_link_model;
+   delete m_electrical_router_power_model;
+   delete m_electrical_link_performance_model;
+   delete m_electrical_link_power_model;
 }
 
 UInt32
@@ -600,8 +601,8 @@ NetworkModelEMeshHopByHopGeneric::reset()
    initializeActivityCounters();
    
    // Reset Router & Link Models
-   m_electrical_router_model->resetCounters();
-   m_electrical_link_model->resetCounters();
+   m_electrical_router_power_model->resetCounters();
+   m_electrical_link_power_model->resetCounters();
 }
 
 pair<bool,SInt32>
@@ -771,16 +772,16 @@ NetworkModelEMeshHopByHopGeneric::updateDynamicEnergy(const NetPacket& pkt,
    // So, we dont need to update dynamic energies again
    if (Config::getSingleton()->getEnablePowerModeling())
    {
-      m_electrical_router_model->updateDynamicEnergySwitchAllocator(contention);
-      m_electrical_router_model->updateDynamicEnergyClock();
+      m_electrical_router_power_model->updateDynamicEnergySwitchAllocator(contention);
+      m_electrical_router_power_model->updateDynamicEnergyClock();
    }
    m_switch_allocator_traversals ++;
 
    // Assume half of the bits flip while crossing the crossbar 
    if (Config::getSingleton()->getEnablePowerModeling())
    {
-      m_electrical_router_model->updateDynamicEnergyCrossbar(m_link_width/2, num_flits); 
-      m_electrical_router_model->updateDynamicEnergyClock(num_flits);
+      m_electrical_router_power_model->updateDynamicEnergyCrossbar(m_link_width/2, num_flits); 
+      m_electrical_router_power_model->updateDynamicEnergyClock(num_flits);
    }
    m_crossbar_traversals += num_flits;
   
@@ -790,14 +791,16 @@ NetworkModelEMeshHopByHopGeneric::updateDynamicEnergy(const NetPacket& pkt,
       if (Config::getSingleton()->getEnablePowerModeling())
       {
          // Buffer Write Energy
-         m_electrical_router_model->updateDynamicEnergyBuffer(ElectricalNetworkRouterModel::BufferAccess::WRITE, \
+         m_electrical_router_power_model->updateDynamicEnergyBuffer( \
+               RouterPowerModel::BufferAccess::WRITE, \
                m_link_width/2, num_flits);
-         m_electrical_router_model->updateDynamicEnergyClock(num_flits);
+         m_electrical_router_power_model->updateDynamicEnergyClock(num_flits);
     
          // Buffer Read Energy
-         m_electrical_router_model->updateDynamicEnergyBuffer(ElectricalNetworkRouterModel::BufferAccess::READ, \
+         m_electrical_router_power_model->updateDynamicEnergyBuffer( \
+               RouterPowerModel::BufferAccess::READ, \
                m_link_width/2, num_flits);
-         m_electrical_router_model->updateDynamicEnergyClock(num_flits);
+         m_electrical_router_power_model->updateDynamicEnergyClock(num_flits);
       }
 
       m_buffer_accesses += num_flits;
@@ -806,7 +809,7 @@ NetworkModelEMeshHopByHopGeneric::updateDynamicEnergy(const NetPacket& pkt,
    // 2) Electrical Link
    if (Config::getSingleton()->getEnablePowerModeling())
    {
-      m_electrical_link_model->updateDynamicEnergy(m_link_width/2, num_flits);
+      m_electrical_link_power_model->updateDynamicEnergy(m_link_width/2, num_flits);
    }
    m_link_traversals += num_flits;
 }
@@ -817,8 +820,10 @@ NetworkModelEMeshHopByHopGeneric::outputPowerSummary(ostream& out)
    if (Config::getSingleton()->getEnablePowerModeling())
    {
       // We need to get the power of the router + all the outgoing links (a total of 4 outputs)
-      volatile double static_power = m_electrical_router_model->getTotalStaticPower() + (m_electrical_link_model->getStaticPower() * NUM_OUTPUT_DIRECTIONS);
-      volatile double dynamic_energy = m_electrical_router_model->getTotalDynamicEnergy() + m_electrical_link_model->getDynamicEnergy();
+      volatile double static_power = m_electrical_router_power_model->getTotalStaticPower() + \
+                                     (m_electrical_link_power_model->getStaticPower() * NUM_OUTPUT_DIRECTIONS);
+      volatile double dynamic_energy = m_electrical_router_power_model->getTotalDynamicEnergy() + \
+                                       m_electrical_link_power_model->getDynamicEnergy();
 
       out << "    Static Power: " << static_power << endl;
       out << "    Dynamic Energy: " << dynamic_energy << endl;

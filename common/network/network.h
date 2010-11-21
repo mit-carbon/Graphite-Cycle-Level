@@ -4,6 +4,8 @@
 #include <iostream>
 #include <vector>
 #include <list>
+using namespace std;
+
 #include "packet_type.h"
 #include "fixed_types.h"
 #include "cond.h"
@@ -27,17 +29,26 @@ public:
    
    SInt32 sender;
    SInt32 receiver;
-   
-   // This field may be used by specific network models in whatever way they please
-   UInt32 specific;
-   
+
    UInt32 length;
    const void *data;
 
+   // Is Raw/Modeling Packet
+   bool is_raw;
+   // Sequence Number
+   UInt64 sequence_num;
+
+   // This field may be used by specific network models in whatever way they please
+   UInt32 specific;
+   
+   // Constructors
    NetPacket();
    explicit NetPacket(Byte*);
-   NetPacket(UInt64 time, PacketType type, SInt32 sender, 
-             SInt32 receiver, UInt32 length, const void *data);
+   NetPacket(UInt64 time, PacketType type, UInt32 length, const void *data, \
+             bool is_raw = true, UInt64 sequence_num = 0);
+   NetPacket(UInt64 time, PacketType type, SInt32 sender, \
+             SInt32 receiver, UInt32 length, const void *data, \
+             bool is_raw = true, UInt64 sequence_num = 0);
 
    UInt32 bufferSize() const;
    Byte *makeBuffer() const;
@@ -45,15 +56,15 @@ public:
    static const SInt32 BROADCAST = 0xDEADBABE;
 };
 
-typedef std::list<NetPacket> NetQueue;
+typedef list<NetPacket> NetQueue;
 
 // -- Network Matches -- //
 
 class NetMatch
 {
    public:
-      std::vector<SInt32> senders;
-      std::vector<PacketType> types;
+      vector<SInt32> senders;
+      vector<PacketType> types;
 };
 
 // -- Network -- //
@@ -79,7 +90,7 @@ class Network
 
       void unregisterCallback(PacketType type);
 
-      void outputSummary(std::ostream &out) const;
+      void outputSummary(ostream &out) const;
 
       void netPullFromTransport();
 
@@ -123,6 +134,9 @@ class Network
       ConditionVariable _netQueueCond;
 
       SInt32 forwardPacket(const NetPacket& packet);
+      void receivePacket(NetPacket& packet);
+      void sendPacketList(const list<NetPacket*>& net_packet_list_to_send);
+      void receivePacketList(const list<NetPacket*>& net_packet_list_to_receive);
 };
 
 #endif // NETWORK_H

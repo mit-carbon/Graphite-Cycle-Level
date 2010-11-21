@@ -8,8 +8,18 @@ DIRECTORIES = $(SIM_ROOT)/common/core/        									\
 			 $(SIM_ROOT)/common/core/memory_subsystem/directory_schemes/	\
           $(SIM_ROOT)/common/network/         									\
 			 $(SIM_ROOT)/common/network/models	 									\
-			 $(SIM_ROOT)/common/network/components/router/						\
-			 $(SIM_ROOT)/common/network/components/link/							\
+			 $(SIM_ROOT)/common/network/components/router	   				\
+			 $(SIM_ROOT)/common/network/components/router/performance	   \
+			 $(SIM_ROOT)/common/network/components/router/performance/flow_control_schemes	   							\
+			 $(SIM_ROOT)/common/network/components/router/performance/flow_control_schemes/buffer_models	   			\
+			 $(SIM_ROOT)/common/network/components/router/performance/flow_control_schemes/buffer_usage_history	   \
+			 $(SIM_ROOT)/common/network/components/router/performance/network_msg_types									   \
+			 $(SIM_ROOT)/common/network/components/router/performance/network_msg_types/flit_types						   \
+			 $(SIM_ROOT)/common/network/components/router/performance/network_msg_types/buffer_management_msg_types  \
+			 $(SIM_ROOT)/common/network/components/router/power				\
+			 $(SIM_ROOT)/common/network/components/link							\
+			 $(SIM_ROOT)/common/network/components/link/performance			\
+			 $(SIM_ROOT)/common/network/components/link/power     			\
           $(SIM_ROOT)/common/transport/       									\
           $(SIM_ROOT)/common/misc/            									\
           $(SIM_ROOT)/common/config/	      									\

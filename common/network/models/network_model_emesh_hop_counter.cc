@@ -78,13 +78,13 @@ NetworkModelEMeshHopCounter::createRouterAndLinkModels()
    
    _num_router_ports = 5;
 
-   _electrical_router_model = ElectricalNetworkRouterModel::create(_num_router_ports, \
+   _electrical_router_power_model = RouterPowerModel::create(_num_router_ports, \
          _num_router_ports, num_flits_per_output_buffer, _link_width);
    
-   _electrical_link_model = ElectricalNetworkLinkModel::create(_link_type, \
-         _frequency, \
-         link_length, \
-         _link_width);
+   _electrical_link_performance_model = ElectricalLinkPerformanceModel::create(_link_type, \
+         _frequency, link_length, _link_width, 1 /* fanout */);
+   _electrical_link_power_model = ElectricalLinkPowerModel::create(_link_type, \
+         _frequency, link_length, _link_width, 1 /* fanout */);
 
    // It is possible that one hop can be accomodated in one cycles by
    // intelligent circuit design but for simplicity, here we consider
@@ -92,7 +92,7 @@ NetworkModelEMeshHopCounter::createRouterAndLinkModels()
 
    // NetworkLinkModel::getDelay() gets delay in cycles (clock frequency is the link frequency)
    // The link frequency is the same as the network frequency here
-   UInt64 link_delay = _electrical_link_model->getDelay();
+   UInt64 link_delay = _electrical_link_performance_model->getDelay();
    LOG_ASSERT_WARNING(link_delay <= 1, "Network Link Delay(%llu) exceeds 1 cycle", link_delay);
    
    _hop_latency = router_delay + link_delay;
@@ -111,8 +111,9 @@ NetworkModelEMeshHopCounter::initializeActivityCounters()
 void
 NetworkModelEMeshHopCounter::destroyRouterAndLinkModels()
 {
-   delete _electrical_router_model;
-   delete _electrical_link_model;
+   delete _electrical_router_power_model;
+   delete _electrical_link_performance_model;
+   delete _electrical_link_power_model;
 }
 
 void
@@ -276,8 +277,8 @@ NetworkModelEMeshHopCounter::reset()
    initializeActivityCounters();
    
    // Router & Link Models
-   _electrical_router_model->resetCounters();
-   _electrical_link_model->resetCounters();
+   _electrical_router_power_model->resetCounters();
+   _electrical_link_power_model->resetCounters();
 }
 
 void
@@ -316,23 +317,23 @@ NetworkModelEMeshHopCounter::updateDynamicEnergy(const NetPacket& pkt,
    // So, we dont need to update dynamic energies again
    if (Config::getSingleton()->getEnablePowerModeling())
    {
-      _electrical_router_model->updateDynamicEnergySwitchAllocator(contention, num_hops);
-      _electrical_router_model->updateDynamicEnergyClock(num_hops);
+      _electrical_router_power_model->updateDynamicEnergySwitchAllocator(contention, num_hops);
+      _electrical_router_power_model->updateDynamicEnergyClock(num_hops);
    }
    _switch_allocator_traversals += num_hops;
 
    // Assume half of the bits flip while crossing the crossbar 
    if (Config::getSingleton()->getEnablePowerModeling())
    {
-      _electrical_router_model->updateDynamicEnergyCrossbar(_link_width/2, num_flits * num_hops); 
-      _electrical_router_model->updateDynamicEnergyClock(num_flits * num_hops);
+      _electrical_router_power_model->updateDynamicEnergyCrossbar(_link_width/2, num_flits * num_hops); 
+      _electrical_router_power_model->updateDynamicEnergyClock(num_flits * num_hops);
    }
    _crossbar_traversals += (num_flits * num_hops);
   
    // 2) Electrical Link
    if (Config::getSingleton()->getEnablePowerModeling())
    {
-      _electrical_link_model->updateDynamicEnergy(_link_width/2, num_flits * num_hops);
+      _electrical_link_power_model->updateDynamicEnergy(_link_width/2, num_flits * num_hops);
    }
    _link_traversals += (num_flits * num_hops);
 }
@@ -343,12 +344,14 @@ NetworkModelEMeshHopCounter::outputPowerSummary(ostream& out)
    if (Config::getSingleton()->getEnablePowerModeling())
    {
       LOG_PRINT("Router Static Power(%g), Link Static Power(%g)", \
-            _electrical_router_model->getTotalStaticPower(), \
-            _electrical_link_model->getStaticPower() * _NUM_OUTPUT_DIRECTIONS);
+            _electrical_router_power_model->getTotalStaticPower(), \
+            _electrical_link_power_model->getStaticPower() * _NUM_OUTPUT_DIRECTIONS);
 
       // We need to get the power of the router + all the outgoing links (a total of 4 outputs)
-      volatile double static_power = _electrical_router_model->getTotalStaticPower() + (_electrical_link_model->getStaticPower() * _NUM_OUTPUT_DIRECTIONS);
-      volatile double dynamic_energy = _electrical_router_model->getTotalDynamicEnergy() + _electrical_link_model->getDynamicEnergy();
+      volatile double static_power = _electrical_router_power_model->getTotalStaticPower() + \
+                                     (_electrical_link_power_model->getStaticPower() * _NUM_OUTPUT_DIRECTIONS);
+      volatile double dynamic_energy = _electrical_router_power_model->getTotalDynamicEnergy() + \
+                                       _electrical_link_power_model->getDynamicEnergy();
 
       out << "    Static Power: " << static_power << endl;
       out << "    Dynamic Energy: " << dynamic_energy << endl;

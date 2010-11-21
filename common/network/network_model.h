@@ -26,7 +26,7 @@ class Network;
 class NetworkModel
 {
    public:
-      NetworkModel(Network *network, SInt32 network_id);
+      NetworkModel(Network *network, SInt32 network_id, bool is_finite_buffer = false);
       virtual ~NetworkModel() { }
 
       class Hop
@@ -77,6 +77,7 @@ class NetworkModel
       virtual void disable() = 0;
       virtual void reset() = 0;
 
+      bool isFiniteBuffer() { return _is_finite_buffer; }
       static NetworkModel *createModel(Network* network, SInt32 network_id, UInt32 model_type);
       static UInt32 parseNetworkType(std::string str);
 
@@ -92,6 +93,8 @@ class NetworkModel
       
       SInt32 _network_id;
       std::string _network_name;
+
+      bool _is_finite_buffer;
 };
 
 #endif // NETWORK_MODEL_H

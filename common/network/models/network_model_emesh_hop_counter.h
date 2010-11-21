@@ -4,8 +4,9 @@
 #include "network.h"
 #include "network_model.h"
 #include "lock.h"
-#include "electrical_network_link_model.h"
-#include "electrical_network_router_model.h"
+#include "router_power_model.h"
+#include "electrical_link_performance_model.h"
+#include "electrical_link_power_model.h"
 
 class NetworkModelEMeshHopCounter : public NetworkModel
 {
@@ -46,8 +47,9 @@ private:
    Lock _lock;
 
    // Router & Link Models
-   ElectricalNetworkRouterModel* _electrical_router_model;
-   ElectricalNetworkLinkModel* _electrical_link_model;
+   RouterPowerModel* _electrical_router_power_model;
+   ElectricalLinkPerformanceModel* _electrical_link_performance_model;
+   ElectricalLinkPowerModel* _electrical_link_power_model;
 
    // Performance Counters
    UInt64 _num_packets;

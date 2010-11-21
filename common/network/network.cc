@@ -8,6 +8,7 @@
 #include "core_manager.h"
 #include "clock_converter.h"
 #include "fxsupport.h"
+#include "finite_buffer_network_model.h"
 #include "log.h"
 
 using namespace std;
@@ -99,66 +100,108 @@ void Network::netPullFromTransport()
             "Packet type: %d not between 0 and %d", packet.type, NUM_PACKET_TYPES);
 
       NetworkModel* model = getNetworkModelFromPacketType(packet.type);
-     
-      UInt32 action = model->computeAction(packet);
-      
-      if (action & NetworkModel::RoutingAction::FORWARD)
+
+      if (model->isFiniteBuffer())
       {
-         LOG_PRINT("Forwarding packet : type %i, from %i, to %i, core_id %i, time %llu.", 
-               (SInt32)packet.type, packet.sender, packet.receiver, _core->getId(), packet.time);
-         forwardPacket(packet);
+         FiniteBufferNetworkModel* finite_buffer_model = (FiniteBufferNetworkModel*) model;
+
+         list<NetPacket*> net_packet_list_to_send;
+         list<NetPacket*> net_packet_list_to_receive;
+         finite_buffer_model->receiveNetPacket(&packet, net_packet_list_to_send, net_packet_list_to_receive);
+
+         sendPacketList(net_packet_list_to_send);
+         receivePacketList(net_packet_list_to_receive);
       }
-      
-      if (action & NetworkModel::RoutingAction::RECEIVE)
+      else // (! model->isFiniteBuffer())
       {
-         LOG_PRINT("Before Processing Received Packet: packet.time(%llu)", packet.time);
+         UInt32 action = model->computeAction(packet);
          
-         // I have accepted the packet - process the received packet
-         model->processReceivedPacket(packet);
-
-         LOG_PRINT("After Processing Received Packet: packet.time(%llu)", packet.time);
-         
-         // Convert from network cycle count to core cycle count
-         packet.time = convertCycleCount(packet.time, \
-               getNetworkModelFromPacketType(packet.type)->getFrequency(), \
-               _core->getPerformanceModel()->getFrequency());
-    
-         LOG_PRINT("After Converting Cycle Count: packet.time(%llu)", packet.time);
-         
-         // asynchronous I/O support
-         NetworkCallback callback = _callbacks[packet.type];
-
-         if (callback != NULL)
+         if (action & NetworkModel::RoutingAction::FORWARD)
          {
-            LOG_PRINT("Executing callback on packet : type %i, from %i, to %i, core_id %i, cycle_count %llu", 
+            LOG_PRINT("Forwarding packet : type %i, from %i, to %i, core_id %i, time %llu.", 
                   (SInt32)packet.type, packet.sender, packet.receiver, _core->getId(), packet.time);
-            assert(0 <= packet.sender && packet.sender < _numMod);
-            assert(0 <= packet.type && packet.type < NUM_PACKET_TYPES);
+            forwardPacket(packet);
+         }
+         if (action & NetworkModel::RoutingAction::RECEIVE)
+         {
+            LOG_PRINT("Before Processing Received Packet: packet.time(%llu)", packet.time);
+            
+            // I have accepted the packet - process the received packet
+            model->processReceivedPacket(packet);
 
-            callback(_callbackObjs[packet.type], packet);
+            LOG_PRINT("After Processing Received Packet: packet.time(%llu)", packet.time);
 
+            receivePacket(packet);
+         }
+         else // if (!(action & NetworkModel::RoutingAction::RECEIVE))
+         {
             if (packet.length > 0)
                delete [] (Byte*) packet.data;
          }
-
-         // synchronous I/O support
-         else
-         {
-            LOG_PRINT("Enqueuing packet : type %i, from %i, to %i, core_id %i, cycle_count %llu", 
-                  (SInt32)packet.type, packet.sender, packet.receiver, _core->getId(), packet.time);
-            _netQueueLock.acquire();
-            _netQueue.push_back(packet);
-            _netQueueLock.release();
-            _netQueueCond.broadcast();
-         }
-      }
-      else // if ((action & NetworkModel::RoutingAction::RECEIVE) == 0)
-      {
-         if (packet.length > 0)
-            delete [] (Byte*) packet.data;
       }
    }
    while (_transport->query());
+}
+
+void Network::receivePacket(NetPacket& packet)
+{  
+   // Convert time (cycle count) from network frequency to core frequency
+   packet.time = convertCycleCount(packet.time, \
+         getNetworkModelFromPacketType(packet.type)->getFrequency(), \
+         _core->getPerformanceModel()->getFrequency());
+
+   LOG_PRINT("After Converting Cycle Count: packet.time(%llu)", packet.time);
+   
+   // asynchronous I/O support
+   NetworkCallback callback = _callbacks[packet.type];
+
+   if (callback != NULL)
+   {
+      LOG_PRINT("Executing callback on packet : type %i, from %i, to %i, core_id %i, cycle_count %llu", 
+            (SInt32)packet.type, packet.sender, packet.receiver, _core->getId(), packet.time);
+      assert(0 <= packet.sender && packet.sender < _numMod);
+      assert(0 <= packet.type && packet.type < NUM_PACKET_TYPES);
+
+      callback(_callbackObjs[packet.type], packet);
+
+      if (packet.length > 0)
+         delete [] (Byte*) packet.data;
+   }
+
+   // synchronous I/O support
+   else
+   {
+      LOG_PRINT("Enqueuing packet : type %i, from %i, to %i, core_id %i, cycle_count %llu", 
+            (SInt32)packet.type, packet.sender, packet.receiver, _core->getId(), packet.time);
+      _netQueueLock.acquire();
+      _netQueue.push_back(packet);
+      _netQueueLock.release();
+      _netQueueCond.broadcast();
+   }
+}
+
+void Network::sendPacketList(const list<NetPacket*>& net_packet_list_to_send)
+{
+   // Send the network packets
+   list<NetPacket*>::const_iterator it = net_packet_list_to_send.begin();
+   for ( ; it != net_packet_list_to_send.end(); it ++)
+   {
+      NetPacket* packet_to_send = *it;
+      Byte* buffer = packet_to_send->makeBuffer();
+      _transport->send(packet_to_send->receiver, buffer, packet_to_send->bufferSize());
+      delete [] buffer;
+   }
+}
+
+void Network::receivePacketList(const list<NetPacket*>& net_packet_list_to_receive)
+{
+   list<NetPacket*>::const_iterator it = net_packet_list_to_receive.begin();
+   for ( ; it != net_packet_list_to_receive.end(); it ++)
+   {
+      NetPacket* packet_to_receive = *it;
+      assert(packet_to_receive->is_raw);
+      receivePacket(*packet_to_receive);
+   }
 }
 
 SInt32 Network::forwardPacket(const NetPacket& packet)
@@ -240,7 +283,7 @@ SInt32 Network::netSend(NetPacket& packet)
    // Floating Point Save/Restore
    FloatingPointHandler floating_point_handler;
 
-   // Convert from core cycle count to network cycle count
+   // Convert time from core frequency to network frequency
    packet.time = convertCycleCount(packet.time, \
          _core->getPerformanceModel()->getFrequency(), \
          getNetworkModelFromPacketType(packet.type)->getFrequency());
@@ -248,9 +291,23 @@ SInt32 Network::netSend(NetPacket& packet)
    // Note the start time
    packet.start_time = packet.time;
 
-   // Call forwardPacket(packet)
-   return forwardPacket(packet);
+   NetworkModel* model = getNetworkModelFromPacketType(packet.type);
+   if (model->isFiniteBuffer())
+   {
+      // Call FiniteBufferNetworkModel functions
+      FiniteBufferNetworkModel* finite_buffer_model = (FiniteBufferNetworkModel*) model;
+      list<NetPacket*> net_packet_list_to_send;
+      finite_buffer_model->sendNetPacket(&packet, net_packet_list_to_send);
+      sendPacketList(net_packet_list_to_send);
+      return packet.length;
+   }
+   else // (!model->isFiniteBuffer())
+   {
+      // Call forwardPacket(packet)
+      return forwardPacket(packet);
+   }
 }
+
 
 // Stupid helper class to eliminate special cases for empty
 // sender/type vectors in a NetMatch
@@ -515,22 +572,42 @@ NetPacket::NetPacket()
    , type(INVALID_PACKET_TYPE)
    , sender(INVALID_CORE_ID)
    , receiver(INVALID_CORE_ID)
-   , specific(0)
    , length(0)
    , data(0)
+   , is_raw(true)
+   , sequence_num(0)
+   , specific(0)
+{
+}
+
+NetPacket::NetPacket(UInt64 t, PacketType ty, UInt32 l, const void *d, 
+                     bool raw, UInt64 seq_num)
+   : start_time(0)
+   , time(t)
+   , type(ty)
+   , sender(INVALID_CORE_ID)
+   , receiver(INVALID_CORE_ID)
+   , length(l)
+   , data(d)
+   , is_raw(raw)
+   , sequence_num(seq_num)
+   , specific(0)
 {
 }
 
 NetPacket::NetPacket(UInt64 t, PacketType ty, SInt32 s,
-                     SInt32 r, UInt32 l, const void *d)
+                     SInt32 r, UInt32 l, const void *d, 
+                     bool raw, UInt64 seq_num)
    : start_time(0)
    , time(t)
    , type(ty)
    , sender(s)
    , receiver(r)
-   , specific(0)
    , length(l)
    , data(d)
+   , is_raw(raw)
+   , sequence_num(seq_num)
+   , specific(0)
 {
 }
 

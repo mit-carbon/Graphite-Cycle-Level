@@ -11,9 +11,10 @@ using namespace std;
 #include "network_model_emesh_hop_by_hop_broadcast_tree.h"
 #include "log.h"
 
-NetworkModel::NetworkModel(Network *network, SInt32 network_id):
+NetworkModel::NetworkModel(Network *network, SInt32 network_id, bool is_finite_buffer):
    _network(network),
-   _network_id(network_id)
+   _network_id(network_id),
+   _is_finite_buffer(is_finite_buffer)
 {
    if (network_id == 0)
       _network_name = "network/user_model_1";
