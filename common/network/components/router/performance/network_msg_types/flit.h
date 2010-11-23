@@ -37,15 +37,4 @@ class Flit : public NetworkMsg
 
       NetworkMsg* clone() { return new Flit(*this); }
       UInt32 size() { return sizeof(*this); }
-      
-      // Just for flit.h and head_flit.h
-      Flit* deepClone()
-      {
-         // Duplicate both Flit and NetPacket
-         Flit* new_flit = (Flit*) clone();
-         NetPacket* new_net_packet = new NetPacket(*_net_packet);
-         new_flit->_net_packet = new_net_packet;
-         new_net_packet->data = (void*) new_flit;
-         return new_flit;
-      }
 };

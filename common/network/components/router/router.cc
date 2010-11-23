@@ -27,12 +27,14 @@ Router::~Router()
 void
 Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_msg_list_to_send)
 {
+   LOG_PRINT("processNetworkMsg(%p, %p) enter", this, network_msg);
+
    switch (network_msg->_type)
    {
       case NetworkMsg::DATA:
          
          {
-            Flit* flit = dynamic_cast<Flit*>(network_msg);
+            Flit* flit = (Flit*) network_msg;
             NetPacket* net_packet = flit->_net_packet;
             assert(net_packet);
             
@@ -48,7 +50,7 @@ Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_
       case NetworkMsg::BUFFER_MANAGEMENT:
 
          {
-            BufferManagementMsg* buffer_msg = dynamic_cast<BufferManagementMsg*>(network_msg);
+            BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
             // Add Credit Pipeline Delay
             buffer_msg->_normalized_time += _router_performance_model->getCreditPipelineDelay();
             _router_performance_model->processBufferManagementMsg(buffer_msg, network_msg_list_to_send);
@@ -68,6 +70,8 @@ Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_
       // Account for router and link delays + update dynamic energy
       performRouterAndLinkTraversal(network_msg_to_send);
    }
+   
+   LOG_PRINT("processNetworkMsg(%p, %p) exit", this, network_msg);
 }
 
 void

@@ -30,8 +30,11 @@ class PacketBufferFlowControlScheme : public FlowControlScheme
 
       // Dividing and coalescing packet at start and end
       static void dividePacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list, \
-            SInt32 packet_length, SInt32 flit_width);
+            SInt32 num_flits);
       static bool isPacketComplete(NetPacket* net_packet);
+
+      BufferModel* getBufferModel(SInt32 input_channel_id)
+      { return _input_packet_buffer_vec[input_channel_id]; }
    
    private:
       typedef BufferModel PacketBuffer;

@@ -26,7 +26,7 @@ FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net, \
    try
    {
       _frequency = Sim()->getCfg()->getFloat(_emesh_network + "frequency");
-      _flit_width = Sim()->getCfg()->getInt(_emesh_network + "link/width");
+      _flit_width = Sim()->getCfg()->getInt(_emesh_network + "flit_width");
       _flow_control_scheme = FlowControlScheme::parse( \
             Sim()->getCfg()->getString(_emesh_network + "flow_control_scheme"));
    }
@@ -57,7 +57,7 @@ FiniteBufferNetworkModelEMesh::createRouter()
 
    try
    {
-      buffer_management_scheme_str = Sim()->getCfg()->getString(_emesh_network + "router/buffer_management_scheme");
+      buffer_management_scheme_str = Sim()->getCfg()->getString(_emesh_network + "buffer_management_scheme");
       data_pipeline_delay = Sim()->getCfg()->getInt(_emesh_network + "router/data_pipeline_delay");
       credit_pipeline_delay = Sim()->getCfg()->getInt(_emesh_network + "router/credit_pipeline_delay");
       router_input_buffer_size = Sim()->getCfg()->getInt(_emesh_network + "router/input_buffer_size");
@@ -68,7 +68,9 @@ FiniteBufferNetworkModelEMesh::createRouter()
    {
       LOG_PRINT_ERROR("Could not read Electrical mesh parameters from the cfg file");
    }
-      
+     
+   _router_data_pipeline_delay = data_pipeline_delay;
+
    BufferManagementScheme::Type buffer_management_scheme = \
          BufferManagementScheme::parse(buffer_management_scheme_str);
    
@@ -152,6 +154,8 @@ FiniteBufferNetworkModelEMesh::createRouter()
                _frequency, link_length, _flit_width, 1);
       link_performance_model_list.push_back(link_performance_model);
 
+      _link_delay = link_performance_model->getDelay();
+
       ElectricalLinkPowerModel* link_power_model = \
          ElectricalLinkPowerModel::create(link_type, \
                _frequency, link_length, _flit_width, 1);
@@ -173,6 +177,8 @@ void
 FiniteBufferNetworkModelEMesh::computeOutputEndpointList(HeadFlit* head_flit, \
       Router* curr_router)
 {
+   LOG_PRINT("computeOutputEndpointList(%p,%p) enter", head_flit, curr_router);
+
    Router::Id curr_router_id = curr_router->getId();
    core_id_t curr_core_id = curr_router_id._core_id;
    SInt32 cx, cy;
@@ -245,14 +251,27 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(HeadFlit* head_flit, \
    list<core_id_t>::iterator it = next_dest_list.begin();
    for ( ; it != next_dest_list.end(); it ++)
    {
-      Router::Id router_id(*it, 0);
+      SInt32 router_index;
+      if (*it == _core_id)
+         router_index = CORE_INTERFACE;
+      else
+         router_index = EMESH;
+
+      Router::Id router_id(*it, router_index);
       Channel::Endpoint& output_endpoint = \
             curr_router->getOutputEndpointFromRouterId(router_id);
       output_endpoint_list.push_back(output_endpoint);
+      
+      LOG_PRINT("Next Router(%i,%i), Output Endpoint(%i,%i)", \
+            router_id._core_id, router_id._index, \
+            output_endpoint._channel_id, output_endpoint._index);
    }
 
    // Initialize the output channel struct inside head_flit
    head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_list);
+   
+   LOG_PRINT("computeOutputEndpointList(%p,%p) exit, channel_endpoint_list.size(%u)", \
+         head_flit, curr_router, head_flit->_output_endpoint_list->size());
 }
 
 void
@@ -265,20 +284,175 @@ FiniteBufferNetworkModelEMesh::computeEMeshPosition(core_id_t core_id, SInt32& x
 core_id_t
 FiniteBufferNetworkModelEMesh::computeCoreId(SInt32 x, SInt32 y)
 {
-   if ((x >= _emesh_width) || (y >= _emesh_height))
+   if ((x < 0) || (x >= _emesh_width) || (y < 0) || (y >= _emesh_height))
       return INVALID_CORE_ID;
    else
       return (y * _emesh_width + x);
 }
 
+SInt32
+FiniteBufferNetworkModelEMesh::computeEMeshDistance(core_id_t sender, core_id_t receiver)
+{
+   SInt32 sx, sy, dx, dy;
+   computeEMeshPosition(sender, sx, sy);
+   computeEMeshPosition(receiver, dx, dy);
+
+   return (abs(sx-dx) + abs(sy-dy));
+}
+
 void
 FiniteBufferNetworkModelEMesh::computeEMeshTopologyParameters(SInt32& emesh_width, SInt32& emesh_height)
 {
-   SInt32 total_cores = Config::getSingleton()->getTotalCores();
+   SInt32 core_count = Config::getSingleton()->getTotalCores();
 
-   emesh_width = (SInt32) floor (sqrt(total_cores));
-   emesh_height = (SInt32) ceil (1.0 * total_cores / emesh_width);
-   LOG_ASSERT_ERROR(total_cores == (emesh_width * emesh_height),
+   emesh_width = (SInt32) floor (sqrt(core_count));
+   emesh_height = (SInt32) ceil (1.0 * core_count / emesh_width);
+   LOG_ASSERT_ERROR(core_count == (emesh_width * emesh_height),
          "total_cores(%i), emesh_width(%i), emesh_height(%i)",
-         total_cores, emesh_width, emesh_height);
+         core_count, emesh_width, emesh_height);
+}
+
+pair<bool,SInt32>
+FiniteBufferNetworkModelEMesh::computeCoreCountConstraints(SInt32 core_count)
+{
+   // This is before 'total_cores' is decided
+   SInt32 emesh_width = (SInt32) floor (sqrt(core_count));
+   SInt32 emesh_height = (SInt32) ceil (1.0 * core_count / emesh_width);
+
+   assert(core_count <= emesh_width * emesh_height);
+   assert(core_count > (emesh_width - 1) * emesh_height);
+   assert(core_count > emesh_width * (emesh_height - 1));
+
+   return make_pair(true, emesh_height * emesh_width);
+}
+
+pair<bool, vector<core_id_t> >
+FiniteBufferNetworkModelEMesh::computeMemoryControllerPositions(SInt32 num_memory_controllers)
+{
+   // core_id_list_along_perimeter : list of cores along the perimeter of 
+   // the chip in clockwise order starting from (0,0)
+   
+   // Initialize mesh_width, mesh_height
+   SInt32 emesh_width, emesh_height;
+   computeEMeshTopologyParameters(emesh_width, emesh_height);
+
+   vector<core_id_t> core_id_list_along_perimeter;
+
+   for (SInt32 i = 0; i < emesh_width; i++)
+      core_id_list_along_perimeter.push_back(i);
+   
+   for (SInt32 i = 1; i < (emesh_height-1); i++)
+      core_id_list_along_perimeter.push_back((i * emesh_width) + emesh_width-1);
+
+   for (SInt32 i = emesh_width-1; i >= 0; i--)
+      core_id_list_along_perimeter.push_back(((emesh_height-1) * emesh_width) + i);
+
+   for (SInt32 i = emesh_height-2; i >= 1; i--)
+      core_id_list_along_perimeter.push_back(i * emesh_width);
+
+   assert(core_id_list_along_perimeter.size() == (UInt32) (2 * (emesh_width + emesh_height - 2)));
+
+   LOG_ASSERT_ERROR(core_id_list_along_perimeter.size() >= (UInt32) num_memory_controllers,
+         "num cores along perimeter(%u), num memory controllers(%i)",
+         core_id_list_along_perimeter.size(), num_memory_controllers);
+
+   SInt32 spacing_between_memory_controllers = core_id_list_along_perimeter.size() / num_memory_controllers;
+   
+   // core_id_list_with_memory_controllers : list of cores that have memory controllers attached to them
+   vector<core_id_t> core_id_list_with_memory_controllers;
+
+   for (SInt32 i = 0; i < num_memory_controllers; i++)
+   {
+      SInt32 index = (i * spacing_between_memory_controllers + emesh_width/2) % core_id_list_along_perimeter.size();
+      core_id_list_with_memory_controllers.push_back(core_id_list_along_perimeter[index]);
+   }
+
+   return (make_pair(true, core_id_list_with_memory_controllers));
+}
+
+pair<bool, vector<Config::CoreList> >
+FiniteBufferNetworkModelEMesh::computeProcessToCoreMapping()
+{
+   // Initialize emesh_width, emesh_height
+   SInt32 emesh_width, emesh_height;
+   computeEMeshTopologyParameters(emesh_width, emesh_height);
+
+   UInt32 process_count = Config::getSingleton()->getProcessCount();
+
+   vector<Config::CoreList> process_to_core_mapping(process_count);
+   // Do a greedy mapping here
+   SInt32 proc_mesh_width = (SInt32) floor(sqrt(process_count));
+   SInt32 proc_mesh_height = (SInt32) floor(1.0 * process_count / proc_mesh_width);
+
+   SInt32 emesh_height_l = (SInt32) ((1.0 * emesh_height * proc_mesh_width * proc_mesh_height) / process_count);
+   
+   for (SInt32 i = 0; i < proc_mesh_width; i++)
+   {
+      for (SInt32 j = 0; j < proc_mesh_height; j++)
+      {
+         SInt32 size_x = emesh_width / proc_mesh_width;
+         SInt32 size_y = emesh_height_l / proc_mesh_height;
+         SInt32 base_x = i * size_x;
+         SInt32 base_y = j * size_y;
+
+         if (i == (proc_mesh_width-1))
+         {
+            size_x = emesh_width - ((proc_mesh_width-1) * size_x);
+         }
+         if (j == (proc_mesh_height-1))
+         {
+            size_y = emesh_height_l - ((proc_mesh_height-1) * size_y);
+         }
+
+         for (SInt32 ii = 0; ii < size_x; ii++)
+         {
+            for (SInt32 jj = 0; jj < size_y; jj++)
+            {
+               core_id_t core_id = (base_x + ii) + ((base_y + jj) * emesh_width);
+               process_to_core_mapping[i + j*proc_mesh_width].push_back(core_id);
+            }
+         }
+      }
+   }
+
+   UInt32 procs_left = process_count - (proc_mesh_width * proc_mesh_height);
+   for (UInt32 i = proc_mesh_width * proc_mesh_height; i < process_count; i++)
+   {
+      SInt32 size_x = emesh_width / procs_left;
+      SInt32 size_y = emesh_height - emesh_height_l;
+      SInt32 base_x = (i - (proc_mesh_width * proc_mesh_height)) * size_x;
+      SInt32 base_y = emesh_height_l;
+
+      if (i == (process_count-1))
+      {
+         size_x = emesh_width - ((procs_left-1) * size_x);
+      }
+
+      for (SInt32 ii = 0; ii < size_x; ii++)
+      {
+         for (SInt32 jj = 0; jj < size_y; jj++)
+         {
+            core_id_t core_id = (base_x + ii) + ((base_y + jj) * emesh_width);
+            process_to_core_mapping[i].push_back(core_id);
+         }
+      }
+   }
+
+   return (make_pair(true, process_to_core_mapping));
+}
+
+UInt64
+FiniteBufferNetworkModelEMesh::computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits)
+{
+   if (sender != receiver)
+      return ((computeEMeshDistance(sender, receiver) + 1) * (_router_data_pipeline_delay + _link_delay)) \
+             + (num_flits - 1);
+   else
+      return 0;
+}
+
+void
+FiniteBufferNetworkModelEMesh::outputSummary(ostream& out)
+{
+   FiniteBufferNetworkModel::outputSummary(out);
 }

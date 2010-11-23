@@ -8,7 +8,7 @@ class BufferUsageHistory
 {
    public:
       BufferUsageHistory() {}
-      virtual ~BufferUsageHistory() = 0;
+      virtual ~BufferUsageHistory() {};
 
       virtual bool allocate(Flit* flit) = 0;
       virtual void prune(UInt64 time) = 0;

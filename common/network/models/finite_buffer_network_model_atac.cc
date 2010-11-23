@@ -15,8 +15,7 @@ using namespace std;
 #include "log.h"
 
 FiniteBufferNetworkModelAtac::FiniteBufferNetworkModelAtac(Network* network, SInt32 network_id):
-   FiniteBufferNetworkModel(network, network_id),
-   _enabled(false)
+   FiniteBufferNetworkModel(network, network_id)
 {
    // Initialize ANet topology related parameters 
    initializeANetTopologyParameters();

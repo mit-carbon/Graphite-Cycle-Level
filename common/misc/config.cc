@@ -186,12 +186,11 @@ Config::computeProcessToCoreMapping()
          switch(network_model)
          {
             case NETWORK_ATAC_CLUSTER:
-               return process_to_core_mapping_struct.second;
-
             case NETWORK_EMESH_HOP_BY_HOP_BASIC:
             case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
+            case FINITE_BUFFER_NETWORK_EMESH_BASIC:
+            case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
                return process_to_core_mapping_struct.second;
-               break;
 
             default:
                fprintf(stderr, "Unrecognized Network Type(%u)\n", network_model);

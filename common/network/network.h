@@ -51,7 +51,9 @@ public:
              bool is_raw = true, UInt64 sequence_num = 0);
 
    UInt32 bufferSize() const;
-   Byte *makeBuffer() const;
+   Byte* makeBuffer() const;
+   NetPacket* clone() const;
+   void release();
 
    static const SInt32 BROADCAST = 0xDEADBABE;
 };
@@ -134,8 +136,9 @@ class Network
       ConditionVariable _netQueueCond;
 
       SInt32 forwardPacket(const NetPacket& packet);
-      void receivePacket(NetPacket& packet);
+      void sendPacket(const NetPacket* packet);
       void sendPacketList(const list<NetPacket*>& net_packet_list_to_send);
+      void receivePacket(NetPacket& packet);
       void receivePacketList(const list<NetPacket*>& net_packet_list_to_receive);
 };
 

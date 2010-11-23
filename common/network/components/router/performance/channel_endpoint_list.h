@@ -18,13 +18,14 @@ class ChannelEndpointList
       { _curr_pos = _channel_endpoint_list.begin(); }
       ~ChannelEndpointList() {}
 
-      Channel::Endpoint next() 
+      Channel::Endpoint curr() 
+      { return *_curr_pos; } 
+
+      void incr()
       { 
-         Channel::Endpoint& endpoint = *_curr_pos; 
          _curr_pos ++; 
          if (_curr_pos == _channel_endpoint_list.end())
             _curr_pos = _channel_endpoint_list.begin();
-         return endpoint;
       }
 
       Channel::Endpoint first()
@@ -32,4 +33,7 @@ class ChannelEndpointList
 
       Channel::Endpoint last()
       { return _channel_endpoint_list[_channel_endpoint_list.size()-1]; }
+
+      size_t size()
+      { return _channel_endpoint_list.size(); }
 };

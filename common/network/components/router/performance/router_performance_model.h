@@ -29,6 +29,9 @@ class RouterPerformanceModel
       SInt32 getDataPipelineDelay() { return _data_pipeline_delay; }
       SInt32 getCreditPipelineDelay() { return _credit_pipeline_delay; }
 
+      FlowControlScheme* getFlowControlObject()
+      { return _flow_control_object; }
+
    private:
       FlowControlScheme* _flow_control_object;
       SInt32 _data_pipeline_delay;

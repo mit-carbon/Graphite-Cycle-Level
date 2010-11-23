@@ -8,9 +8,15 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       FiniteBufferNetworkModelAtac(Network* network, SInt32 network_id);
       ~FiniteBufferNetworkModelAtac();
 
-      void enable() { _enabled = true; }
-      void disable() { _enabled = false; }
+      volatile float getFrequency() { return _frequency; }
+    
+      // Output Summary 
+      void outputSummary(ostream& out) { /* FIXME: Fill me in */ }
 
+      // static pair<bool,SInt32> computeCoreCountConstraints(SInt32 core_count);
+      // static pair<bool,vector<core_id_t> > computeMemoryControllerPositions(SInt32 num_memory_controllers);
+      // static pair<bool,vector<Config::CoreList> > computeProcessToCoreMapping();
+   
    private:
       ////// Private Enumerators
       
@@ -51,7 +57,6 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       static SInt32 _sqrt_cluster_size;
       
       //// Non-Static
-      bool _enabled;
       volatile float _frequency;
 
       SInt32 _num_bnets_in_cluster;
@@ -124,4 +129,6 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       
       // Virtual Function in FiniteBufferNetworkModel
       void computeOutputEndpointList(HeadFlit* head_flit, Router* curr_router);
+      UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits)
+      { return 0; /* FIXME: Fill me in */ }
 };

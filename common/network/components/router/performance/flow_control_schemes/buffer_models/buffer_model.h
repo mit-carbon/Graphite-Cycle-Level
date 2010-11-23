@@ -29,4 +29,5 @@ class BufferModel
      
       void updateFlitTime(); 
       void updateBufferTime();
+      UInt64 getBufferTime() { return _queue_time; }
 };

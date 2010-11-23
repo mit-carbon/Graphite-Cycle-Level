@@ -127,7 +127,7 @@ class NetworkModelEMeshHopByHopGeneric : public NetworkModel
       void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops);
       void processReceivedPacket(NetPacket &pkt);
 
-      static std::pair<bool,std::vector<core_id_t> > computeMemoryControllerPositions(SInt32 num_memory_controllers, SInt32 core_count);
+      static std::pair<bool,std::vector<core_id_t> > computeMemoryControllerPositions(SInt32 num_memory_controllers);
       static std::pair<bool,SInt32> computeCoreCountConstraints(SInt32 core_count);
       static std::pair<bool,std::vector<Config::CoreList> > computeProcessToCoreMapping();
 

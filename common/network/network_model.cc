@@ -1,15 +1,17 @@
 #include <cassert>
 using namespace std;
 
-#include "network.h"
 #include "network_types.h"
-
 #include "network_model_magic.h"
 #include "network_model_emesh_hop_counter.h"
 #include "network_model_analytical.h"
 #include "network_model_emesh_hop_by_hop_basic.h"
 #include "network_model_emesh_hop_by_hop_broadcast_tree.h"
+#include "finite_buffer_network_model_emesh_basic.h"
+#include "finite_buffer_network_model_emesh_broadcast_tree.h"
 #include "log.h"
+
+#include "network.h"
 
 NetworkModel::NetworkModel(Network *network, SInt32 network_id, bool is_finite_buffer):
    _network(network),
@@ -50,6 +52,12 @@ NetworkModel::createModel(Network *net, SInt32 network_id, UInt32 model_type)
    case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
       return new NetworkModelEMeshHopByHopBroadcastTree(net, network_id);
 
+   case FINITE_BUFFER_NETWORK_EMESH_BASIC:
+      return new FiniteBufferNetworkModelEMeshBasic(net, network_id);
+
+   case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
+      return new FiniteBufferNetworkModelEMeshBroadcastTree(net, network_id);
+
    default:
       LOG_PRINT_ERROR("Unrecognized Network Model(%u)", model_type);
       return NULL;
@@ -69,6 +77,10 @@ NetworkModel::parseNetworkType(string str)
       return NETWORK_EMESH_HOP_BY_HOP_BASIC;
    else if (str == "emesh_hop_by_hop_broadcast_tree")
       return NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE;
+   else if (str == "finite_buffer_emesh_basic")
+      return FINITE_BUFFER_NETWORK_EMESH_BASIC;
+   else if (str == "finite_buffer_emesh_broadcast_tree")
+      return FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE;
    else
       return (UInt32)-1;
 }
@@ -87,6 +99,10 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
       case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
          return NetworkModelEMeshHopByHopGeneric::computeCoreCountConstraints(core_count);
 
+      case FINITE_BUFFER_NETWORK_EMESH_BASIC:
+      case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
+         return FiniteBufferNetworkModelEMesh::computeCoreCountConstraints(core_count);
+
       default:
          fprintf(stderr, "Unrecognized network type(%u)\n", network_type);
          assert(false);
@@ -95,7 +111,7 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
 }
 
 pair<bool, vector<core_id_t> > 
-NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_memory_controllers, SInt32 core_count)
+NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_memory_controllers)
 {
    switch(network_type)
    {
@@ -103,6 +119,7 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
       case NETWORK_EMESH_HOP_COUNTER:
       case NETWORK_ANALYTICAL_MESH:
          {
+            SInt32 core_count = (SInt32) Config::getSingleton()->getTotalCores();
             SInt32 spacing_between_memory_controllers = core_count / num_memory_controllers;
             vector<core_id_t> core_list_with_memory_controllers;
             for (core_id_t i = 0; i < num_memory_controllers; i++)
@@ -116,7 +133,11 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
 
       case NETWORK_EMESH_HOP_BY_HOP_BASIC:
       case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
-         return NetworkModelEMeshHopByHopGeneric::computeMemoryControllerPositions(num_memory_controllers, core_count);
+         return NetworkModelEMeshHopByHopGeneric::computeMemoryControllerPositions(num_memory_controllers);
+
+      case FINITE_BUFFER_NETWORK_EMESH_BASIC:
+      case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
+         return FiniteBufferNetworkModelEMesh::computeMemoryControllerPositions(num_memory_controllers);
 
       default:
          LOG_PRINT_ERROR("Unrecognized network type(%u)", network_type);
@@ -137,6 +158,10 @@ NetworkModel::computeProcessToCoreMapping(UInt32 network_type)
       case NETWORK_EMESH_HOP_BY_HOP_BASIC:
       case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
          return NetworkModelEMeshHopByHopGeneric::computeProcessToCoreMapping();
+
+      case FINITE_BUFFER_NETWORK_EMESH_BASIC:
+      case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
+         return FiniteBufferNetworkModelEMesh::computeProcessToCoreMapping();
 
       default:
          fprintf(stderr, "Unrecognized network type(%u)\n", network_type);

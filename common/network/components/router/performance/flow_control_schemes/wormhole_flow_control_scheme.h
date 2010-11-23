@@ -24,6 +24,9 @@ class WormholeFlowControlScheme : public FlitBufferFlowControlScheme
       void processDataMsg(Flit* flit, vector<NetworkMsg*>& network_msg_list);
       void processBufferManagementMsg(BufferManagementMsg* buffer_msg, \
             vector<NetworkMsg*>& network_msg_list);
+
+      BufferModel* getBufferModel(SInt32 input_channel_id)
+      { return _input_flit_buffer_vec[input_channel_id]->getBufferModel(); }
    
    private:
       // Private Fields

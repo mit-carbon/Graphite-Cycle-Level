@@ -14,6 +14,15 @@ using namespace std;
 
 class FlitBufferFlowControlScheme : public FlowControlScheme
 {
+   public:
+      FlitBufferFlowControlScheme(SInt32 num_input_channels, SInt32 num_output_channels);
+      ~FlitBufferFlowControlScheme();
+      
+      // Dividing and coalescing packet at start and end
+      static void dividePacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list, \
+            SInt32 num_flits);
+      static bool isPacketComplete(NetPacket* net_packet);
+   
    protected:
       class FlitBuffer
       {
@@ -27,6 +36,9 @@ class FlitBufferFlowControlScheme : public FlowControlScheme
 
             ChannelEndpointList* _output_endpoint_list;
 
+            BufferModel* getBufferModel()
+            { return _buffer; }
+            
             // FIXME: Dont know if there is a better way to do this
             // Just want to call the public functions of BufferModel
             BufferManagementMsg* enqueue(Flit* flit) { return _buffer->enqueue(flit); }
@@ -36,15 +48,6 @@ class FlitBufferFlowControlScheme : public FlowControlScheme
             size_t size() { return _buffer->size(); }
             void updateFlitTime() { return _buffer->updateFlitTime(); }
             void updateBufferTime() { return _buffer->updateBufferTime(); }
-      };
-
-      static SInt32 computeNumFlits(SInt32 packet_length, SInt32 flit_width);
-
-   public:
-      FlitBufferFlowControlScheme(SInt32 num_input_channels, SInt32 num_output_channels);
-      ~FlitBufferFlowControlScheme();
-      
-      static void dividePacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list, \
-            SInt32 packet_length, SInt32 flit_width);
-      static bool isPacketComplete(NetPacket* net_packet);
+            UInt64 getBufferTime() { return _buffer->getBufferTime(); }
+      };    
 };

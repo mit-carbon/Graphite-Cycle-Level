@@ -1,3 +1,4 @@
+#include <cmath>
 #include "packet_buffer_flow_control_scheme.h"
 
 PacketBufferFlowControlScheme::PacketBufferFlowControlScheme( \
@@ -115,7 +116,7 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
 
    HeadFlit* head_flit = (HeadFlit*) packet_buffer->front();
 
-   head_flit->_output_endpoint = head_flit->_output_endpoint_list->next();
+   head_flit->_output_endpoint = head_flit->_output_endpoint_list->curr();
    // Update Flit Time
    if (head_flit->_output_endpoint == head_flit->_output_endpoint_list->first())
    {
@@ -143,13 +144,20 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
          }
          // Send head_flit downstream
          head_flit_to_send = head_flit;
+         // Delete _output_endpoint_list
+         delete head_flit->_output_endpoint_list;
       }
       else
       {
          // Duplicate head_flit and net_packet
-         HeadFlit* cloned_head_flit = (HeadFlit*) head_flit->deepClone();
+         NetPacket* cloned_net_packet = head_flit->_net_packet->clone();
+         HeadFlit* cloned_head_flit = (HeadFlit*) cloned_net_packet->data;
+         cloned_head_flit->_net_packet = cloned_net_packet;
+         
          // Send cloned_head_flit downstream
          head_flit_to_send = cloned_head_flit;
+         // Update pointer to _output_endpoint_list
+         head_flit->_output_endpoint_list->incr();
       }
 
       // Send packet to downstream router
@@ -175,11 +183,8 @@ PacketBufferFlowControlScheme::allocateDownstreamBuffer(HeadFlit* head_flit)
 void
 PacketBufferFlowControlScheme::dividePacket(NetPacket* net_packet, \
       list<NetPacket*>& net_packet_list, \
-      SInt32 packet_length, SInt32 flit_width)
+      SInt32 num_flits)
 {
-   // net_packet.getModeledLength() includes the size of the data + header
-   SInt32 num_flits = computeNumFlits(packet_length, flit_width);
-
    HeadFlit* head_flit = new HeadFlit(num_flits, net_packet->sender, net_packet->receiver);
    NetPacket* head_flit_packet = new NetPacket(net_packet->time, net_packet->type, \
          sizeof(*head_flit), (void*) head_flit, \

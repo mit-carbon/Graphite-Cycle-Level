@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <string.h>
 
 #include "transport.h"
@@ -93,7 +94,8 @@ void Network::netPullFromTransport()
 
       NetPacket packet(_transport->recv());
 
-      LOG_PRINT("Pull packet : type %i, from %i, time %llu", (SInt32)packet.type, packet.sender, packet.time);
+      LOG_PRINT("Pull packet : type %i, from %i, time %llu, raw(%i)", \
+            (SInt32)packet.type, packet.sender, packet.time, packet.is_raw);
       LOG_ASSERT_ERROR(0 <= packet.sender && packet.sender < _numMod,
             "Invalid Packet Sender(%i)", packet.sender);
       LOG_ASSERT_ERROR(0 <= packet.type && packet.type < NUM_PACKET_TYPES,
@@ -109,7 +111,13 @@ void Network::netPullFromTransport()
          list<NetPacket*> net_packet_list_to_receive;
          finite_buffer_model->receiveNetPacket(&packet, net_packet_list_to_send, net_packet_list_to_receive);
 
+         // Send packets destined for other cores
          sendPacketList(net_packet_list_to_send);
+         
+         // Free the memory occupied by the flits
+         delete [] (Byte*) packet.data;
+         
+         // Receive the packets intended for this core
          receivePacketList(net_packet_list_to_receive);
       }
       else // (! model->isFiniteBuffer())
@@ -124,13 +132,6 @@ void Network::netPullFromTransport()
          }
          if (action & NetworkModel::RoutingAction::RECEIVE)
          {
-            LOG_PRINT("Before Processing Received Packet: packet.time(%llu)", packet.time);
-            
-            // I have accepted the packet - process the received packet
-            model->processReceivedPacket(packet);
-
-            LOG_PRINT("After Processing Received Packet: packet.time(%llu)", packet.time);
-
             receivePacket(packet);
          }
          else // if (!(action & NetworkModel::RoutingAction::RECEIVE))
@@ -144,7 +145,13 @@ void Network::netPullFromTransport()
 }
 
 void Network::receivePacket(NetPacket& packet)
-{  
+{ 
+   LOG_PRINT("receivePacket(%p) enter", &packet);
+
+   NetworkModel* model = getNetworkModelFromPacketType(packet.type);
+   // I have accepted the packet - process the received packet
+   model->processReceivedPacket(packet);
+
    // Convert time (cycle count) from network frequency to core frequency
    packet.time = convertCycleCount(packet.time, \
          getNetworkModelFromPacketType(packet.type)->getFrequency(), \
@@ -172,36 +179,64 @@ void Network::receivePacket(NetPacket& packet)
    else
    {
       LOG_PRINT("Enqueuing packet : type %i, from %i, to %i, core_id %i, cycle_count %llu", 
-            (SInt32)packet.type, packet.sender, packet.receiver, _core->getId(), packet.time);
+            (SInt32) packet.type, packet.sender, packet.receiver, _core->getId(), packet.time);
       _netQueueLock.acquire();
       _netQueue.push_back(packet);
       _netQueueLock.release();
       _netQueueCond.broadcast();
    }
+   
+   LOG_PRINT("receivePacket(%p) exit", &packet);
+}
+
+void Network::sendPacket(const NetPacket* packet_to_send)
+{
+   LOG_PRINT("sendPacket(%p) enter", packet_to_send);
+   
+   Byte* buffer = packet_to_send->makeBuffer();
+   _transport->send(packet_to_send->receiver, buffer, packet_to_send->bufferSize());
+   // sleep(2);
+   delete [] buffer;
+
+   LOG_PRINT("sendPacket(%p) exit", packet_to_send);
 }
 
 void Network::sendPacketList(const list<NetPacket*>& net_packet_list_to_send)
 {
+   LOG_PRINT("sendPacketList() enter");
+   
    // Send the network packets
    list<NetPacket*>::const_iterator it = net_packet_list_to_send.begin();
    for ( ; it != net_packet_list_to_send.end(); it ++)
    {
       NetPacket* packet_to_send = *it;
-      Byte* buffer = packet_to_send->makeBuffer();
-      _transport->send(packet_to_send->receiver, buffer, packet_to_send->bufferSize());
-      delete [] buffer;
+      sendPacket(packet_to_send);
+   
+      // Delete the packet
+      packet_to_send->release();
    }
+   
+   LOG_PRINT("sendPacketList() exit");
 }
 
 void Network::receivePacketList(const list<NetPacket*>& net_packet_list_to_receive)
 {
+   LOG_PRINT("receivePacketList() enter");
+   
    list<NetPacket*>::const_iterator it = net_packet_list_to_receive.begin();
    for ( ; it != net_packet_list_to_receive.end(); it ++)
    {
       NetPacket* packet_to_receive = *it;
       assert(packet_to_receive->is_raw);
       receivePacket(*packet_to_receive);
+      
+      // Delete the packet
+      // The data will be deleted by the receiver
+      LOG_PRINT("NetPacket: release(%p)", packet_to_receive);
+      delete packet_to_receive;
    }
+   
+   LOG_PRINT("receivePacketList() exit");
 }
 
 SInt32 Network::forwardPacket(const NetPacket& packet)
@@ -296,9 +331,16 @@ SInt32 Network::netSend(NetPacket& packet)
    {
       // Call FiniteBufferNetworkModel functions
       FiniteBufferNetworkModel* finite_buffer_model = (FiniteBufferNetworkModel*) model;
+      
+      // Divide Packet into flits
       list<NetPacket*> net_packet_list_to_send;
       finite_buffer_model->sendNetPacket(&packet, net_packet_list_to_send);
+      
+      // Send Raw Packet on the network
+      sendPacket(&packet);
+      // Send Flits on the network (also free the memory occupied by flits)
       sendPacketList(net_packet_list_to_send);
+
       return packet.length;
    }
    else // (!model->isFiniteBuffer())
@@ -646,4 +688,25 @@ Byte* NetPacket::makeBuffer() const
    memcpy(buffer + sizeof(*this), data, length);
 
    return buffer;
+}
+
+NetPacket* NetPacket::clone() const
+{
+   // Call default copy constructor
+   NetPacket* cloned_net_packet = new NetPacket(*this);
+   cloned_net_packet->data = new Byte[length];
+   memcpy((void*) cloned_net_packet->data, data, length);
+
+   LOG_PRINT("NetPacket: allocate(%p)", cloned_net_packet);
+   LOG_PRINT("Data: allocate(%p)", cloned_net_packet->data);
+   return cloned_net_packet;
+}
+
+void NetPacket::release()
+{
+   LOG_PRINT("NetPacket: release(%p)", this);
+   LOG_PRINT("Data: release(%p)", data);
+
+   delete [] (Byte*) data;
+   delete this;
 }

@@ -2,6 +2,7 @@
 
 #include "head_flit.h"
 #include "flit_buffer_flow_control_scheme.h"
+#include "log.h"
 
 FlitBufferFlowControlScheme::FlitBufferFlowControlScheme( \
       SInt32 num_input_channels, SInt32 num_output_channels):
@@ -14,10 +15,9 @@ FlitBufferFlowControlScheme::~FlitBufferFlowControlScheme()
 void
 FlitBufferFlowControlScheme::dividePacket(NetPacket* net_packet, \
       list<NetPacket*>& net_packet_list, \
-      SInt32 packet_length, SInt32 flit_width)
+      SInt32 num_flits)
 {
-   // net_packet.getModeledLength() includes the size of the data + header
-   SInt32 num_flits = computeNumFlits(packet_length, flit_width);
+   LOG_PRINT("dividePacket(%p, %i) enter", net_packet, num_flits);
 
    // Make HeadFlit first
    HeadFlit* head_flit = new HeadFlit(1, net_packet->sender, net_packet->receiver);
@@ -48,6 +48,8 @@ FlitBufferFlowControlScheme::dividePacket(NetPacket* net_packet, \
       // The head flit is also the tail flit
       head_flit->_type = (Flit::Type) ( ((SInt32) head_flit->_type) | ((SInt32) Flit::TAIL) );
    }
+
+   LOG_PRINT("dividePacket() exit");
 }
 
 bool
@@ -58,12 +60,6 @@ FlitBufferFlowControlScheme::isPacketComplete(NetPacket* net_packet)
    assert(network_msg->_type == NetworkMsg::DATA);
    Flit* flit = (Flit*) network_msg;
    return (flit->_type & Flit::TAIL);
-}
-
-SInt32
-FlitBufferFlowControlScheme::computeNumFlits(SInt32 packet_length, SInt32 flit_width)
-{
-   return (SInt32) ceil((float) (packet_length * 8) / flit_width);
 }
 
 FlitBufferFlowControlScheme::FlitBuffer::FlitBuffer( \

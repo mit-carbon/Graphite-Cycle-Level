@@ -13,7 +13,7 @@ class Channel
             Endpoint(SInt32 channel_id, SInt32 index = ALL): 
                _channel_id(channel_id), _index(index) {}
             
-            ~Endpoint();
+            ~Endpoint() {}
 
             bool operator==(const Endpoint& endpoint) const
             { return ((_channel_id == endpoint._channel_id) && (_index == endpoint._index)); }

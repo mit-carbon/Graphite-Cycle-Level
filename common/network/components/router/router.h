@@ -65,6 +65,10 @@ class Router
       Router::Id& getRouterIdFromOutputEndpoint(Channel::Endpoint& output_endpoint);
       vector<Router::Id>& getRouterIdListFromOutputChannel(SInt32 output_channel_id);
 
+      // RouterPerformanceModel
+      RouterPerformanceModel* getRouterPerformanceModel()
+      { return _router_performance_model; }
+
    private:
       Id _id;
 

@@ -9,6 +9,7 @@ using namespace std;
 #include "network_msg.h"
 #include "flit.h"
 #include "buffer_management_msg.h"
+#include "buffer_model.h"
 
 class FlowControlScheme
 {
@@ -25,7 +26,7 @@ class FlowControlScheme
          _num_input_channels(num_input_channels),
          _num_output_channels(num_output_channels)
       {}
-      virtual ~FlowControlScheme() = 0;
+      virtual ~FlowControlScheme() {};
 
       static Type parse(string flow_control_scheme_str);
       
@@ -39,7 +40,7 @@ class FlowControlScheme
 
       static void dividePacket(Type flow_control_scheme, \
             NetPacket* net_packet, list<NetPacket*>& net_packet_list, \
-            SInt32 packet_length, SInt32 flit_width);
+            SInt32 num_flits);
       static bool isPacketComplete(Type flow_control_scheme, NetPacket* net_packet);
       static SInt32 computeNumFlits(SInt32 packet_length, SInt32 flit_width);
 
@@ -47,6 +48,8 @@ class FlowControlScheme
       virtual void processDataMsg(Flit* flit, vector<NetworkMsg*>& network_msg_list) = 0;
       virtual void processBufferManagementMsg(BufferManagementMsg* buffer_management_msg, \
             vector<NetworkMsg*>& network_msg_list) = 0;
+
+      virtual BufferModel* getBufferModel(SInt32 input_channel_id) = 0;
 
    protected:
       SInt32 _num_input_channels;

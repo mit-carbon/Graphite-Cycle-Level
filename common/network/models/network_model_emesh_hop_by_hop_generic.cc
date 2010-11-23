@@ -619,7 +619,7 @@ NetworkModelEMeshHopByHopGeneric::computeCoreCountConstraints(SInt32 core_count)
 }
 
 pair<bool, vector<core_id_t> >
-NetworkModelEMeshHopByHopGeneric::computeMemoryControllerPositions(SInt32 num_memory_controllers, SInt32 core_count)
+NetworkModelEMeshHopByHopGeneric::computeMemoryControllerPositions(SInt32 num_memory_controllers)
 {
    // core_id_list_along_perimeter : list of cores along the perimeter of 
    // the chip in clockwise order starting from (0,0)
