@@ -1,4 +1,5 @@
 #include "router.h"
+#include "utils.h"
 #include "log.h"
 
 Router::Router(Id id, \
@@ -19,6 +20,8 @@ Router::Router(Id id, \
    _output_channel_to_router_id_list__mapping(output_channel_to_router_id_list__mapping)
 {
    createMappings();
+   // Time Normalizer
+   _time_normalizer = new TimeNormalizer(Config::getSingleton()->getApplicationCores());
 }
 
 Router::~Router()
@@ -37,8 +40,9 @@ Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_
             Flit* flit = (Flit*) network_msg;
             NetPacket* net_packet = flit->_net_packet;
             assert(net_packet);
-            
-            flit->_normalized_time = normalizeTime(net_packet->time);
+          
+            // Compute normalized time 
+            flit->_normalized_time = _time_normalizer->normalize(net_packet->time, flit->_requester);
             // Set the entry time to account for the time spent in the router
             flit->_normalized_time_at_entry = flit->_normalized_time;
 

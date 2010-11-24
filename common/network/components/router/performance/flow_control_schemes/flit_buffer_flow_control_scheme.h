@@ -20,7 +20,7 @@ class FlitBufferFlowControlScheme : public FlowControlScheme
       
       // Dividing and coalescing packet at start and end
       static void dividePacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list, \
-            SInt32 num_flits);
+            SInt32 num_flits, core_id_t requester);
       static bool isPacketComplete(NetPacket* net_packet);
    
    protected:
@@ -34,6 +34,7 @@ class FlitBufferFlowControlScheme : public FlowControlScheme
                   SInt32 size_buffer);
             ~FlitBuffer();
 
+            // One endpoint list per packet
             ChannelEndpointList* _output_endpoint_list;
 
             BufferModel* getBufferModel()

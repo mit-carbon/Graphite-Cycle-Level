@@ -35,7 +35,7 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
       static void computeEMeshTopologyParameters(SInt32& emesh_width, SInt32& emesh_height);
 
       // Main Routing Function
-      void computeOutputEndpointList(HeadFlit* head_flit, Router* curr_router);
+      void computeOutputEndpointList(Flit* head_flit, Router* curr_router);
       // Compute Unloaded Delay
       UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits);
 

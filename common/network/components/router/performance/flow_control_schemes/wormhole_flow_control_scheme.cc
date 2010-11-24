@@ -1,5 +1,4 @@
 #include "wormhole_flow_control_scheme.h"
-#include "head_flit.h"
 #include "log.h"
 
 WormholeFlowControlScheme::WormholeFlowControlScheme( \
@@ -155,8 +154,7 @@ WormholeFlowControlScheme::sendFlit(SInt32 input_channel)
    {
       LOG_PRINT("Head Flit");
       LOG_ASSERT_ERROR(flit->_type & Flit::HEAD, "flit->_type(%u)", flit->_type);
-      HeadFlit* head_flit = (HeadFlit*) flit;
-      flit_buffer->_output_endpoint_list = head_flit->_output_endpoint_list;
+      flit_buffer->_output_endpoint_list = flit->_output_endpoint_list;
    }
 
    // Get the curr output_endpoint

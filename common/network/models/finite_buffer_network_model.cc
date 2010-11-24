@@ -12,7 +12,6 @@ FiniteBufferNetworkModel::FiniteBufferNetworkModel(Network* net, SInt32 network_
    _enabled(false),
    _sequence_num(0)
 {
-   _last_packet_id = (UInt64) -1;
    _core_id = getNetwork()->getCore()->getId();
    // FIXME: Temporary Hack
    _flow_control_packet_type = USER_2;
@@ -31,7 +30,9 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
    LOG_PRINT("sendNetPacket(%p) enter", net_packet);
    assert(net_packet->is_raw);
 
-   if (!_enabled)
+   core_id_t requester = getRequester(*net_packet);
+   if ( (!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()) || \
+         (net_packet->sender == net_packet->receiver) )
       return;
 
    // Increment Sequence Number
@@ -42,23 +43,21 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
  
    assert(net_packet->sender == _core_id); 
    // Split the packet into multiple flits 
-   if (net_packet->receiver != net_packet->sender)
-   {
-      SInt32 packet_length = getNetwork()->getModeledLength(*net_packet);
-      SInt32 num_flits = computeNumFlits(packet_length);
-      FlowControlScheme::dividePacket(_flow_control_scheme, \
-            net_packet, net_packet_list_to_send, \
-            num_flits);
-   }
+   SInt32 packet_length = getNetwork()->getModeledLength(*net_packet);
+   SInt32 num_flits = computeNumFlits(packet_length);
+   FlowControlScheme::dividePacket(_flow_control_scheme, \
+         net_packet, net_packet_list_to_send, \
+         num_flits, requester);
+   
    list<NetPacket*>::iterator packet_it = net_packet_list_to_send.begin();
    for ( ; packet_it != net_packet_list_to_send.end(); packet_it ++)
    {
-      // FIXME: EMesh router for now (Make general later, eg. for concentrated mesh)
       NetPacket* net_packet_to_send = *packet_it;
       net_packet_to_send->sender = _core_id;
       net_packet_to_send->receiver = _core_id;
       NetworkMsg* network_msg_to_send = (NetworkMsg*) net_packet_to_send->data;
       network_msg_to_send->_sender_router_index = Router::Id::CORE_INTERFACE;
+      // FIXME: EMesh router for now (Make general later, eg. for concentrated mesh)
       network_msg_to_send->_receiver_router_index = 0; 
    }
 
@@ -105,7 +104,7 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet, \
 
          if (flit->_type == Flit::HEAD)
          {
-            HeadFlit* head_flit = (HeadFlit*) flit;
+            Flit* head_flit = flit;
             // Calls the specific network model (emesh, atac, etc.)
             computeOutputEndpointList(head_flit, receiver_router);
          }
@@ -277,7 +276,9 @@ FiniteBufferNetworkModel::receiveRawPacket(NetPacket* raw_packet)
    LOG_PRINT("receiveRawPacket(%p) enter", raw_packet);
    assert(raw_packet->is_raw);
 
-   if ((!_enabled) || (raw_packet->receiver == raw_packet->sender))
+   core_id_t requester = getRequester(*raw_packet);
+   if ((!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()) || \
+         (raw_packet->sender == raw_packet->receiver))
    {
       LOG_PRINT("receiveRawPacket(%p) exit - Local Msg", raw_packet);
       return true;
@@ -332,14 +333,8 @@ FiniteBufferNetworkModel::receiveModelingPacket(NetPacket* modeling_packet)
    LOG_PRINT("receiveModelingPacket(%p) enter", modeling_packet);
    
    Flit* flit = (Flit*) modeling_packet->data;
-   if (flit->_type == Flit::HEAD)
-   {
-      HeadFlit* head_flit = (HeadFlit*) flit;
-      LOG_ASSERT_ERROR(_last_packet_id == ((UInt64) -1), "_last_packet_id(%llu)", _last_packet_id);
-      _last_packet_id = (((UInt64) head_flit->_sender) << 32) + modeling_packet->sequence_num;
-   }
-   UInt64 packet_id = _last_packet_id;
-
+   UInt64 packet_id = (((UInt64) flit->_sender) << 32) + modeling_packet->sequence_num;
+   
    LOG_PRINT("packet_id(%llu)", packet_id);
   
    map<UInt64,NetPacket*>::iterator modeling_it = _received_modeling_packet_map.find(packet_id);
@@ -358,7 +353,10 @@ FiniteBufferNetworkModel::receiveModelingPacket(NetPacket* modeling_packet)
       assert(!FlowControlScheme::isPacketComplete(_flow_control_scheme, prev_modeling_packet));
 
       // Remove the data
-      assert(modeling_packet->time >= prev_modeling_packet->time);
+      modeling_packet->time = max<UInt64>(modeling_packet->time, prev_modeling_packet->time);
+      // LOG_ASSERT_ERROR(modeling_packet->time > prev_modeling_packet->time,
+      //       "time(%llu), previous time(%llu)",
+      //       modeling_packet->time, prev_modeling_packet->time);
       prev_modeling_packet->release();
 
       (*modeling_it).second = modeling_packet;
@@ -367,7 +365,6 @@ FiniteBufferNetworkModel::receiveModelingPacket(NetPacket* modeling_packet)
    // Check if packet is complete
    if (FlowControlScheme::isPacketComplete(_flow_control_scheme, modeling_packet))
    {
-      _last_packet_id = (UInt64) -1;
       LOG_PRINT("Modeling Packet Complete");
       map<UInt64,NetPacket*>::iterator raw_it = _received_raw_packet_map.find(packet_id);
       if (raw_it == _received_raw_packet_map.end())
@@ -411,6 +408,7 @@ FiniteBufferNetworkModel::processReceivedPacket(NetPacket& packet)
 
    UInt64 packet_latency = packet.time - packet.start_time;
    UInt64 unloaded_delay = computeUnloadedDelay(packet.sender, _core_id, num_flits);
+   assert(unloaded_delay <= packet_latency);
    UInt64 contention_delay = packet_latency - unloaded_delay;
 
    _total_packets_received ++;
@@ -445,9 +443,10 @@ FiniteBufferNetworkModel::outputSummary(ostream& out)
       UInt64 total_contention_delay_in_ns = convertCycleCount(_total_contention_delay, getFrequency(), 1.0);
       UInt64 total_packet_latency_in_ns = convertCycleCount(_total_packet_latency, getFrequency(), 1.0);
 
-      out << "    total contention delay: " << _total_contention_delay << endl;
       out << "    average packet length: " << 
          ((float) _total_bytes_received / _total_packets_received) << endl;
+      out << "    total contention delay: " << _total_contention_delay << endl;
+      out << "    total packet latency: " << _total_packet_latency << endl;
       out << "    average contention delay (in clock cycles): " << 
          ((double) _total_contention_delay / _total_packets_received) << endl;
       out << "    average contention delay (in ns): " << 
@@ -460,9 +459,12 @@ FiniteBufferNetworkModel::outputSummary(ostream& out)
    }
    else
    {
+      out << "    average packet length: 0" << endl;
+      out << "    total contention delay: 0" << endl;
+      out << "    total packet latency: 0" << endl;
+      
       out << "    average contention delay (in clock cycles): 0" << endl;
       out << "    average contention delay (in ns): 0" << endl;
-      
       out << "    average packet latency (in clock cycles): 0" << endl;
       out << "    average packet latency (in ns): 0" << endl;
    }

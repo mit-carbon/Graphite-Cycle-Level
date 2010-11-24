@@ -62,17 +62,17 @@ FlowControlScheme::create(Type flow_control_scheme, \
 void
 FlowControlScheme::dividePacket(Type flow_control_scheme, \
       NetPacket* net_packet, list<NetPacket*>& net_packet_list, \
-      SInt32 num_flits)
+      SInt32 num_flits, core_id_t requester)
 {
    switch (flow_control_scheme)
    {
       case STORE_AND_FORWARD:
       case VIRTUAL_CUT_THROUGH:
-         PacketBufferFlowControlScheme::dividePacket(net_packet, net_packet_list, num_flits);
+         PacketBufferFlowControlScheme::dividePacket(net_packet, net_packet_list, num_flits, requester);
          break;
 
       case WORMHOLE:
-         FlitBufferFlowControlScheme::dividePacket(net_packet, net_packet_list, num_flits);
+         FlitBufferFlowControlScheme::dividePacket(net_packet, net_packet_list, num_flits, requester);
          break;
 
       default:

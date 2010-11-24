@@ -128,7 +128,7 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
             vector<Channel::Endpoint>& output_endpoint_list);
       
       // Virtual Function in FiniteBufferNetworkModel
-      void computeOutputEndpointList(HeadFlit* head_flit, Router* curr_router);
+      void computeOutputEndpointList(Flit* head_flit, Router* curr_router);
       UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits)
       { return 0; /* FIXME: Fill me in */ }
 };

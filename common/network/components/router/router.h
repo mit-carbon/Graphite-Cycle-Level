@@ -12,6 +12,7 @@ using namespace std;
 #include "link_performance_model.h"
 #include "link_power_model.h"
 #include "channel.h"
+#include "time_normalizer.h"
 
 class Router
 {
@@ -81,6 +82,9 @@ class Router
       vector<LinkPerformanceModel*> _link_performance_model_list;
       vector<LinkPowerModel*> _link_power_model_list;
 
+      // Time Normalizer
+      TimeNormalizer* _time_normalizer;
+
       // Endpoint <-> Router Id mapping
       vector<vector<Router::Id> > _input_channel_to_router_id_list__mapping;
       vector<vector<Router::Id> > _output_channel_to_router_id_list__mapping;
@@ -89,8 +93,4 @@ class Router
 
       void createMappings();
       void performRouterAndLinkTraversal(NetworkMsg* network_msg_to_send);
-
-      // FIXME: Change this later
-      UInt64 normalizeTime(UInt64 time)
-      { return time; }
 };

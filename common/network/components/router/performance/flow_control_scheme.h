@@ -40,7 +40,7 @@ class FlowControlScheme
 
       static void dividePacket(Type flow_control_scheme, \
             NetPacket* net_packet, list<NetPacket*>& net_packet_list, \
-            SInt32 num_flits);
+            SInt32 num_flits, core_id_t requester);
       static bool isPacketComplete(Type flow_control_scheme, NetPacket* net_packet);
       static SInt32 computeNumFlits(SInt32 packet_length, SInt32 flit_width);
 

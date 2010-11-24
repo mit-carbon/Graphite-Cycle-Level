@@ -7,7 +7,6 @@ using namespace std;
 #include "network_model.h"
 #include "network.h"
 #include "router.h"
-#include "head_flit.h"
 #include "lock.h"
 
 class FiniteBufferNetworkModel : public NetworkModel
@@ -61,8 +60,6 @@ class FiniteBufferNetworkModel : public NetworkModel
       map<UInt64, NetPacket*> _received_modeling_packet_map;
       // Flow Control Packet Type
       PacketType _flow_control_packet_type;
-      // Last Packet Id
-      UInt64 _last_packet_id;
       // Performance Counters
       UInt64 _total_packets_received;
       UInt64 _total_bytes_received;
@@ -70,7 +67,7 @@ class FiniteBufferNetworkModel : public NetworkModel
       UInt64 _total_contention_delay;
 
       // Compute the output endpoints->[channel, index] of a particular flit
-      virtual void computeOutputEndpointList(HeadFlit* head_flit, Router* curr_router) = 0;
+      virtual void computeOutputEndpointList(Flit* head_flit, Router* curr_router) = 0;
       // Compute Unloaded delay
       virtual UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits) = 0;
 

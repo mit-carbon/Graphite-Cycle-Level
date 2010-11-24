@@ -485,8 +485,7 @@ FiniteBufferNetworkModelAtac::createRouter(RouterType router_type)
 }
 
 void
-FiniteBufferNetworkModelAtac::computeOutputEndpointList(HeadFlit* head_flit, \
-      Router* curr_router)
+FiniteBufferNetworkModelAtac::computeOutputEndpointList(Flit* head_flit, Router* curr_router)
 {
    Router::Id curr_router_id = curr_router->getId();
    assert(_core_id == curr_router_id._core_id);

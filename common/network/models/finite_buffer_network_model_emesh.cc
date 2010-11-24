@@ -174,8 +174,7 @@ FiniteBufferNetworkModelEMesh::createRouter()
 }
 
 void
-FiniteBufferNetworkModelEMesh::computeOutputEndpointList(HeadFlit* head_flit, \
-      Router* curr_router)
+FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Router* curr_router)
 {
    LOG_PRINT("computeOutputEndpointList(%p,%p) enter", head_flit, curr_router);
 

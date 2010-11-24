@@ -32,16 +32,35 @@ void
 BufferModel::updateFlitTime()
 {
    Flit* flit = _queue.front();
+   
+   LOG_PRINT("updateFlitTime() enter: Flit Time(%llu), Buffer Time(%llu)", \
+         flit->_normalized_time, _queue_time);
+
    // Synchronize the flit time to the buffer time
    flit->_normalized_time = max<UInt64>(_queue_time, flit->_normalized_time);
+   
+   LOG_PRINT("updateFlitTime() exit: Flit Time(%llu)", flit->_normalized_time);
 }
 
 void
 BufferModel::updateBufferTime()
 {
    Flit* flit = _queue.front();
+   
+   LOG_PRINT("updateBufferTime() enter: Flit Time(%llu), Flit Length(%i), Buffer Time(%llu)", \
+         flit->_normalized_time, flit->_length, _queue_time);
+
    // Synchronize the buffer time to the flit time
    _queue_time = max<UInt64>(_queue_time, flit->_normalized_time + flit->_length);
+   
+   LOG_PRINT("updateBufferTime() enter: Buffer Time(%llu)", _queue_time);
+}
+
+UInt64
+BufferModel::getBufferTime()
+{
+   LOG_PRINT("getBufferTime(): Buffer Time(%llu)", _queue_time);
+   return _queue_time;
 }
 
 BufferModel*

@@ -1,6 +1,5 @@
 #include <cmath>
 
-#include "head_flit.h"
 #include "flit_buffer_flow_control_scheme.h"
 #include "log.h"
 
@@ -15,38 +14,38 @@ FlitBufferFlowControlScheme::~FlitBufferFlowControlScheme()
 void
 FlitBufferFlowControlScheme::dividePacket(NetPacket* net_packet, \
       list<NetPacket*>& net_packet_list, \
-      SInt32 num_flits)
+      SInt32 num_flits, core_id_t requester)
 {
    LOG_PRINT("dividePacket(%p, %i) enter", net_packet, num_flits);
 
    // Make HeadFlit first
-   HeadFlit* head_flit = new HeadFlit(1, net_packet->sender, net_packet->receiver);
+   Flit* head_flit = new Flit(Flit::HEAD, 1, net_packet->sender, net_packet->receiver, requester);
    NetPacket* head_flit_packet = new NetPacket(net_packet->time, net_packet->type, \
-         sizeof(*head_flit), (void*) head_flit, \
+         head_flit->size(), (void*) head_flit, \
          false /* is_raw */, net_packet->sequence_num);
    net_packet_list.push_back(head_flit_packet);
 
    for (SInt32 i = 1; i < num_flits - 1; i++)
    {
-      Flit* body_flit = new Flit(Flit::BODY, 1);
+      Flit* body_flit = new Flit(Flit::BODY, 1, net_packet->sender, net_packet->receiver, requester);
       NetPacket* body_flit_packet = new NetPacket(net_packet->time + i, net_packet->type,
-            sizeof(*body_flit), (void*) body_flit, \
+            body_flit->size(), (void*) body_flit, \
             false /* is_raw */, net_packet->sequence_num);
       net_packet_list.push_back(body_flit_packet);
    }
    if (num_flits > 1)
    {
       // Have a separate TAIL flit
-      Flit* tail_flit = new Flit(Flit::TAIL, 1);
+      Flit* tail_flit = new Flit(Flit::TAIL, 1, net_packet->sender, net_packet->receiver, requester);
       NetPacket* tail_flit_packet = new NetPacket(net_packet->time + num_flits - 1, net_packet->type, \
-            sizeof(*tail_flit), (void*) tail_flit, \
+            tail_flit->size(), (void*) tail_flit, \
             false /* is_raw */, net_packet->sequence_num);
       net_packet_list.push_back(tail_flit_packet);
    }
    else
    {
       // The head flit is also the tail flit
-      head_flit->_type = (Flit::Type) ( ((SInt32) head_flit->_type) | ((SInt32) Flit::TAIL) );
+      head_flit->_type = (Flit::Type) ( ((SInt32) Flit::HEAD) | ((SInt32) Flit::TAIL) );
    }
 
    LOG_PRINT("dividePacket() exit");

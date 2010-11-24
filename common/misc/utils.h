@@ -12,6 +12,13 @@
 
 using namespace std;
 
+inline unsigned long long rdtscll(void)
+{
+   unsigned int _a, _d;
+   asm volatile("rdtsc" : "=a"(_a), "=d"(_d));
+   return ((unsigned long long) _a) | (((unsigned long long) _d) << 32);
+}
+
 
 string myDecStr(UInt64 v, UInt32 w);
 

@@ -53,6 +53,8 @@ Core::Core(SInt32 id)
 
 Core::~Core()
 {
+   // fprintf(stderr, "Core(%i) dtor enter\n", getId());
+   
    if (m_clock_skew_minimization_client)
       delete m_clock_skew_minimization_client;
 
@@ -65,7 +67,12 @@ Core::~Core()
       delete m_shmem_perf_model;
    }
    delete m_performance_model;
+   
+   // fprintf(stderr, "Before network dtor\n");
    delete m_network;
+   // fprintf(stderr, "After network dtor\n");
+
+   // fprintf(stderr, "Core(%i) dtor exit\n", getId());
 }
 
 void Core::outputSummary(std::ostream &os)

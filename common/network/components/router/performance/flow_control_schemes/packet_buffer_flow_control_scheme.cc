@@ -114,7 +114,7 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
       return false;
    }
 
-   HeadFlit* head_flit = (HeadFlit*) packet_buffer->front();
+   Flit* head_flit = packet_buffer->front();
 
    head_flit->_output_endpoint = head_flit->_output_endpoint_list->curr();
    // Update Flit Time
@@ -127,7 +127,7 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
    if (allocated)
    {
       // head_flit_to_send downstream
-      HeadFlit* head_flit_to_send;
+      Flit* head_flit_to_send;
 
       // Remove flit from queue
       // Update Buffer Time first
@@ -151,7 +151,7 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
       {
          // Duplicate head_flit and net_packet
          NetPacket* cloned_net_packet = head_flit->_net_packet->clone();
-         HeadFlit* cloned_head_flit = (HeadFlit*) cloned_net_packet->data;
+         Flit* cloned_head_flit = (Flit*) cloned_net_packet->data;
          cloned_head_flit->_net_packet = cloned_net_packet;
          
          // Send cloned_head_flit downstream
@@ -172,7 +172,7 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
 }
 
 bool
-PacketBufferFlowControlScheme::allocateDownstreamBuffer(HeadFlit* head_flit)
+PacketBufferFlowControlScheme::allocateDownstreamBuffer(Flit* head_flit)
 {
    Channel::Endpoint& output_endpoint = head_flit->_output_endpoint;
    ListOfBufferUsageHistories* list_of_buffer_usage_histories = \
@@ -183,11 +183,11 @@ PacketBufferFlowControlScheme::allocateDownstreamBuffer(HeadFlit* head_flit)
 void
 PacketBufferFlowControlScheme::dividePacket(NetPacket* net_packet, \
       list<NetPacket*>& net_packet_list, \
-      SInt32 num_flits)
+      SInt32 num_flits, core_id_t requester)
 {
-   HeadFlit* head_flit = new HeadFlit(num_flits, net_packet->sender, net_packet->receiver);
+   Flit* head_flit = new Flit(Flit::HEAD, num_flits, net_packet->sender, net_packet->receiver, requester);
    NetPacket* head_flit_packet = new NetPacket(net_packet->time, net_packet->type, \
-         sizeof(*head_flit), (void*) head_flit, \
+         head_flit->size(), (void*) head_flit, \
          false /* is_raw */, net_packet->sequence_num);
    net_packet_list.push_back(head_flit_packet);
 }
