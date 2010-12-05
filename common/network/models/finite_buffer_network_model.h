@@ -84,7 +84,11 @@ class FiniteBufferNetworkModel : public NetworkModel
             Router::Id& sender_router_id, Router::Id& receiver_router_id);
       SInt32 computeNumFlits(SInt32 packet_length);
       core_id_t getRequester(const NetPacket& packet);
+      UInt64 computePacketId(core_id_t sender, UInt64 sequence_num);
 
       // Initialization
       void initializePerformanceCounters();
+
+      // misc
+      void printNetPacketList(const list<NetPacket*>& net_packet_list);
 };

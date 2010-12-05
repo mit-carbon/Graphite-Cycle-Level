@@ -20,8 +20,9 @@ Router::Router(Id id, \
    _output_channel_to_router_id_list__mapping(output_channel_to_router_id_list__mapping)
 {
    createMappings();
+
    // Time Normalizer
-   _time_normalizer = new TimeNormalizer(Config::getSingleton()->getApplicationCores());
+   _time_normalizer = TimeNormalizer::create(Config::getSingleton()->getApplicationCores());
 }
 
 Router::~Router()
@@ -35,16 +36,10 @@ Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_
    switch (network_msg->_type)
    {
       case NetworkMsg::DATA:
-         
+ 
          {
             Flit* flit = (Flit*) network_msg;
-            NetPacket* net_packet = flit->_net_packet;
-            assert(net_packet);
-          
-            // Compute normalized time 
-            flit->_normalized_time = _time_normalizer->normalize(net_packet->time, flit->_requester);
-            // Set the entry time to account for the time spent in the router
-            flit->_normalized_time_at_entry = flit->_normalized_time;
+            normalizeTime(flit, true /* entry */); 
 
             _router_performance_model->processDataMsg(flit, network_msg_list_to_send);
          }
@@ -55,6 +50,8 @@ Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_
 
          {
             BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
+            normalizeTime(buffer_msg, true /* entry */);
+
             // Add Credit Pipeline Delay
             buffer_msg->_normalized_time += _router_performance_model->getCreditPipelineDelay();
             _router_performance_model->processBufferManagementMsg(buffer_msg, network_msg_list_to_send);
@@ -73,8 +70,10 @@ Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_
       NetworkMsg* network_msg_to_send = *msg_it;
       // Account for router and link delays + update dynamic energy
       performRouterAndLinkTraversal(network_msg_to_send);
+      // Normalize Time
+      normalizeTime(network_msg_to_send, false /* exit */);
    }
-   
+ 
    LOG_PRINT("processNetworkMsg(%p, %p) exit", this, network_msg);
 }
 
@@ -116,6 +115,60 @@ Router::performRouterAndLinkTraversal(NetworkMsg* network_msg_to_send)
 
       default:
          LOG_PRINT_ERROR("Unrecognized NetworkMsg Type(%u)", network_msg_to_send->_type);
+         break;
+   }
+}
+
+void
+Router::normalizeTime(NetworkMsg* network_msg, bool entry)
+{
+   switch (network_msg->_type)
+   {
+      case NetworkMsg::DATA:
+
+         {
+            Flit* flit = (Flit*) network_msg;
+            if (entry)
+            {
+               // Compute normalized time
+               flit->_normalized_time = _time_normalizer->normalize(flit->_net_packet->time, flit->_requester);
+               // Set the entry time to account for the time spent in the router
+               flit->_normalized_time_at_entry = flit->_normalized_time;
+               LOG_PRINT("Normalize(DATA, %llu) -> %llu", flit->_net_packet->time, flit->_normalized_time);
+            }
+            else
+            {
+               assert(flit->_net_packet);
+               // Compute new unnormalized time
+               flit->_net_packet->time += (flit->_normalized_time - flit->_normalized_time_at_entry);
+            }
+         }
+
+         break;
+
+      case NetworkMsg::BUFFER_MANAGEMENT:
+         
+         {            
+            BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
+            if (entry)
+            {
+               // Re-normalize according to average rate of progress
+               UInt64 renormalized_time = _time_normalizer->renormalize(buffer_msg->_normalized_time,
+                     buffer_msg->_average_rate_of_progress);
+               LOG_PRINT("Renormalize(BUFFER, %llu) -> %llu", buffer_msg->_normalized_time, renormalized_time);
+               buffer_msg->_normalized_time = renormalized_time;
+            }
+            else
+            {
+               // Set the average rate of progress
+               buffer_msg->_average_rate_of_progress = _time_normalizer->getAverageRateOfProgress();
+            }
+         }
+
+         break;
+
+      default:
+         LOG_PRINT_ERROR("Unrecognized NetworkMsg type(%u)", network_msg->_type);
          break;
    }
 }

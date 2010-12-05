@@ -70,6 +70,10 @@ class Router
       RouterPerformanceModel* getRouterPerformanceModel()
       { return _router_performance_model; }
 
+      // Time Normalizer
+      TimeNormalizer* getTimeNormalizer()
+      { return _time_normalizer; }
+
    private:
       Id _id;
 
@@ -90,6 +94,9 @@ class Router
       vector<vector<Router::Id> > _output_channel_to_router_id_list__mapping;
       map<Router::Id, Channel::Endpoint> _router_id_to_input_endpoint_mapping;
       map<Router::Id, Channel::Endpoint> _router_id_to_output_endpoint_mapping;
+
+      // Normalize Time
+      void normalizeTime(NetworkMsg* network_msg, bool entry);
 
       void createMappings();
       void performRouterAndLinkTraversal(NetworkMsg* network_msg_to_send);

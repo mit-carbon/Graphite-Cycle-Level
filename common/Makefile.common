@@ -21,6 +21,7 @@ DIRECTORIES = $(SIM_ROOT)/common/core/        									\
 			 $(SIM_ROOT)/common/network/components/link/power     			\
           $(SIM_ROOT)/common/transport/       									\
           $(SIM_ROOT)/common/misc/            									\
+          $(SIM_ROOT)/common/misc/time_normalizers								\
           $(SIM_ROOT)/common/config/	      									\
           $(SIM_ROOT)/common/system/          									\
           $(SIM_ROOT)/common/performance_model/      							\

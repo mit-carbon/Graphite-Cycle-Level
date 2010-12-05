@@ -94,7 +94,7 @@ void Network::netPullFromTransport()
 
       NetPacket packet(_transport->recv());
 
-      LOG_PRINT("Pull packet : type %i, from %i, time %llu, raw(%i)", \
+      LOG_PRINT("Pull packet : type %i, from %i, time %llu, raw %i", \
             (SInt32)packet.type, packet.sender, packet.time, packet.is_raw);
       LOG_ASSERT_ERROR(0 <= packet.sender && packet.sender < _numMod,
             "Invalid Packet Sender(%i)", packet.sender);
@@ -120,7 +120,7 @@ void Network::netPullFromTransport()
          // Receive the packets intended for this core
          receivePacketList(net_packet_list_to_receive);
       }
-      else // (! model->isFiniteBuffer())
+      else // (!model->isFiniteBuffer())
       {
          UInt32 action = model->computeAction(packet);
          
@@ -158,7 +158,7 @@ void Network::receivePacket(NetPacket& packet)
          _core->getPerformanceModel()->getFrequency());
 
    LOG_PRINT("After Converting Cycle Count: packet.time(%llu)", packet.time);
-   
+
    // asynchronous I/O support
    NetworkCallback callback = _callbacks[packet.type];
 
@@ -590,19 +590,19 @@ void Network::resetModels()
 // Modeling
 UInt32 Network::getModeledLength(const NetPacket& pkt)
 {
+   UInt32 header_size = 1 + 2 * Config::getSingleton()->getCoreIDLength() + 2;
    if ((pkt.type == SHARED_MEM_1) || (pkt.type == SHARED_MEM_2))
    {
       // packet_type + sender + receiver + length + shmem_msg.size()
       // 1 byte for packet_type
       // log2(core_id) for sender and receiver
       // 2 bytes for packet length
-      UInt32 metadata_size = 1 + 2 * Config::getSingleton()->getCoreIDLength() + 2;
       UInt32 data_size = getCore()->getMemoryManager()->getModeledLength(pkt.data);
-      return metadata_size + data_size;
+      return header_size + data_size;
    }
    else
    {
-      return pkt.bufferSize();
+      return header_size + pkt.length;
    }
 }
 
