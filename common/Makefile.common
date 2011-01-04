@@ -24,6 +24,7 @@ DIRECTORIES = $(SIM_ROOT)/common/core/        									\
           $(SIM_ROOT)/common/misc/time_normalizers								\
           $(SIM_ROOT)/common/config/	      									\
           $(SIM_ROOT)/common/system/          									\
+          $(SIM_ROOT)/common/system/clock_skew_minimization					\
           $(SIM_ROOT)/common/performance_model/      							\
           $(SIM_ROOT)/common/performance_model/branch_predictors/      	\
           $(SIM_ROOT)/common/performance_model/performance_models/     	\

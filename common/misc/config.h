@@ -109,8 +109,10 @@ public:
    UInt32 getNumLocalCores() { return getNumCoresInProcess(getCurrentProcessNum()); }
 
    // Return the total number of modules in all processes
-   UInt32 getTotalCores();
-   UInt32 getApplicationCores();
+   UInt32 getTotalCores() { return m_total_cores; }
+   UInt32 getApplicationCores() { return m_application_cores; }
+   // Get the total number of sim threads
+   UInt32 getTotalSimThreads() { return m_total_sim_threads; }
 
    // Return an array of core numbers for a given process
    //  The returned array will have numMods(proc_num) elements
@@ -169,6 +171,7 @@ private:
    UInt32  m_num_processes;         // Total number of processes (incl myself)
    UInt32  m_total_cores;           // Total number of cores in all processes
    UInt32  m_application_cores;     // Total number of cores used by the application
+   UInt32  m_total_sim_threads;     // Total number of sim threads
    UInt32  m_core_id_length;        // Number of bytes needed to store a core_id
 
    UInt32  m_current_process_num;          // Process number for this process
@@ -194,6 +197,7 @@ private:
 
    static UInt32 m_knob_total_cores;
    static UInt32 m_knob_num_process;
+   static UInt32 m_knob_total_sim_threads;
    static bool m_knob_simarch_has_shared_mem;
    static std::string m_knob_output_file;
    static bool m_knob_enable_performance_modeling;

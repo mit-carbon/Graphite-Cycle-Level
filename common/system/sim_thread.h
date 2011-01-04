@@ -3,7 +3,6 @@
 
 #include "thread.h"
 #include "fixed_types.h"
-#include "network.h"
 
 class SimThread : public Runnable
 {
@@ -15,8 +14,6 @@ public:
 
 private:
    void run();
-
-   static void terminateFunc(void *vp, NetPacket pkt);
 
    Thread *m_thread;
 };

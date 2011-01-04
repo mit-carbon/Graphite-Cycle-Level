@@ -13,6 +13,7 @@
 
 UInt32 Config::m_knob_total_cores;
 UInt32 Config::m_knob_num_process;
+UInt32 Config::m_knob_total_sim_threads;
 bool Config::m_knob_simarch_has_shared_mem;
 std::string Config::m_knob_output_file;
 bool Config::m_knob_enable_performance_modeling;
@@ -39,6 +40,7 @@ Config::Config()
    {
       m_knob_total_cores = Sim()->getCfg()->getInt("general/total_cores");
       m_knob_num_process = Sim()->getCfg()->getInt("general/num_processes");
+      m_knob_total_sim_threads = Sim()->getCfg()->getInt("general/total_sim_threads");
       m_knob_simarch_has_shared_mem = Sim()->getCfg()->getBool("general/enable_shared_mem");
       m_knob_output_file = Sim()->getCfg()->getString("general/output_file");
       m_knob_enable_performance_modeling = Sim()->getCfg()->getBool("general/enable_performance_modeling");
@@ -59,6 +61,7 @@ Config::Config()
    m_num_processes = m_knob_num_process;
    m_total_cores = m_knob_total_cores;
    m_application_cores = m_total_cores;
+   m_total_sim_threads = m_knob_total_sim_threads;
 
    if ((m_simulation_mode == LITE) && (m_num_processes > 1))
    {
@@ -97,16 +100,6 @@ Config::~Config()
 {
    // Clean up the dynamic memory we allocated
    delete [] m_proc_to_core_list_map;
-}
-
-UInt32 Config::getTotalCores()
-{
-   return m_total_cores;
-}
-
-UInt32 Config::getApplicationCores()
-{
-   return m_application_cores;
 }
 
 core_id_t Config::getThreadSpawnerCoreNum(UInt32 proc_num)

@@ -4,7 +4,7 @@
 #include "log.h"
 #include "config.h"
 #include "simulator.h"
-#include "mcp.h"
+#include "transport.h"
 
 SimThreadManager::SimThreadManager()
    : m_active_threads(0)
@@ -19,11 +19,12 @@ SimThreadManager::~SimThreadManager()
 
 void SimThreadManager::spawnSimThreads()
 {
-   UInt32 num_sim_threads = Config::getSingleton()->getNumLocalCores();
+   m_simulation_running = true;
+   UInt32 num_sim_threads = Config::getSingleton()->getTotalSimThreads();
 
    LOG_PRINT("Starting %d threads on proc: %d.", num_sim_threads, Config::getSingleton()->getCurrentProcessNum());
 
-   m_sim_threads = new SimThread [num_sim_threads];
+   m_sim_threads = new SimThread[num_sim_threads];
 
    for (UInt32 i = 0; i < num_sim_threads; i++)
    {
@@ -39,23 +40,7 @@ void SimThreadManager::spawnSimThreads()
 
 void SimThreadManager::quitSimThreads()
 {
-   LOG_PRINT("Sending quit messages.");
-
-   Transport::Node *global_node = Transport::getSingleton()->getGlobalNode();
-   UInt32 num_local_cores = Config::getSingleton()->getNumLocalCores();
-
-   // This is something of a hard-wired emulation of Network::netSend
-   // ... not the greatest thing to do, but whatever.
-   NetPacket pkt(0, SIM_THREAD_TERMINATE_THREADS, 0, 0, 0, NULL);
-   const Config::CoreList &core_list = Config::getSingleton()->getCoreListForProcess(Config::getSingleton()->getCurrentProcessNum());
-
-   for (UInt32 i = 0; i < num_local_cores; i++)
-   {
-      core_id_t core_id = core_list[i];
-      pkt.receiver = core_id;
-      global_node->send(core_id, &pkt, pkt.bufferSize());
-   }
-
+   m_simulation_running = false; 
    LOG_PRINT("Waiting for local sim threads to exit.");
 
    while (m_active_threads > 0)
@@ -66,16 +51,18 @@ void SimThreadManager::quitSimThreads()
    LOG_PRINT("All threads have exited.");
 }
 
-void SimThreadManager::simThreadStartCallback()
+SInt32 SimThreadManager::registerSimThread()
 {
    m_active_threads_lock.acquire();
-   ++m_active_threads;
+   SInt32 sim_thread_id = m_active_threads++;
    m_active_threads_lock.release();
+
+   return sim_thread_id;
 }
 
-void SimThreadManager::simThreadExitCallback()
+void SimThreadManager::unregisterSimThread()
 {
    m_active_threads_lock.acquire();
-   --m_active_threads;
+   m_active_threads--;
    m_active_threads_lock.release();
 }

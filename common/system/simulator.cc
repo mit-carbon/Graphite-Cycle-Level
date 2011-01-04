@@ -5,6 +5,7 @@
 #include "lcp.h"
 #include "mcp.h"
 #include "core.h"
+#include "event_manager.h"
 #include "core_manager.h"
 #include "thread_manager.h"
 #include "perf_counter_manager.h"
@@ -55,6 +56,7 @@ Simulator::Simulator()
    , m_config()
    , m_log(m_config)
    , m_transport(NULL)
+   , m_event_manager(NULL)
    , m_core_manager(NULL)
    , m_thread_manager(NULL)
    , m_perf_counter_manager(NULL)
@@ -80,6 +82,7 @@ void Simulator::start()
    // OrionConfig::getSingleton()->print_config(cout);
  
    m_transport = Transport::create();
+   m_event_manager = new EventManager();
    m_core_manager = new CoreManager();
    m_thread_manager = new ThreadManager(m_core_manager);
    m_perf_counter_manager = new PerfCounterManager(m_thread_manager);
@@ -152,6 +155,7 @@ Simulator::~Simulator()
    delete m_perf_counter_manager;
    delete m_thread_manager;
    delete m_core_manager;
+   delete m_event_manager;
    delete m_transport;
 
    // Delete Orion Config Object

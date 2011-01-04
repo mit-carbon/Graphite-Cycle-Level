@@ -8,6 +8,7 @@
 class MCP;
 class LCP;
 class Transport;
+class EventManager;
 class CoreManager;
 class Thread;
 class ThreadManager;
@@ -30,6 +31,7 @@ public:
 
    MCP *getMCP() { return m_mcp; }
    LCP *getLCP() { return m_lcp; }
+   EventManager* getEventManager() { return m_event_manager; }
    CoreManager *getCoreManager() { return m_core_manager; }
    SimThreadManager *getSimThreadManager() { return m_sim_thread_manager; }
    ThreadManager *getThreadManager() { return m_thread_manager; }
@@ -66,6 +68,7 @@ private:
    Config m_config;
    Log m_log;
    Transport *m_transport;
+   EventManager *m_event_manager;
    CoreManager *m_core_manager;
    ThreadManager *m_thread_manager;
    PerfCounterManager *m_perf_counter_manager;

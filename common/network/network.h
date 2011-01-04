@@ -94,7 +94,7 @@ class Network
 
       void outputSummary(ostream &out) const;
 
-      void netPullFromTransport();
+      void processPacket(NetPacket* packet);
 
       // -- Main interface -- //
 
@@ -135,10 +135,10 @@ class Network
       Lock _netQueueLock;
       ConditionVariable _netQueueCond;
 
-      SInt32 forwardPacket(const NetPacket& packet);
-      void sendPacket(const NetPacket* packet);
+      SInt32 forwardPacket(const NetPacket* packet);
+      void sendPacket(const NetPacket* packet, SInt32 receiver);
       void sendPacketList(const list<NetPacket*>& net_packet_list_to_send);
-      void receivePacket(NetPacket& packet);
+      void receivePacket(NetPacket* packet);
       void receivePacketList(const list<NetPacket*>& net_packet_list_to_receive);
 };
 
