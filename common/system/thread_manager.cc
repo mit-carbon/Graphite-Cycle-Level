@@ -101,34 +101,35 @@ void ThreadManager::onThreadStart(ThreadSpawnRequest *req)
    PerformanceModel *pm = m_core_manager->getCurrentCore()->getPerformanceModel();
 
    // Global Clock to Core Clock
-   UInt64 start_cycle_count = convertCycleCount(req->time, \
+   UInt64 start_cycle_count = convertCycleCount(req->time,
          1.0, pm->getFrequency());
    pm->queueDynamicInstruction(new SpawnInstruction(start_cycle_count));
 }
 
 void ThreadManager::onThreadExit()
 {
-   if (m_core_manager->getCurrentCoreID() == -1)
+   if (m_core_manager->getCurrentCoreID() == INVALID_CORE_ID)
       return;
  
    // Floating Point Save/Restore
    FloatingPointHandler floating_point_handler;
 
    Core* core = m_core_manager->getCurrentCore();
+   PerformanceModel* pm = core->getPerformanceModel();
 
    // send message to master process to update thread state
    SInt32 msg[] = { MCP_MESSAGE_THREAD_EXIT, m_core_manager->getCurrentCoreID() };
 
    LOG_PRINT("onThreadExit -- send message to master ThreadManager; thread %d at time %llu",
              core->getId(),
-             core->getPerformanceModel()->getCycleCount());
+             pm->getCycleCount());
    Network *net = core->getNetwork();
 
    // Set the CoreState to 'IDLE'
    core->setState(Core::IDLE);
 
    // Recompute Average Frequency
-   core->getPerformanceModel()->recomputeAverageFrequency();
+   pm->recomputeAverageFrequency();
 
    // terminate thread locally so we are ready for new thread requests
    // on that core
@@ -183,7 +184,8 @@ SInt32 ThreadManager::spawnThread(thread_func_t func, void *arg)
    Network *net = core->getNetwork();
 
    // Core Clock to Global Clock
-   UInt64 global_cycle_count = convertCycleCount(core->getPerformanceModel()->getCycleCount(), \
+   UInt64 global_cycle_count = convertCycleCount(
+         core->getPerformanceModel()->getCycleCount(),
          core->getPerformanceModel()->getFrequency(), 1.0);
 
    ThreadSpawnRequest req = { MCP_MESSAGE_THREAD_SPAWN_REQUEST_FROM_REQUESTER,
@@ -205,7 +207,7 @@ SInt32 ThreadManager::spawnThread(thread_func_t func, void *arg)
    // Set the CoreState to 'RUNNING'
    core->setState(Core::RUNNING);
 
-   core_id_t core_id = *((core_id_t*)pkt.data);
+   core_id_t core_id = *((core_id_t*) pkt.data);
    LOG_PRINT("Thread spawned on core: %d", core_id);
 
    // Delete the data buffer
@@ -410,7 +412,8 @@ void ThreadManager::masterJoinThread(ThreadJoinRequest *req, UInt64 time)
    stallThread(req->sender);
 
    // Core not running, so the thread must have joined
-   LOG_ASSERT_ERROR((UInt32)req->core_id < m_thread_state.size(), "Core id out of range: %d", req->core_id);
+   LOG_ASSERT_ERROR((UInt32)req->core_id < m_thread_state.size(),
+         "Core id out of range: %d", req->core_id);
    if (m_thread_state[req->core_id].status == Core::IDLE)
    {
       LOG_PRINT("Not running, sending reply.");
