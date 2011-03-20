@@ -354,7 +354,7 @@ SockTransport::BufferTagPair SockTransport::SockNode::recv()
    LOG_PRINT("Entering recv");
 
    SInt32 node_id = getNodeId();
-   SInt32 list_id = (node_id == GLOBAL_TAG) ? (m_num_lists-1) : node_id;
+   SInt32 list_id = (node_id == GLOBAL_TAG) ? (m_transport->m_num_lists-1) : node_id;
    
    m_transport->m_buffer_list_sems[list_id].wait();
 
@@ -388,7 +388,7 @@ SockTransport::BufferTagPair SockTransport::SockNode::recv()
 bool SockTransport::SockNode::query()
 {
    SInt32 node_id = getNodeId();
-   SInt32 list_id = (node_id == GLOBAL_TAG) ? (m_num_lists-1) : node_id;
+   SInt32 list_id = (node_id == GLOBAL_TAG) ? (m_transport->m_num_lists-1) : node_id;
 
    buffer_list &list = m_transport->m_buffer_lists[list_id];
    Lock &lock = m_transport->m_buffer_list_locks[list_id];
