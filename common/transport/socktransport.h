@@ -21,7 +21,7 @@ public:
 
       void globalSend(SInt32 dest_proc, const void *buffer, UInt32 length);
       void send(core_id_t dest_core, const void *buffer, UInt32 length);
-      Byte* recv();
+      BufferTagPair recv();
       bool query();
 
    private:
@@ -114,7 +114,7 @@ private:
    Thread *m_update_thread;
    UpdateThreadState m_update_thread_state;
 
-   typedef std::list<Byte*> buffer_list;
+   typedef std::list<BufferTagPair> buffer_list;
    SInt32 m_num_lists;
    buffer_list *m_buffer_lists;
    std::list<Header*> *m_header_lists;

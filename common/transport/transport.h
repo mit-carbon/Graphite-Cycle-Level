@@ -10,6 +10,8 @@ class Transport
 public:
    virtual ~Transport() { };
 
+   typedef std::pair<Byte*,SInt32> BufferTagPair;
+
    class Node
    {
    public:
@@ -17,15 +19,15 @@ public:
 
       virtual void globalSend(SInt32 dest_proc, const void *buffer, UInt32 length) = 0;
       virtual void send(core_id_t dest, const void *buffer, UInt32 length) = 0;
-      virtual Byte* recv() = 0;
+      virtual BufferTagPair recv() = 0;
       virtual bool query() = 0;
 
    protected:
-      core_id_t getCoreId();
-      Node(core_id_t core_id);
+      SInt32 getNodeId();
+      Node(SInt32 node_id);
 
    private:
-      core_id_t m_core_id;
+      SInt32 m_node_id;
    };
 
    static Transport* create();

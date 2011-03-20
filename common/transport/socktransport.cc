@@ -116,7 +116,7 @@ void SockTransport::initSockets()
 void SockTransport::initBufferLists()
 {
    m_num_lists
-      = Config::getSingleton()->getTotalCores() // for cores
+      = Config::getSingleton()->getLocalSimThreadCount() // for sim threads
       + 1; // for global node
 
    m_buffer_lists = new buffer_list[m_num_lists];
@@ -217,19 +217,18 @@ void SockTransport::updateBufferLists()
 
 void SockTransport::insertInBufferList(SInt32 tag, Byte *buffer, Header* header)
 {
-   if (tag == GLOBAL_TAG)
-      tag = m_num_lists - 1;
+   SInt32 list_id = (tag == GLOBAL_TAG) ? (m_num_lists-1) : Config::getSingleton()->getSimThreadIDFromCoreID(tag);
 
-   LOG_ASSERT_ERROR(0 <= tag && tag < m_num_lists, "Unexpected tag value: %d", tag);
-   m_buffer_list_locks[tag].acquire();
-   m_buffer_lists[tag].push_back(buffer);
+   LOG_ASSERT_ERROR(0 <= list_id && list_id < m_num_lists, "Unexpected list_id value: %d", list_id);
+   m_buffer_list_locks[list_id].acquire();
+   m_buffer_lists[list_id].push_back(BufferTagPair(buffer,tag));
 
 #ifdef __CHECKSUM_ENABLED__
-   m_header_lists[tag].push_back(header);
+   m_header_lists[list_id].push_back(header);
 #endif // __CHECKSUM_ENABLED__
    
-   m_buffer_list_locks[tag].release();
-   m_buffer_list_sems[tag].signal();
+   m_buffer_list_locks[list_id].release();
+   m_buffer_list_sems[list_id].signal();
 }
 
 void SockTransport::terminateUpdateThread()
@@ -347,21 +346,24 @@ void SockTransport::SockNode::send(core_id_t dest_core,
    send(dest_proc, dest_core, buffer, length);
 }
 
-Byte* SockTransport::SockNode::recv()
+SockTransport::BufferTagPair SockTransport::SockNode::recv()
 {
+   LOG_ASSERT_ERROR(Sim()->getConfig()->getSimulationMode() != CYCLE_ACCURATE,
+         "Can't be called in Cycle Accurate mode");
+
    LOG_PRINT("Entering recv");
 
-   core_id_t tag = getCoreId();
-   tag = (tag == GLOBAL_TAG) ? m_transport->m_num_lists - 1 : tag;
+   SInt32 node_id = getNodeId();
+   SInt32 list_id = (node_id == GLOBAL_TAG) ? (m_num_lists-1) : node_id;
    
-   m_transport->m_buffer_list_sems[tag].wait();
+   m_transport->m_buffer_list_sems[list_id].wait();
 
-   Lock &lock = m_transport->m_buffer_list_locks[tag];
+   Lock &lock = m_transport->m_buffer_list_locks[list_id];
    lock.acquire();
    
-   buffer_list &list = m_transport->m_buffer_lists[tag];
+   buffer_list &list = m_transport->m_buffer_lists[list_id];
    LOG_ASSERT_ERROR(!list.empty(), "Buffer list empty after waiting on semaphore.");
-   Byte* buffer = list.front();
+   BufferTagPair& buffer_tag_pair = list.front();
    list.pop_front();
 
 #ifdef __CHECKSUM_ENABLED__
@@ -380,16 +382,16 @@ Byte* SockTransport::SockNode::recv()
 
    LOG_PRINT("Message recv'd");
 
-   return buffer;
+   return buffer_tag_pair;
 }
 
 bool SockTransport::SockNode::query()
 {
-   core_id_t tag = getCoreId();
-   tag = (tag == GLOBAL_TAG) ? m_transport->m_num_lists - 1 : tag;
+   SInt32 node_id = getNodeId();
+   SInt32 list_id = (node_id == GLOBAL_TAG) ? (m_num_lists-1) : node_id;
 
-   buffer_list &list = m_transport->m_buffer_lists[tag];
-   Lock &lock = m_transport->m_buffer_list_locks[tag];
+   buffer_list &list = m_transport->m_buffer_lists[list_id];
+   Lock &lock = m_transport->m_buffer_list_locks[list_id];
 
    lock.acquire();
    bool result = !list.empty();
@@ -402,6 +404,9 @@ void SockTransport::SockNode::send(SInt32 dest_proc,
                                    const void *buffer, 
                                    UInt32 length)
 {
+   LOG_ASSERT_ERROR(Sim()->getConfig()->getSimulationMode() != CYCLE_ACCURATE,
+         "Can't be called in Cycle Accurate mode");
+
    // two cases:
    // (1) remote process, use sockets
    // (2) single process, put directly in buffer list
