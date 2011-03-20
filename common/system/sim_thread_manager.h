@@ -10,22 +10,21 @@ public:
    SimThreadManager();
    ~SimThreadManager();
 
-   void spawnSimThreads();
-   void quitSimThreads();
+   void spawnThreads();
+   void quitThreads();
 
-   SInt32 registerSimThread();
-   void unregisterSimThread();
+   SInt32 registerThread();
+   void unregisterThread();
 
-   bool isSimulationRunning()
-   { return m_simulation_running; }
-   
 private:
-   SimThread *m_sim_threads;
+   // Core Id to Sim Thread Id mapping
+   map<core_id_t, SInt32> _core_id__to__sim_thread_id__mapping;
+   vector<vector<core_id_t> > _sim_thread_id__to__core_id_list__mapping;
+   
+   SimThread* m_sim_threads;
 
    Lock m_active_threads_lock;
    UInt32 m_active_threads;
-
-   bool m_simulation_running;
 };
 
 #endif // SIM_THREAD_MANAGER

@@ -15,6 +15,8 @@ public:
 private:
    void run();
 
+   static void terminateFunc(void *vp, NetPacket pkt);
+   
    Thread *m_thread;
 };
 

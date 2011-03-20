@@ -217,7 +217,8 @@ void SockTransport::updateBufferLists()
 
 void SockTransport::insertInBufferList(SInt32 tag, Byte *buffer, Header* header)
 {
-   SInt32 list_id = (tag == GLOBAL_TAG) ? (m_num_lists-1) : Config::getSingleton()->getSimThreadIDFromCoreID(tag);
+   SInt32 list_id = (tag == GLOBAL_TAG) ?
+                    (m_num_lists-1) : Sim()->getSimThreadManager()->getSimThreadIDFromCoreID(tag);
 
    LOG_ASSERT_ERROR(0 <= list_id && list_id < m_num_lists, "Unexpected list_id value: %d", list_id);
    m_buffer_list_locks[list_id].acquire();
