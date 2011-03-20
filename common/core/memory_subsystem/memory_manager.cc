@@ -7,8 +7,8 @@ using namespace std;
 #include "pr_l1_pr_l2_dram_directory_mosi/memory_manager.h"
 #include "log.h"
 
-MemoryManagerBase* 
-MemoryManagerBase::createMMU(std::string protocol_type,
+MemoryManager* 
+MemoryManager::createMMU(std::string protocol_type,
       Core* core, Network* network, ShmemPerfModel* shmem_perf_model)
 {
    CachingProtocol_t caching_protocol = parseProtocolType(protocol_type);
@@ -27,8 +27,8 @@ MemoryManagerBase::createMMU(std::string protocol_type,
    }
 }
 
-MemoryManagerBase::CachingProtocol_t
-MemoryManagerBase::parseProtocolType(std::string& protocol_type)
+MemoryManager::CachingProtocol_t
+MemoryManager::parseProtocolType(std::string& protocol_type)
 {
    if (protocol_type == "pr_l1_pr_l2_dram_directory_msi")
       return PR_L1_PR_L2_DRAM_DIRECTORY_MSI;
@@ -40,7 +40,7 @@ MemoryManagerBase::parseProtocolType(std::string& protocol_type)
 
 void MemoryManagerNetworkCallback(void* obj, NetPacket packet)
 {
-   MemoryManagerBase *mm = (MemoryManagerBase*) obj;
+   MemoryManager *mm = (MemoryManager*) obj;
    assert(mm != NULL);
 
    switch (packet.type)
@@ -57,7 +57,7 @@ void MemoryManagerNetworkCallback(void* obj, NetPacket packet)
 }
 
 vector<core_id_t>
-MemoryManagerBase::getCoreListWithMemoryControllers()
+MemoryManager::getCoreListWithMemoryControllers()
 {
    SInt32 num_memory_controllers = -1;
    string memory_controller_positions_from_cfg_file = "";
@@ -134,7 +134,7 @@ MemoryManagerBase::getCoreListWithMemoryControllers()
 }
 
 void
-MemoryManagerBase::printCoreListWithMemoryControllers(vector<core_id_t>& core_list_with_memory_controllers)
+MemoryManager::printCoreListWithMemoryControllers(vector<core_id_t>& core_list_with_memory_controllers)
 {
    ostringstream core_list;
    for (vector<core_id_t>::iterator it = core_list_with_memory_controllers.begin(); it != core_list_with_memory_controllers.end(); it++)
@@ -143,3 +143,4 @@ MemoryManagerBase::printCoreListWithMemoryControllers(vector<core_id_t>& core_li
    }
    fprintf(stderr, "\n[[Graphite]] --> [ Core IDs' with memory controllers = (%s) ]\n", (core_list.str()).c_str());
 }
+

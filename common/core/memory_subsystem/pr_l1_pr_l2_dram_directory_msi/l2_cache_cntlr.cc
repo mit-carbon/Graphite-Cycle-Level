@@ -10,8 +10,6 @@ L2CacheCntlr::L2CacheCntlr(core_id_t core_id,
       MemoryManager* memory_manager,
       L1CacheCntlr* l1_cache_cntlr,
       AddressHomeLookup* dram_directory_home_lookup,
-      Semaphore* user_thread_sem,
-      Semaphore* network_thread_sem,
       UInt32 cache_block_size,
       UInt32 l2_cache_size, UInt32 l2_cache_associativity,
       std::string l2_cache_replacement_policy,
@@ -21,8 +19,6 @@ L2CacheCntlr::L2CacheCntlr(core_id_t core_id,
    m_dram_directory_home_lookup(dram_directory_home_lookup),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
-   m_user_thread_sem(user_thread_sem),
-   m_network_thread_sem(network_thread_sem),
    m_shmem_perf_model(shmem_perf_model)
 {
    m_l2_cache = new Cache("L2",
@@ -188,7 +184,9 @@ L2CacheCntlr::handleMsgFromL1Cache(ShmemMsg* shmem_msg)
    assert(shmem_msg->getDataBuf() == NULL);
    assert(shmem_msg->getDataLength() == 0);
 
-   m_shmem_req_source_map[address] = sender_mem_component;
+   L2MissStatus* l2_miss_status = new L2MissStatus(address, sender_mem_component);
+   m_miss_status_map.insert(l2_miss_status);
+   
    switch (shmem_msg_type)
    {
       case ShmemMsg::EX_REQ:
@@ -287,8 +285,7 @@ L2CacheCntlr::handleMsgFromDramDirectory(
 
    if ((shmem_msg_type == ShmemMsg::EX_REP) || (shmem_msg_type == ShmemMsg::SH_REP))
    {
-      wakeUpUserThread();
-      waitForUserThread();
+      m_l1_cache_cntlr->signalDataReady(caching_mem_component, address);
    }
 }
 
@@ -305,14 +302,15 @@ L2CacheCntlr::processExRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
 
    // Insert Cache Block in L1 Cache
    // Support for non-blocking caches can be added in this way
-   MemComponent::component_t mem_component = m_shmem_req_source_map[address];
+   L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
+   MemComponent::component_t mem_component = l2_miss_status->_mem_component;
    assert (mem_component == MemComponent::L1_DCACHE);
+   
    insertCacheBlockInL1(mem_component, address, l2_cache_block_info, CacheState::MODIFIED, data_buf);
 
-   // Set the Counters in the Shmem Perf model accordingly
-   // Set the counter value in the USER thread to that in the SIM thread
-   getShmemPerfModel()->setCycleCount(ShmemPerfModel::_USER_THREAD, 
-         getShmemPerfModel()->getCycleCount());
+   // Remove the Miss Status Information
+   m_miss_status_map.erase(l2_miss_status);
+   delete l2_miss_status;
 }
 
 void
@@ -329,13 +327,13 @@ L2CacheCntlr::processShRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
 
    // Insert Cache Block in L1 Cache
    // Support for non-blocking caches can be added in this way
-   MemComponent::component_t mem_component = m_shmem_req_source_map[address];
+   L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
+   MemComponent::component_t mem_component = l2_miss_status->_mem_component;
    insertCacheBlockInL1(mem_component, address, l2_cache_block_info, CacheState::SHARED, data_buf);
-   
-   // Set the Counters in the Shmem Perf model accordingly
-   // Set the counter value in the USER thread to that in the SIM thread
-   getShmemPerfModel()->setCycleCount(ShmemPerfModel::_USER_THREAD, 
-         getShmemPerfModel()->getCycleCount());
+
+   // Remove the Miss Status Information
+   m_miss_status_map.erase(l2_miss_status);
+   delete l2_miss_status;
 }
 
 void
@@ -483,9 +481,9 @@ L2CacheCntlr::acquireL1CacheLock(ShmemMsg::msg_t msg_type, IntPtr address)
    {
       case ShmemMsg::EX_REP:
       case ShmemMsg::SH_REP:
-         
-         m_l1_cache_cntlr->acquireLock(m_shmem_req_source_map[address]);
-         return m_shmem_req_source_map[address];
+         MemComponent::component_t mem_component = ((L2MissStatus*) m_miss_status_map.get(address))->_mem_component;
+         m_l1_cache_cntlr->acquireLock(mem_component);
+         return mem_component;
 
       case ShmemMsg::INV_REQ:
       case ShmemMsg::FLUSH_REQ:
@@ -524,18 +522,6 @@ void
 L2CacheCntlr::releaseLock()
 {
    m_l2_cache_lock.release();
-}
-
-void
-L2CacheCntlr::wakeUpUserThread()
-{
-   m_user_thread_sem->signal();
-}
-
-void
-L2CacheCntlr::waitForUserThread()
-{
-   m_network_thread_sem->wait();
 }
 
 }

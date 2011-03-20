@@ -11,7 +11,7 @@ namespace PrL1PrL2DramDirectoryMOSI
 
 MemoryManager::MemoryManager(Core* core, 
       Network* network, ShmemPerfModel* shmem_perf_model):
-   MemoryManagerBase(core, network, shmem_perf_model),
+   ::MemoryManager(core, network, shmem_perf_model),
    m_dram_directory_cntlr(NULL),
    m_dram_cntlr(NULL),
    m_dram_cntlr_present(false),

@@ -7,8 +7,6 @@ namespace PrL1PrL2DramDirectoryMSI
 
 L1CacheCntlr::L1CacheCntlr(core_id_t core_id,
       MemoryManager* memory_manager,
-      Semaphore* user_thread_sem,
-      Semaphore* network_thread_sem,
       UInt32 cache_block_size,
       UInt32 l1_icache_size, UInt32 l1_icache_associativity,
       std::string l1_icache_replacement_policy,
@@ -19,8 +17,6 @@ L1CacheCntlr::L1CacheCntlr(core_id_t core_id,
    m_l2_cache_cntlr(NULL),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
-   m_user_thread_sem(user_thread_sem),
-   m_network_thread_sem(network_thread_sem),
    m_shmem_perf_model(shmem_perf_model)
 {
    m_l1_icache = new Cache("L1-I",
@@ -35,13 +31,16 @@ L1CacheCntlr::L1CacheCntlr(core_id_t core_id,
          m_cache_block_size,
          l1_dcache_replacement_policy,
          CacheBase::PR_L1_CACHE);
+
+   initializeMissStatusMaps();
 }
 
 L1CacheCntlr::~L1CacheCntlr()
 {
+   deinitializeMissStatusMaps();
    delete m_l1_icache;
    delete m_l1_dcache;
-}      
+} 
 
 void
 L1CacheCntlr::setL2CacheCntlr(L2CacheCntlr* l2_cache_cntlr)
@@ -49,11 +48,28 @@ L1CacheCntlr::setL2CacheCntlr(L2CacheCntlr* l2_cache_cntlr)
    m_l2_cache_cntlr = l2_cache_cntlr;
 }
 
-bool
+void
+L1CacheCntlr::initializeMissStatusMaps()
+{
+   m_miss_status_maps.insert(make_pair<MemComponent::component_t, MissStatusMap>
+                            (MemComponent::L1_ICACHE, MissStatusMap()));
+   m_miss_status_maps.insert(make_pair<MemComponent::component_t, MissStatusMap>
+                            (MemComponent::L1_DCACHE, MissStatusMap()));
+}
+
+void
+L1CacheCntlr::deinitializeMissStatusMaps()
+{
+   assert(m_miss_status_maps[MemComponent::L1_ICACHE].empty());
+   assert(m_miss_status_maps[MemComponent::L1_DCACHE].empty());
+}
+
+void
 L1CacheCntlr::processMemOpFromCore(
       MemComponent::component_t mem_component,
+      SInt32 memory_access_id,
       Core::lock_signal_t lock_signal,
-      Core::mem_op_t mem_op_type, 
+      Core::mem_op_t mem_op_type,
       IntPtr ca_address, UInt32 offset,
       Byte* data_buf, UInt32 data_length,
       bool modeled)
@@ -62,86 +78,125 @@ L1CacheCntlr::processMemOpFromCore(
          lock_signal, mem_op_type, ca_address);
 
    bool l1_cache_hit = true;
-   UInt32 access_num = 0;
 
-   while(1)
+   if (lock_signal != Core::UNLOCK)
+      acquireLock(mem_component);
+
+   if (operationPermissibleinL1Cache(mem_component,
+                                     ca_address, mem_op_type,
+                                     modeled, true /* update_cache_counters */))
    {
-      access_num ++;
-      LOG_ASSERT_ERROR((access_num == 1) || (access_num == 2),
-            "Error: access_num(%u)", access_num);
-
-      if (lock_signal != Core::UNLOCK)
-         acquireLock(mem_component);
-
-      // Wake up the network thread after acquiring the lock
-      if (access_num == 2)
-      {
-         wakeUpNetworkThread();
-      }
-
-      if (operationPermissibleinL1Cache(mem_component, ca_address, mem_op_type, access_num, modeled))
-      {
-         // Increment Shared Mem Perf model cycle counts
-         // L1 Cache
-         getMemoryManager()->incrCycleCount(mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
-
-         accessCache(mem_component, mem_op_type, ca_address, offset, data_buf, data_length);
-                 
-         if (lock_signal != Core::LOCK)
-            releaseLock(mem_component);
-         return l1_cache_hit;
-      }
-
-      getMemoryManager()->incrCycleCount(mem_component, CachePerfModel::ACCESS_CACHE_TAGS);
-      
-      if (lock_signal == Core::UNLOCK)
-         LOG_PRINT_ERROR("Expected to find address(0x%x) in L1 Cache", ca_address);
-
-      // Invalidate the cache block before passing the request to L2 Cache
-      invalidateCacheBlock(mem_component, ca_address);
-
-      m_l2_cache_cntlr->acquireLock();
- 
-      ShmemMsg::msg_t shmem_msg_type = getShmemMsgType(mem_op_type);
-
-      if (m_l2_cache_cntlr->processShmemReqFromL1Cache(mem_component, shmem_msg_type, ca_address, modeled))
-      {
-         m_l2_cache_cntlr->releaseLock();
-         
-         // Increment Shared Mem Perf model cycle counts
-         // L2 Cache
+      // Increment Shared Mem Perf model cycle counts
+      // L1 Cache
+      getMemoryManager()->incrCycleCount(mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
+      if (mem_op_type == Core::WRITE)
          getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
-         // L1 Cache
-         getMemoryManager()->incrCycleCount(mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
 
-         accessCache(mem_component, mem_op_type, ca_address, offset, data_buf, data_length);
-
-         if (lock_signal != Core::LOCK)
-            releaseLock(mem_component);
-         return false;
-      }
-
-      l1_cache_hit = false;
-      
-      // Increment shared mem perf model cycle counts
-      getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_TAGS);
-      
-      m_l2_cache_cntlr->releaseLock();
-      releaseLock(mem_component);
-      
-      // Send out a request to the network thread for the cache data
-      getMemoryManager()->sendMsg(shmem_msg_type, 
-            mem_component, MemComponent::L2_CACHE,
-            m_core_id /* requester */,
-            m_core_id /* receiver */, ca_address);
-
-      waitForNetworkThread();
+      accessCache(mem_component, mem_op_type, ca_address, offset, data_buf, data_length);
+              
+      if (lock_signal != Core::LOCK)
+         releaseLock(mem_component);
+      return;
    }
 
-   LOG_PRINT_ERROR("Should not reach here");
-   return false;
+   getMemoryManager()->incrCycleCount(mem_component, CachePerfModel::ACCESS_CACHE_TAGS);
+   
+   LOG_ASSERT_ERROR(lock_signal != Core::UNLOCK, "Expected to find address(0x%x) in L1 Cache", ca_address);
+
+   // Invalidate the cache block before passing the request to L2 Cache
+   invalidateCacheBlock(mem_component, ca_address);
+
+   m_l2_cache_cntlr->acquireLock();
+
+   ShmemMsg::msg_t shmem_msg_type = getShmemMsgType(mem_op_type);
+
+   if (m_l2_cache_cntlr->processShmemReqFromL1Cache(mem_component, shmem_msg_type, ca_address, modeled))
+   {
+      m_l2_cache_cntlr->releaseLock();
+      
+      // Increment Shared Mem Perf model cycle counts
+      // L2 Cache
+      getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
+      // L1 Cache
+      getMemoryManager()->incrCycleCount(mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
+
+      accessCache(mem_component, mem_op_type, ca_address, offset, data_buf, data_length);
+
+      if (lock_signal != Core::LOCK)
+         releaseLock(mem_component);
+      return;
+   }
+
+   // Increment shared mem perf model cycle counts
+   getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_TAGS);
+   
+   m_l2_cache_cntlr->releaseLock();
+   releaseLock(mem_component);
+  
+   L1MissStatus* l1_miss_status = new L1MissStatus(ca_address,
+                                                   memory_access_id,
+                                                   lock_signal, mem_op_type,
+                                                   offset,
+                                                   data_buf, data_length,
+                                                   modeled);
+   m_miss_status_maps[mem_component].insert(l1_miss_status);
+
+   // Send out a request to the network thread for the cache data
+   getMemoryManager()->sendMsg(shmem_msg_type, 
+         mem_component, MemComponent::L2_CACHE,
+         m_core_id /* requester */,
+         m_core_id /* receiver */, ca_address);
+
+   if (mode != CYCLE_ACCURATE)
+   {
+      waitForSimThread();
+      reprocessMemOpFromCore(mem_component, l1_miss_status);
+   }
 }
 
+void
+L1CacheCntlr::reprocessMemOpFromCore(
+      MemComponent::component_t mem_component,
+      L1MissStatus* l1_miss_status)
+{
+   LOG_PRINT("reprocessMemOpFromCore() start");
+
+   if (l1_miss_status->_lock_signal != Core::UNLOCK)
+      acquireLock(mem_component);
+
+   if (mode != CYCLE_ACCURATE)
+   {
+      // Wake up the sim thread after acquiring the lock
+      wakeUpSimThread();
+   }
+
+   assert(operationPermissibleinL1Cache(mem_component,
+          l1_miss_status->_ca_address, l1_miss_status->_mem_op_type,
+          l1_miss_status->_modeled, false /* update_cache_counters */));
+
+   accessCache(mem_component, 
+               l1_miss_status->_mem_op_type,
+               l1_miss_status->_ca_address, l1_miss_status->_offset,
+               l1_miss_status->_data_buf, l1_miss_status->_data_length);
+ 
+   if (l1_miss_status->_lock_signal != Core::LOCK)
+      releaseLock(mem_component);
+
+   SInt32 memory_access_id = l1_miss_status->_memory_access_id;
+   // Remove the MissStatus structure
+   m_miss_status_maps[mem_component].erase(l1_miss_status);
+   delete l1_miss_status;
+ 
+   LOG_PRINT("reprocessMemOpFromCore() end");
+  
+   EventCompleteCacheAccess* event = new EventCompleteCacheAccess(
+         getShmemPerfModel()->getCycleCount(),
+         getMemoryManager()->getCore(),
+         memory_access_id);
+   Sim()->getEventManager()->processEventInOrder(event);
+}
+
+// Return value indicates whether I am the first miss for that address
 void
 L1CacheCntlr::accessCache(MemComponent::component_t mem_component,
       Core::mem_op_t mem_op_type, IntPtr ca_address, UInt32 offset,
@@ -173,7 +228,7 @@ bool
 L1CacheCntlr::operationPermissibleinL1Cache(
       MemComponent::component_t mem_component, 
       IntPtr address, Core::mem_op_t mem_op_type,
-      UInt32 access_num, bool modeled)
+      bool modeled, bool update_cache_counters)
 {
    // TODO: Verify why this works
    bool cache_hit = false;
@@ -195,7 +250,7 @@ L1CacheCntlr::operationPermissibleinL1Cache(
          break;
    }
 
-   if (modeled && (access_num == 1))
+   if (modeled && update_cache_counters)
    {
       // Update the Cache Counters
       getL1Cache(mem_component)->updateCounters(cache_hit);
@@ -317,15 +372,21 @@ L1CacheCntlr::releaseLock(MemComponent::component_t mem_component)
 }
 
 void
-L1CacheCntlr::waitForNetworkThread()
+L1CacheCntlr::signalDataReady(MemComponent::component_t mem_component, IntPtr address)
 {
-   m_user_thread_sem->wait();
-}
-
-void
-L1CacheCntlr::wakeUpNetworkThread()
-{
-   m_network_thread_sem->signal();
+   if (mode != CYCLE_ACCURATE)
+   {
+      getShmemPerfModel()->setCycleCount(ShmemPerfModel::_USER_THREAD,
+            getShmemPerfModel()->getCycleCount());
+      wakeUpAppThread();
+      waitForAppThread();
+   }
+   else // (mode == CYCLE_ACCURATE)
+   {
+      L1MissStatus* l1_miss_status = (L1MissStatus*) m_miss_status_maps[mem_component].get(address);
+      assert(l1_miss_status);
+      reprocessMemOpFromCore(mem_component, l1_miss_status);
+   }
 }
 
 }

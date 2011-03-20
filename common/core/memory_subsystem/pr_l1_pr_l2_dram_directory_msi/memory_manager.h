@@ -15,7 +15,7 @@
 
 namespace PrL1PrL2DramDirectoryMSI
 {
-   class MemoryManager : public MemoryManagerBase
+   class MemoryManager : public ::MemoryManager
    {
       private:
          L1CacheCntlr* m_l1_cache_cntlr;

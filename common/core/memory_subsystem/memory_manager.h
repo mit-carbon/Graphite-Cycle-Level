@@ -1,6 +1,4 @@
-#ifndef __MEMORY_MANAGER_BASE_H__
-#define __MEMORY_MANAGER_BASE_H__
-
+#pragma once
 using namespace std;
 
 #include "core.h"
@@ -10,7 +8,7 @@ using namespace std;
 
 void MemoryManagerNetworkCallback(void* obj, NetPacket packet);
 
-class MemoryManagerBase
+class MemoryManager
 {
    public:
       enum CachingProtocol_t
@@ -35,14 +33,14 @@ class MemoryManagerBase
       void printCoreListWithMemoryControllers(vector<core_id_t>& core_list_with_memory_controllers);
    
    public:
-      MemoryManagerBase(Core* core, Network* network, ShmemPerfModel* shmem_perf_model):
+      MemoryManager(Core* core, Network* network, ShmemPerfModel* shmem_perf_model):
          m_core(core), 
          m_network(network), 
          m_shmem_perf_model(shmem_perf_model)
       {}
-      virtual ~MemoryManagerBase() {}
+      virtual ~MemoryManager() {}
 
-      virtual bool coreInitiateMemoryAccess(
+      virtual bool initiateMemoryAccess(
             MemComponent::component_t mem_component,
             Core::lock_signal_t lock_signal,
             Core::mem_op_t mem_op_type,
@@ -77,5 +75,3 @@ class MemoryManagerBase
       
       virtual void outputSummary(std::ostream& os) = 0;
 };
-
-#endif /* __MEMORY_MANAGER_BASE_H__ */

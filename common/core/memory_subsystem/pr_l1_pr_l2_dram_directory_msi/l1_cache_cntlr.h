@@ -30,10 +30,12 @@ namespace PrL1PrL2DramDirectoryMSI
          core_id_t m_core_id;
          UInt32 m_cache_block_size;
 
+         MissStatusMaps m_miss_status_maps;
+
          Lock m_l1_icache_lock;
          Lock m_l1_dcache_lock;
-         Semaphore* m_user_thread_sem;
-         Semaphore* m_network_thread_sem;
+         Semaphore m_app_thread_semaphore;
+         Semaphore m_sim_thread_semaphore;
 
          ShmemPerfModel* m_shmem_perf_model;
 
@@ -45,7 +47,7 @@ namespace PrL1PrL2DramDirectoryMSI
          bool operationPermissibleinL1Cache(
                MemComponent::component_t mem_component, 
                IntPtr address, Core::mem_op_t mem_op_type,
-               UInt32 access_num, bool modeled);
+               bool modeled, bool update_cache_counters);
 
          Cache* getL1Cache(MemComponent::component_t mem_component);
          ShmemMsg::msg_t getShmemMsgType(Core::mem_op_t mem_op_type);
@@ -55,17 +57,25 @@ namespace PrL1PrL2DramDirectoryMSI
          MemoryManager* getMemoryManager() { return m_memory_manager; }
          ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
 
-         // Wait for Network Thread
-         void waitForNetworkThread(void);
-         // Wake up Network Thread
-         void wakeUpNetworkThread(void);
+         // Reprocess request from core
+         void reprocessMemOpFromCore(MemComponent::component_t mem_component, L1MissStatus* l1_miss_status);
+
+         // Wait for Sim Thread
+         void waitForSimThread()
+         { m_app_thread_semaphore.wait(); }
+         // Wake up Sim Thread
+         void wakeUpSimThread(void)
+         { m_sim_thread_semaphore.signal(); }
+         // Wait for App Thread
+         void waitForAppThread(void)
+         { m_sim_thread_semaphore.wait(); }
+         // Wake up App Thread
+         void wakeUpAppThread(void)
+         { m_app_thread_semaphore.signal(); }
          
       public:
-         
          L1CacheCntlr(core_id_t core_id,
                MemoryManager* memory_manager,
-               Semaphore* user_thread_sem,
-               Semaphore* network_thread_sem,
                UInt32 cache_block_size,
                UInt32 l1_icache_size, UInt32 l1_icache_associativity,
                std::string l1_icache_replacement_policy,
@@ -80,13 +90,17 @@ namespace PrL1PrL2DramDirectoryMSI
 
          void setL2CacheCntlr(L2CacheCntlr* l2_cache_cntlr);
 
-         bool processMemOpFromCore(
+         // Called from core to process a memory operation
+         void processMemOpFromCore(
                MemComponent::component_t mem_component,
                Core::lock_signal_t lock_signal,
                Core::mem_op_t mem_op_type, 
                IntPtr ca_address, UInt32 offset,
                Byte* data_buf, UInt32 data_length,
                bool modeled);
+
+         // Called from L2 cache cntlr to indicate that a memory request has been processed
+         void signalDataReady(MemComponent::component_t mem_component, IntPtr address);
 
          void insertCacheBlock(MemComponent::component_t mem_component,
                IntPtr address, CacheState::cstate_t cstate, Byte* data_buf,
@@ -96,8 +110,7 @@ namespace PrL1PrL2DramDirectoryMSI
                MemComponent::component_t mem_component, IntPtr address);
          void setCacheState(MemComponent::component_t mem_component,
                IntPtr address, CacheState::cstate_t cstate);
-         void invalidateCacheBlock(
-               MemComponent::component_t mem_component, IntPtr address);
+         void invalidateCacheBlock(MemComponent::component_t mem_component, IntPtr address);
 
          void acquireLock(MemComponent::component_t mem_component);
          void releaseLock(MemComponent::component_t mem_component);
