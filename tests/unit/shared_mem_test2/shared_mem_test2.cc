@@ -23,7 +23,7 @@ int main (int argc, char *argv[])
 
    Core* core = Sim()->getCoreManager()->getCurrentCore();
    int val = 0;
-   core->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &val, sizeof(val));
+   core->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &val, sizeof(val));
 
    for (int i = 0; i < num_threads; i++)
    {
@@ -35,7 +35,7 @@ int main (int argc, char *argv[])
       CarbonJoinThread(tid_list[i]);
    }
    
-   core->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &val, sizeof(val));
+   core->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &val, sizeof(val));
    
    printf("val(%i)\n", val);
    if (val == (num_threads * num_iterations))
@@ -45,6 +45,7 @@ int main (int argc, char *argv[])
    else
    {
       printf("shared_mem_test2 (FAILURE)\n");
+      assert(false);
    }
    
    CarbonStopSim();
@@ -58,10 +59,10 @@ void* thread_func(void*)
    for (int i = 0; i < num_iterations; i++)
    {
       int val;
-      core->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::LOCK, Core::READ_EX, address, (Byte*) &val, sizeof(val));
+      core->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::LOCK, Core::READ_EX, address, (Byte*) &val, sizeof(val));
       
       val += 1;
 
-      core->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::UNLOCK, Core::WRITE, address, (Byte*) &val, sizeof(val));
+      core->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::UNLOCK, Core::WRITE, address, (Byte*) &val, sizeof(val));
    }
 }

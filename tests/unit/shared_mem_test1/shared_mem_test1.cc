@@ -28,35 +28,29 @@ int main (int argc, char *argv[])
 
    // Core 0 - Write value into this address
    printf("Writing(%u) into address(0x%x)\n", write_val_0, address);
-   UInt32 num_misses;
-   num_misses = (core_0->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &write_val_0, sizeof(write_val_0))).first;
-   assert(num_misses == 1);
+   core_0->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &write_val_0, sizeof(write_val_0));
 
    // Core 0 - Read out the value
-   num_misses = (core_0->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &read_val_0, sizeof(read_val_0))).first;
+   core_0->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &read_val_0, sizeof(read_val_0));
    printf("Read Out(%u) from address(0x%x)\n", read_val_0, address);
-   assert(num_misses == 0);
    assert(read_val_0 == 100);
 
    UInt32 write_val_1 = 0;
    UInt32 read_val_1 = 0;
 
    // Core 1 - Read out the value and write something else
-   num_misses = (core_1->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &read_val_1, sizeof(read_val_1))).first;
+   core_1->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &read_val_1, sizeof(read_val_1));
    printf("Read Out(%u) from address(0x%x)\n", read_val_1, address);
-   assert(num_misses == 1);
    assert(read_val_1 == 100);
 
    write_val_1 = read_val_1 + 10;
    // Core 1 - Write read out value + 1
    printf("Writing(%u) into address(0x%x)\n", write_val_1, address);
-   num_misses = (core_1->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &write_val_1, sizeof(write_val_1))).first;
-   assert(num_misses == 1);
+   core_1->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &write_val_1, sizeof(write_val_1));
    
    // Core 0 - Read out the value
-   num_misses = (core_0->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &read_val_0, sizeof(read_val_0))).first;
+   core_0->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &read_val_0, sizeof(read_val_0));
    printf("Read Out(%u) from address(0x%x)\n", read_val_0, address);
-   assert(num_misses == 1);
    assert(read_val_0 == 110);
 
    // Disable Performance Models

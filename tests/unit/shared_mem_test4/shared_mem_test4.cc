@@ -29,7 +29,7 @@ int main (int argc, char *argv[])
    Core* core = Sim()->getCoreManager()->getCurrentCore();
 
    int val = 0;
-   core->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &val, sizeof(val));
+   core->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &val, sizeof(val));
    LOG_PRINT("Core(%i): Access Time(%llu)", core->getId(), core->getShmemPerfModel()->getCycleCount());
 
    for (int i = 0; i < num_threads; i++)
@@ -42,7 +42,7 @@ int main (int argc, char *argv[])
       CarbonJoinThread(tid_list[i]);
    }
   
-   core->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &val, sizeof(val));
+   core->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &val, sizeof(val));
    LOG_PRINT("Core(%i): Access Time(%llu)", core->getId(), core->getShmemPerfModel()->getCycleCount());
    
    printf("val = %i\n", val);
@@ -67,7 +67,7 @@ void* thread_func(void* threadid)
    for (int i = 0; i < num_iterations; i++)
    {
       int val;
-      core->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &val, sizeof(val));
+      core->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::READ, address, (Byte*) &val, sizeof(val));
       LOG_PRINT("Core(%i): Access Time(%llu)", core->getId(), core->getShmemPerfModel()->getCycleCount());
 
       CarbonBarrierWait(&barrier); 
@@ -75,7 +75,7 @@ void* thread_func(void* threadid)
       if (tid == 0)
       {
          val ++;
-         core->initiateMemoryAccess(MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &val, sizeof(val));
+         core->initiateMemoryAccess(0, MemComponent::L1_DCACHE, Core::NONE, Core::WRITE, address, (Byte*) &val, sizeof(val));
          LOG_PRINT("Core(%i): Access Time(%llu)", core->getId(), core->getShmemPerfModel()->getCycleCount());
       }
    }

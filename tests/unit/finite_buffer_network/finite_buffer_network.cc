@@ -137,8 +137,8 @@ void* sendNetworkTraffic(void*)
       if (i >= outstanding_window_size)
       {
          SInt32 sender = receive_vec[(i-outstanding_window_size) % receive_vec.size()];
-         NetPacket recv_net_packet = core->getNetwork()->netRecv(sender, _packet_type);
-         delete [] (Byte*) recv_net_packet.data;
+         NetPacket* recv_net_packet = core->getNetwork()->netRecv(sender, _packet_type);
+         recv_net_packet->release();
       }
    }
 

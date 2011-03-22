@@ -23,7 +23,7 @@ int main (int argc, char *argv[])
    // 3) Do initiateSharedMemReq() on the memory_manager object
 
    Core* core = Sim()->getCoreManager()->getCoreFromIndex(0);
-   MemoryManagerBase* memory_manager = core->getMemoryManager();
+   MemoryManager* memory_manager = core->getMemoryManager();
    ShmemPerfModel* shmem_perf_model = core->getShmemPerfModel();
 
    Byte data_buf[4];
