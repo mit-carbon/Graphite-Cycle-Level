@@ -1,6 +1,6 @@
 #pragma once
 
-#include "memory_manager_base.h"
+#include "../memory_manager.h"
 #include "cache_base.h"
 #include "l1_cache_cntlr.h"
 #include "l2_cache_cntlr.h"
@@ -26,9 +26,6 @@ namespace PrL1PrL2DramDirectoryMOSI
          AddressHomeLookup* m_dram_directory_home_lookup;
 
          bool m_dram_cntlr_present;
-
-         Semaphore* m_user_thread_sem;
-         Semaphore* m_network_thread_sem;
 
          UInt32 m_cache_block_size;
          bool m_enabled;
@@ -62,7 +59,8 @@ namespace PrL1PrL2DramDirectoryMOSI
          DramCntlr* getDramCntlr() { return m_dram_cntlr; }
          AddressHomeLookup* getDramDirectoryHomeLookup() { return m_dram_directory_home_lookup; }
 
-         bool coreInitiateMemoryAccess(
+         void coreInitiateCacheAccess(UInt64 time,
+               UInt32 memory_access_id,
                MemComponent::component_t mem_component,
                Core::lock_signal_t lock_signal,
                Core::mem_op_t mem_op_type,

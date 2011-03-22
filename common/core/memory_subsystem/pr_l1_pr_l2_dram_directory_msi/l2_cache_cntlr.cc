@@ -285,6 +285,13 @@ L2CacheCntlr::handleMsgFromDramDirectory(
 
    if ((shmem_msg_type == ShmemMsg::EX_REP) || (shmem_msg_type == ShmemMsg::SH_REP))
    {
+      // Remove the Miss Status Information
+      L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
+      assert(l2_miss_status->_mem_component = caching_mem_component);
+      m_miss_status_map.erase(l2_miss_status);
+      delete l2_miss_status;
+      
+      // Signal the L1 Cache that data is ready
       m_l1_cache_cntlr->signalDataReady(caching_mem_component, address);
    }
 }
@@ -307,10 +314,6 @@ L2CacheCntlr::processExRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
    assert (mem_component == MemComponent::L1_DCACHE);
    
    insertCacheBlockInL1(mem_component, address, l2_cache_block_info, CacheState::MODIFIED, data_buf);
-
-   // Remove the Miss Status Information
-   m_miss_status_map.erase(l2_miss_status);
-   delete l2_miss_status;
 }
 
 void
@@ -329,11 +332,8 @@ L2CacheCntlr::processShRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
    // Support for non-blocking caches can be added in this way
    L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
    MemComponent::component_t mem_component = l2_miss_status->_mem_component;
+   
    insertCacheBlockInL1(mem_component, address, l2_cache_block_info, CacheState::SHARED, data_buf);
-
-   // Remove the Miss Status Information
-   m_miss_status_map.erase(l2_miss_status);
-   delete l2_miss_status;
 }
 
 void
@@ -481,9 +481,11 @@ L2CacheCntlr::acquireL1CacheLock(ShmemMsg::msg_t msg_type, IntPtr address)
    {
       case ShmemMsg::EX_REP:
       case ShmemMsg::SH_REP:
-         MemComponent::component_t mem_component = ((L2MissStatus*) m_miss_status_map.get(address))->_mem_component;
-         m_l1_cache_cntlr->acquireLock(mem_component);
-         return mem_component;
+         {
+            MemComponent::component_t mem_component = ((L2MissStatus*) m_miss_status_map.get(address))->_mem_component;
+            m_l1_cache_cntlr->acquireLock(mem_component);
+            return mem_component;
+         }
 
       case ShmemMsg::INV_REQ:
       case ShmemMsg::FLUSH_REQ:
@@ -493,7 +495,8 @@ L2CacheCntlr::acquireL1CacheLock(ShmemMsg::msg_t msg_type, IntPtr address)
             acquireLock();
             
             PrL2CacheBlockInfo* l2_cache_block_info = getCacheBlockInfo(address);
-            MemComponent::component_t caching_mem_component = (l2_cache_block_info == NULL) ? MemComponent::INVALID_MEM_COMPONENT : l2_cache_block_info->getCachedLoc();
+            MemComponent::component_t caching_mem_component = (l2_cache_block_info == NULL) ?
+                  MemComponent::INVALID_MEM_COMPONENT : l2_cache_block_info->getCachedLoc();
             
             releaseLock();
 

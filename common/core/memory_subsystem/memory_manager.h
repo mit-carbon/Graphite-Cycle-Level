@@ -40,7 +40,8 @@ class MemoryManager
       {}
       virtual ~MemoryManager() {}
 
-      virtual bool initiateMemoryAccess(
+      virtual void coreInitiateCacheAccess(UInt64 time,
+            UInt32 memory_access_id,
             MemComponent::component_t mem_component,
             Core::lock_signal_t lock_signal,
             Core::mem_op_t mem_op_type,
@@ -68,7 +69,7 @@ class MemoryManager
       Core* getCore() { return m_core; }
       
       static CachingProtocol_t parseProtocolType(std::string& protocol_type);
-      static MemoryManagerBase* createMMU(std::string protocol_type,
+      static MemoryManager* createMMU(std::string protocol_type,
             Core* core,
             Network* network, 
             ShmemPerfModel* shmem_perf_model);

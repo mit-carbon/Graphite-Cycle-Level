@@ -16,6 +16,7 @@ namespace PrL1PrL2DramDirectoryMSI
 #include "lock.h"
 #include "fixed_types.h"
 #include "shmem_perf_model.h"
+#include "miss_status.h"
 
 namespace PrL1PrL2DramDirectoryMSI
 {
@@ -52,6 +53,10 @@ namespace PrL1PrL2DramDirectoryMSI
          Cache* getL1Cache(MemComponent::component_t mem_component);
          ShmemMsg::msg_t getShmemMsgType(Core::mem_op_t mem_op_type);
 
+         // Miss Status Maps
+         void initializeMissStatusMaps();
+         void deinitializeMissStatusMaps();
+
          // Get Cache Block Size
          UInt32 getCacheBlockSize(void) { return m_cache_block_size; }
          MemoryManager* getMemoryManager() { return m_memory_manager; }
@@ -59,6 +64,8 @@ namespace PrL1PrL2DramDirectoryMSI
 
          // Reprocess request from core
          void reprocessMemOpFromCore(MemComponent::component_t mem_component, L1MissStatus* l1_miss_status);
+         // Complete request from core
+         void completeMemOpFromCore(UInt32 memory_access_id);
 
          // Wait for Sim Thread
          void waitForSimThread()
@@ -92,6 +99,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
          // Called from core to process a memory operation
          void processMemOpFromCore(
+               UInt32 memory_access_id,
                MemComponent::component_t mem_component,
                Core::lock_signal_t lock_signal,
                Core::mem_op_t mem_op_type, 

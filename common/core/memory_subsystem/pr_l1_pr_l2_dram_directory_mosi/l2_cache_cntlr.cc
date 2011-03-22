@@ -10,8 +10,6 @@ L2CacheCntlr::L2CacheCntlr(core_id_t core_id,
       MemoryManager* memory_manager,
       L1CacheCntlr* l1_cache_cntlr,
       AddressHomeLookup* dram_directory_home_lookup,
-      Semaphore* user_thread_sem,
-      Semaphore* network_thread_sem,
       UInt32 cache_block_size,
       UInt32 l2_cache_size, UInt32 l2_cache_associativity,
       std::string l2_cache_replacement_policy,
@@ -21,8 +19,6 @@ L2CacheCntlr::L2CacheCntlr(core_id_t core_id,
    m_dram_directory_home_lookup(dram_directory_home_lookup),
    m_core_id(core_id),
    m_cache_block_size(cache_block_size),
-   m_user_thread_sem(user_thread_sem),
-   m_network_thread_sem(network_thread_sem),
    m_shmem_perf_model(shmem_perf_model)
 {
    m_l2_cache = new Cache("L2",
@@ -195,17 +191,8 @@ L2CacheCntlr::handleMsgFromL1Cache(ShmemMsg* shmem_msg)
    assert(shmem_msg->getDataBuf() == NULL);
    assert(shmem_msg->getDataLength() == 0);
 
-   LOG_ASSERT_ERROR(m_outstanding_shmem_msg.getAddress() == INVALID_ADDRESS, 
-         "m_outstanding_address(%#llx)", m_outstanding_shmem_msg.getAddress());
-   LOG_ASSERT_ERROR(m_outstanding_shmem_msg.getSenderMemComponent() == MemComponent::INVALID_MEM_COMPONENT,
-         "m_outstanding_cache_component(%u)", m_outstanding_shmem_msg.getSenderMemComponent());
-   LOG_ASSERT_ERROR(m_outstanding_shmem_msg.getMsgType() == ShmemMsg::INVALID_MSG_TYPE,
-         "m_outstanding_shmem_msg_type(%u)", m_outstanding_shmem_msg.getMsgType());
-
-   // Set Outstanding shmem req parameters
-   m_outstanding_shmem_msg.setAddress(address);
-   m_outstanding_shmem_msg.setSenderMemComponent(sender_mem_component);
-   m_outstanding_shmem_msg.setMsgType(shmem_msg_type);
+   L2MissStatus* l2_miss_status = new L2MissStatus(address, sender_mem_component);
+   m_miss_status_map.insert(l2_miss_status);
 
    ShmemMsg send_shmem_msg(shmem_msg_type, MemComponent::L2_CACHE, MemComponent::DRAM_DIR,
          m_core_id, INVALID_CORE_ID, false, address); 
@@ -257,15 +244,18 @@ L2CacheCntlr::handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg)
    if (caching_mem_component != MemComponent::INVALID_MEM_COMPONENT)
       m_l1_cache_cntlr->releaseLock(caching_mem_component);
 
-   if ((shmem_msg_type == ShmemMsg::EX_REP) || (shmem_msg_type == ShmemMsg::SH_REP) || (shmem_msg_type == ShmemMsg::UPGRADE_REP))
+   if ( (shmem_msg_type == ShmemMsg::EX_REP) ||
+        (shmem_msg_type == ShmemMsg::SH_REP) ||
+        (shmem_msg_type == ShmemMsg::UPGRADE_REP) )
    {
-      wakeUpUserThread();
-      waitForUserThread();
-
-      // There are no more outstanding memory requests
-      m_outstanding_shmem_msg.setAddress(INVALID_ADDRESS);
-      m_outstanding_shmem_msg.setSenderMemComponent(MemComponent::INVALID_MEM_COMPONENT);
-      m_outstanding_shmem_msg.setMsgType(ShmemMsg::INVALID_MSG_TYPE);
+      // Remove the Miss Status Information
+      L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
+      assert(l2_miss_status->_mem_component == caching_mem_component);
+      m_miss_status_map.erase(l2_miss_status);
+      delete l2_miss_status; 
+      
+      // Signal the L1 Cache that the data is ready
+      m_l1_cache_cntlr->signalDataReady(caching_mem_component, address);
    }
 }
 
@@ -280,21 +270,12 @@ L2CacheCntlr::processExRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
 
    PrL2CacheBlockInfo* l2_cache_block_info = insertCacheBlock(address, CacheState::MODIFIED, data_buf);
 
-   // Insert Cache Block in L1 Cache
-   // Support for non-blocking caches can be added in this way
-   LOG_ASSERT_ERROR(address == m_outstanding_shmem_msg.getAddress(), 
-         "Got Address(%#llx), Expected Address(%#llx) from Directory",
-         address, m_outstanding_shmem_msg.getAddress());
-
-   MemComponent::component_t mem_component = m_outstanding_shmem_msg.getSenderMemComponent();
+   L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
+   MemComponent::component_t mem_component = l2_miss_status->_mem_component;
    assert(mem_component == MemComponent::L1_DCACHE);
 
+   // Insert Cache Block in L1 Cache
    insertCacheBlockInL1(mem_component, address, l2_cache_block_info, CacheState::MODIFIED, data_buf);
-
-   // Set the Counters in the Shmem Perf model accordingly
-   // Set the counter value in the USER thread to that in the SIM thread
-   getShmemPerfModel()->setCycleCount(ShmemPerfModel::_USER_THREAD, 
-         getShmemPerfModel()->getCycleCount());
 }
 
 void
@@ -309,20 +290,11 @@ L2CacheCntlr::processShRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
    // Insert Cache Block in L2 Cache
    PrL2CacheBlockInfo* l2_cache_block_info = insertCacheBlock(address, CacheState::SHARED, data_buf);
 
+   L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
+   MemComponent::component_t mem_component = l2_miss_status->_mem_component;
+   
    // Insert Cache Block in L1 Cache
-   // Support for non-blocking caches can be added in this way
-   LOG_ASSERT_ERROR(address == m_outstanding_shmem_msg.getAddress(), 
-         "Got Address(%#llx), Expected Address(%#llx) from Directory",
-         address, m_outstanding_shmem_msg.getAddress());
-
-   MemComponent::component_t mem_component = m_outstanding_shmem_msg.getSenderMemComponent();
-   
    insertCacheBlockInL1(mem_component, address, l2_cache_block_info, CacheState::SHARED, data_buf);
-   
-   // Set the Counters in the Shmem Perf model accordingly
-   // Set the counter value in the USER thread to that in the SIM thread
-   getShmemPerfModel()->setCycleCount(ShmemPerfModel::_USER_THREAD, 
-         getShmemPerfModel()->getCycleCount());
 }
 
 void
@@ -345,14 +317,12 @@ L2CacheCntlr::processUpgradeRepFromDramDirectory(core_id_t sender, ShmemMsg* shm
 
    setCacheState(l2_cache_block_info, CacheState::MODIFIED);
 
-   // In L1
-   LOG_ASSERT_ERROR(address == m_outstanding_shmem_msg.getAddress(), 
-         "Got Address(%#llx), Expected Address(%#llx) from Directory",
-         address, m_outstanding_shmem_msg.getAddress());
-
-   MemComponent::component_t mem_component = m_outstanding_shmem_msg.getSenderMemComponent();
+   // Get the L1 Cache component where address is cached
+   L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
+   MemComponent::component_t mem_component = l2_miss_status->_mem_component;
    assert(mem_component == MemComponent::L1_DCACHE);
-   
+  
+   // In L1 
    CacheState::cstate_t l1_cstate = getCacheStateInL1(mem_component, address);
    if (l1_cstate == CacheState::INVALID)
    {
@@ -366,11 +336,6 @@ L2CacheCntlr::processUpgradeRepFromDramDirectory(core_id_t sender, ShmemMsg* shm
       assert(l2_cache_block_info->getCachedLoc() != MemComponent::INVALID_MEM_COMPONENT);
       setCacheStateInL1(mem_component, address, CacheState::MODIFIED);
    }
-
-   // Set the Counters in the Shmem Perf model accordingly
-   // Set the counter value in the USER thread to that in the SIM thread
-   getShmemPerfModel()->setCycleCount(ShmemPerfModel::_USER_THREAD,
-         getShmemPerfModel()->getCycleCount());
 }
 
 void
@@ -544,11 +509,11 @@ L2CacheCntlr::acquireL1CacheLock(ShmemMsg::msg_t msg_type, IntPtr address)
       case ShmemMsg::EX_REP:
       case ShmemMsg::SH_REP:
       case ShmemMsg::UPGRADE_REP:
-         
-         assert(m_outstanding_shmem_msg.getAddress() == address);
-         assert(m_outstanding_shmem_msg.getSenderMemComponent() != MemComponent::INVALID_MEM_COMPONENT);
-         m_l1_cache_cntlr->acquireLock(m_outstanding_shmem_msg.getSenderMemComponent());
-         return m_outstanding_shmem_msg.getSenderMemComponent();
+         { 
+            MemComponent::component_t mem_component = ((L2MissStatus*) m_miss_status_map.get(address))->_mem_component;
+            m_l1_cache_cntlr->acquireLock(mem_component);
+            return mem_component;
+         }
 
       case ShmemMsg::INV_REQ:
       case ShmemMsg::FLUSH_REQ:
@@ -559,7 +524,8 @@ L2CacheCntlr::acquireL1CacheLock(ShmemMsg::msg_t msg_type, IntPtr address)
             acquireLock();
             
             PrL2CacheBlockInfo* l2_cache_block_info = getCacheBlockInfo(address);
-            MemComponent::component_t caching_mem_component = (l2_cache_block_info == NULL) ? MemComponent::INVALID_MEM_COMPONENT : l2_cache_block_info->getCachedLoc();
+            MemComponent::component_t caching_mem_component = (l2_cache_block_info == NULL) ?
+                  MemComponent::INVALID_MEM_COMPONENT : l2_cache_block_info->getCachedLoc();
             
             releaseLock();
 
@@ -587,18 +553,6 @@ void
 L2CacheCntlr::releaseLock()
 {
    m_l2_cache_lock.release();
-}
-
-void
-L2CacheCntlr::wakeUpUserThread()
-{
-   m_user_thread_sem->signal();
-}
-
-void
-L2CacheCntlr::waitForUserThread()
-{
-   m_network_thread_sem->wait();
 }
 
 }

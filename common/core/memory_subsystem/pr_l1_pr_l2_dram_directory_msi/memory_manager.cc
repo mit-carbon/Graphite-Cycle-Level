@@ -191,8 +191,6 @@ MemoryManager::~MemoryManager()
    delete m_l1_dcache_perf_model;
    delete m_l2_cache_perf_model;
 
-   delete m_user_thread_sem;
-   delete m_network_thread_sem;
    delete m_dram_directory_home_lookup;
    delete m_l1_cache_cntlr;
    delete m_l2_cache_cntlr;
@@ -203,8 +201,9 @@ MemoryManager::~MemoryManager()
    }
 }
 
-bool
-MemoryManager::coreAccessL1Cache(
+void
+MemoryManager::coreInitiateCacheAccess(UInt64 time,
+      UInt32 memory_access_id,
       MemComponent::component_t mem_component,
       Core::lock_signal_t lock_signal,
       Core::mem_op_t mem_op_type,
@@ -212,13 +211,16 @@ MemoryManager::coreAccessL1Cache(
       Byte* data_buf, UInt32 data_length,
       bool modeled)
 {
-   return m_l1_cache_cntlr->processMemOpFromCore(
-            mem_component, 
-            lock_signal, 
-            mem_op_type, 
-            address, offset, 
-            data_buf, data_length,
-            modeled);
+   getShmemPerfModel()->setCycleCount(time);
+
+   m_l1_cache_cntlr->processMemOpFromCore(
+         memory_access_id,
+         mem_component, 
+         lock_signal, 
+         mem_op_type, 
+         address, offset, 
+         data_buf, data_length,
+         modeled);
 }
 
 void

@@ -1,6 +1,7 @@
 #include "l1_cache_cntlr.h"
 #include "l2_cache_cntlr.h" 
 #include "memory_manager.h"
+#include "event.h"
 
 namespace PrL1PrL2DramDirectoryMSI
 {
@@ -60,14 +61,16 @@ L1CacheCntlr::initializeMissStatusMaps()
 void
 L1CacheCntlr::deinitializeMissStatusMaps()
 {
-   assert(m_miss_status_maps[MemComponent::L1_ICACHE].empty());
-   assert(m_miss_status_maps[MemComponent::L1_DCACHE].empty());
+   LOG_ASSERT_ERROR(m_miss_status_maps[MemComponent::L1_ICACHE].empty(), "size(%u)",
+         m_miss_status_maps[MemComponent::L1_ICACHE].size());
+   LOG_ASSERT_ERROR(m_miss_status_maps[MemComponent::L1_DCACHE].empty(), "size(%u)",
+         m_miss_status_maps[MemComponent::L1_DCACHE].size());
 }
 
 void
 L1CacheCntlr::processMemOpFromCore(
+      UInt32 memory_access_id,
       MemComponent::component_t mem_component,
-      SInt32 memory_access_id,
       Core::lock_signal_t lock_signal,
       Core::mem_op_t mem_op_type,
       IntPtr ca_address, UInt32 offset,
@@ -76,8 +79,6 @@ L1CacheCntlr::processMemOpFromCore(
 {
    LOG_PRINT("processMemOpFromCore(), lock_signal(%u), mem_op_type(%u), ca_address(0x%x)",
          lock_signal, mem_op_type, ca_address);
-
-   bool l1_cache_hit = true;
 
    if (lock_signal != Core::UNLOCK)
       acquireLock(mem_component);
@@ -96,6 +97,9 @@ L1CacheCntlr::processMemOpFromCore(
               
       if (lock_signal != Core::LOCK)
          releaseLock(mem_component);
+
+      // Complete Cache Operation
+      completeMemOpFromCore(memory_access_id);
       return;
    }
 
@@ -124,6 +128,9 @@ L1CacheCntlr::processMemOpFromCore(
 
       if (lock_signal != Core::LOCK)
          releaseLock(mem_component);
+      
+      // Complete Cache Operation
+      completeMemOpFromCore(memory_access_id);
       return;
    }
 
@@ -147,7 +154,7 @@ L1CacheCntlr::processMemOpFromCore(
          m_core_id /* requester */,
          m_core_id /* receiver */, ca_address);
 
-   if (mode != CYCLE_ACCURATE)
+   if (Config::getSingleton()->getSimulationMode() != Config::CYCLE_ACCURATE)
    {
       waitForSimThread();
       reprocessMemOpFromCore(mem_component, l1_miss_status);
@@ -164,19 +171,19 @@ L1CacheCntlr::reprocessMemOpFromCore(
    if (l1_miss_status->_lock_signal != Core::UNLOCK)
       acquireLock(mem_component);
 
-   if (mode != CYCLE_ACCURATE)
+   if (Config::getSingleton()->getSimulationMode() != Config::CYCLE_ACCURATE)
    {
       // Wake up the sim thread after acquiring the lock
       wakeUpSimThread();
    }
 
    assert(operationPermissibleinL1Cache(mem_component,
-          l1_miss_status->_ca_address, l1_miss_status->_mem_op_type,
+          l1_miss_status->_address, l1_miss_status->_mem_op_type,
           l1_miss_status->_modeled, false /* update_cache_counters */));
 
    accessCache(mem_component, 
                l1_miss_status->_mem_op_type,
-               l1_miss_status->_ca_address, l1_miss_status->_offset,
+               l1_miss_status->_address, l1_miss_status->_offset,
                l1_miss_status->_data_buf, l1_miss_status->_data_length);
  
    if (l1_miss_status->_lock_signal != Core::LOCK)
@@ -188,15 +195,21 @@ L1CacheCntlr::reprocessMemOpFromCore(
    delete l1_miss_status;
  
    LOG_PRINT("reprocessMemOpFromCore() end");
-  
-   EventCompleteCacheAccess* event = new EventCompleteCacheAccess(
-         getShmemPerfModel()->getCycleCount(),
-         getMemoryManager()->getCore(),
-         memory_access_id);
-   Sim()->getEventManager()->processEventInOrder(event);
+
+   // Complete Cache Operation
+   completeMemOpFromCore(memory_access_id);
 }
 
-// Return value indicates whether I am the first miss for that address
+void
+L1CacheCntlr::completeMemOpFromCore(UInt32 memory_access_id)
+{
+   UnstructuredBuffer event_args;
+   event_args << getMemoryManager()->getCore() << memory_access_id; 
+   EventCompleteCacheAccess* event = new EventCompleteCacheAccess(getShmemPerfModel()->getCycleCount(),
+                                                                  event_args);
+   Event::processInOrder(event, getMemoryManager()->getCore()->getId(), EventQueue::ORDERED);
+}
+
 void
 L1CacheCntlr::accessCache(MemComponent::component_t mem_component,
       Core::mem_op_t mem_op_type, IntPtr ca_address, UInt32 offset,
@@ -374,9 +387,9 @@ L1CacheCntlr::releaseLock(MemComponent::component_t mem_component)
 void
 L1CacheCntlr::signalDataReady(MemComponent::component_t mem_component, IntPtr address)
 {
-   if (mode != CYCLE_ACCURATE)
+   if (Config::getSingleton()->getSimulationMode() != Config::CYCLE_ACCURATE)
    {
-      getShmemPerfModel()->setCycleCount(ShmemPerfModel::_USER_THREAD,
+      getShmemPerfModel()->setCycleCount(ShmemPerfModel::_APP_THREAD,
             getShmemPerfModel()->getCycleCount());
       wakeUpAppThread();
       waitForAppThread();

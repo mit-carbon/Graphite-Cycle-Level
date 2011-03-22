@@ -115,9 +115,6 @@ MemoryManager::MemoryManager(Core* core,
       LOG_PRINT_ERROR("Error reading memory system parameters from the config file");
    }
 
-   m_user_thread_sem = new Semaphore(0);
-   m_network_thread_sem = new Semaphore(0);
-
    std::vector<core_id_t> core_list_with_dram_controllers = getCoreListWithMemoryControllers();
    if (getCore()->getId() == 0)
       printCoreListWithMemoryControllers(core_list_with_dram_controllers);
@@ -153,8 +150,6 @@ MemoryManager::MemoryManager(Core* core,
 
    m_l1_cache_cntlr = new L1CacheCntlr(getCore()->getId(),
          this,
-         m_user_thread_sem,
-         m_network_thread_sem,
          getCacheBlockSize(),
          l1_icache_size, l1_icache_associativity,
          l1_icache_replacement_policy,
@@ -166,8 +161,6 @@ MemoryManager::MemoryManager(Core* core,
          this,
          m_l1_cache_cntlr,
          m_dram_directory_home_lookup,
-         m_user_thread_sem,
-         m_network_thread_sem,
          getCacheBlockSize(),
          l2_cache_size, l2_cache_associativity,
          l2_cache_replacement_policy,
@@ -204,8 +197,6 @@ MemoryManager::~MemoryManager()
    delete m_l1_dcache_perf_model;
    delete m_l2_cache_perf_model;
 
-   delete m_user_thread_sem;
-   delete m_network_thread_sem;
    delete m_dram_directory_home_lookup;
    delete m_l1_cache_cntlr;
    delete m_l2_cache_cntlr;
@@ -216,8 +207,9 @@ MemoryManager::~MemoryManager()
    }
 }
 
-bool
-MemoryManager::coreInitiateMemoryAccess(
+void
+MemoryManager::coreInitiateCacheAccess(UInt64 time,
+      UInt32 memory_access_id,
       MemComponent::component_t mem_component,
       Core::lock_signal_t lock_signal,
       Core::mem_op_t mem_op_type,
@@ -225,7 +217,11 @@ MemoryManager::coreInitiateMemoryAccess(
       Byte* data_buf, UInt32 data_length,
       bool modeled)
 {
-   return m_l1_cache_cntlr->processMemOpFromCore(mem_component, 
+   getShmemPerfModel()->setCycleCount(time);
+
+   return m_l1_cache_cntlr->processMemOpFromCore(
+         memory_access_id,
+         mem_component, 
          lock_signal, 
          mem_op_type, 
          address, offset, 
@@ -248,7 +244,7 @@ MemoryManager::handleMsgFromNetwork(NetPacket& packet)
    if (m_enabled)
    {
       LOG_PRINT("Got Shmem Msg: type(%i), address(%#llx), sender_mem_component(%u), receiver_mem_component(%u), sender(%i), receiver(%i)", 
-            shmem_msg->getMsgType(), shmem_msg->getAddress(), sender_mem_component, receiver_mem_component, sender, packet.receiver);    
+            shmem_msg->getMsgType(), shmem_msg->getAddress(), sender_mem_component, receiver_mem_component, sender, packet.receiver);
    }
 
    switch (receiver_mem_component)

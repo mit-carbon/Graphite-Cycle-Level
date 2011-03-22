@@ -18,6 +18,7 @@ namespace PrL1PrL2DramDirectoryMSI
 #include "lock.h"
 #include "fixed_types.h"
 #include "shmem_perf_model.h"
+#include "miss_status.h"
 
 namespace PrL1PrL2DramDirectoryMSI
 {
@@ -33,6 +34,8 @@ namespace PrL1PrL2DramDirectoryMSI
          
          core_id_t m_core_id;
          UInt32 m_cache_block_size;
+
+         MissStatusMap m_miss_status_map;
 
          Lock m_l2_cache_lock;
 
