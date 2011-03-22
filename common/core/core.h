@@ -26,49 +26,6 @@ using namespace std;
 
 class Core
 {
-private:
-
-   class MemoryAccessStatus
-   {
-   public:
-      MemoryAccessStatus(SInt32 access_id, UInt64 time,
-                         IntPtr address, UInt32 bytes,
-                         MemComponent::component_t mem_component,
-                         lock_signal_t lock_signal,
-                         mem_op_t mem_op_type,
-                         Byte* data_buffer, bool modeled)
-         : _access_id(access_id)
-         , _start_time(time)
-         , _curr_time(time)
-         , _start_address(address)
-         , _curr_address(address)
-         , _total_bytes(bytes)
-         , _curr_bytes(0)
-         , _bytes_remaining(bytes)
-         , _mem_component(mem_component)
-         , _lock_signal(lock_signal)
-         , _mem_op_type(mem_op_type)
-         , _data_buffer(data_buffer)
-         , _modeled(modeled)
-      {}
-
-      ~MemoryAccessStatus() {}
-
-      UInt32 _access_id;
-      UInt64 _start_time;
-      UInt64 _curr_time;
-      IntPtr _start_address;
-      IntPtr _curr_address;
-      UInt32 _total_bytes;
-      UInt32 _curr_bytes;
-      UInt32 _bytes_remaining;
-      MemComponent::component_t _mem_component;
-      lock_signal_t _lock_signal;
-      mem_op_t _mem_op_type;
-      Byte* _data_buffer;
-      bool _modeled;
-   };
-
 public:
    enum State
    {
@@ -111,19 +68,15 @@ public:
    int coreSendW(int sender, int receiver, char *buffer, int size, carbon_network_t net_type);
    int coreRecvW(int sender, int receiver, char *buffer, int size, carbon_network_t net_type);
   
-   UInt64 readInstructionMemory(IntPtr address, 
-         UInt32 instruction_size);
-
-   void initiateMemoryAccess(
+   void initiateMemoryAccess(UInt64 time,
          MemComponent::component_t mem_component,
-         lock_signal_t lock_signal, 
-         mem_op_t mem_op_type, 
-         IntPtr address, 
-         Byte* data_buf, UInt32 data_size,
-         bool modeled = false,
-         UInt64 time = 0);
-   
-   void completePartialMemoryAccess(SInt32 memory_access_id, IntPtr address, UInt32 bytes);
+         lock_signal_t lock_signal,
+         mem_op_t mem_op_type,
+         IntPtr address,
+         Byte* data_buffer,
+         UInt32 bytes,
+         bool modeled = false);
+   void completeCacheAccess(UInt64 time, SInt32 memory_access_id);
 
    void accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type,
          IntPtr d_addr, char* data_buffer, UInt32 data_size, bool modeled = false);
@@ -151,6 +104,48 @@ public:
    void resetPerformanceModels();
 
 private:
+   
+   class MemoryAccessStatus
+   {
+   public:
+      MemoryAccessStatus(SInt32 access_id, UInt64 time,
+                         IntPtr address, UInt32 bytes,
+                         MemComponent::component_t mem_component,
+                         lock_signal_t lock_signal,
+                         mem_op_t mem_op_type,
+                         Byte* data_buffer, bool modeled)
+         : _access_id(access_id)
+         , _start_time(time)
+         , _curr_time(time)
+         , _start_address(address)
+         , _curr_address(address)
+         , _total_bytes(bytes)
+         , _curr_bytes(0)
+         , _bytes_remaining(bytes)
+         , _mem_component(mem_component)
+         , _lock_signal(lock_signal)
+         , _mem_op_type(mem_op_type)
+         , _data_buffer(data_buffer)
+         , _modeled(modeled)
+      {}
+
+      ~MemoryAccessStatus() {}
+
+      UInt32 _access_id;
+      UInt64 _start_time;
+      UInt64 _curr_time;
+      IntPtr _start_address;
+      IntPtr _curr_address;
+      UInt32 _total_bytes;
+      UInt32 _curr_bytes;
+      UInt32 _bytes_remaining;
+      MemComponent::component_t _mem_component;
+      lock_signal_t _lock_signal;
+      mem_op_t _mem_op_type;
+      Byte* _data_buffer;
+      bool _modeled;
+   };
+
    core_id_t m_core_id;
    MemoryManager *m_memory_manager;
    PinMemoryManager *m_pin_memory_manager;
@@ -160,16 +155,20 @@ private:
    SyncClient *m_sync_client;
    ClockSkewMinimizationClient *m_clock_skew_minimization_client;
    ShmemPerfModel* m_shmem_perf_model;
-   
+  
    State m_core_state;
+   
+   // Memory Access Status
+   UInt32 m_last_memory_access_id;
+   std::map<UInt32, MemoryAccessStatus*> m_memory_access_status_map; 
+   
    Lock m_core_state_lock;
-
    static Lock m_global_core_lock;
 
    PacketType getPktTypeFromUserNetType(carbon_network_t net_type);
 
-   void continueMemoryAccess(MemoryAccessState& memory_access_state);
-   void completeMemoryAccess(MemoryAccessState& memory_access_state);
+   void continueMemoryAccess(MemoryAccessStatus& memory_access_status);
+   void completeMemoryAccess(MemoryAccessStatus& memory_access_status);
 };
 
 #endif

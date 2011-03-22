@@ -13,7 +13,7 @@
 
 UInt32 Config::m_knob_total_cores;
 UInt32 Config::m_knob_num_process;
-UInt32 Config::m_knob_total_sim_threads;
+UInt32 Config::m_knob_num_sim_threads_per_process;
 bool Config::m_knob_simarch_has_shared_mem;
 std::string Config::m_knob_output_file;
 bool Config::m_knob_enable_performance_modeling;
@@ -34,13 +34,15 @@ Config *Config::getSingleton()
 Config::Config()
       : m_current_process_num((UInt32)-1)
 {
+   // TODO: Currently assumes a constant number of sim threads per process
+   // Fix this assumption later
    // NOTE: We can NOT use logging in the config constructor! The log
    // has not been instantiated at this point!
    try
    {
       m_knob_total_cores = Sim()->getCfg()->getInt("general/total_cores");
       m_knob_num_process = Sim()->getCfg()->getInt("general/num_processes");
-      m_knob_total_sim_threads = Sim()->getCfg()->getInt("general/total_sim_threads");
+      m_knob_num_sim_threads_per_process = Sim()->getCfg()->getInt("general/num_sim_threads_per_process");
       m_knob_simarch_has_shared_mem = Sim()->getCfg()->getBool("general/enable_shared_mem");
       m_knob_output_file = Sim()->getCfg()->getString("general/output_file");
       m_knob_enable_performance_modeling = Sim()->getCfg()->getBool("general/enable_performance_modeling");
@@ -61,13 +63,7 @@ Config::Config()
    m_num_processes = m_knob_num_process;
    m_total_cores = m_knob_total_cores;
    m_application_cores = m_total_cores;
-   m_total_sim_threads = m_knob_total_sim_threads;
-
-   if ((m_simulation_mode == LITE) && (m_num_processes > 1))
-   {
-      fprintf(stderr, "ERROR: Use only 1 process in lite mode\n");
-      exit(EXIT_FAILURE);
-   }
+   m_num_sim_threads_per_process = m_knob_num_sim_threads_per_process;
 
    m_singleton = this;
 
@@ -94,6 +90,22 @@ Config::Config()
    m_core_id_length = computeCoreIDLength(m_total_cores);
 
    GenerateCoreMap();
+
+   // Assert Conditions
+   if (((m_simulation_mode == LITE) || (m_simulation_mode == CYCLE_ACCURATE)) && (m_num_processes > 1))
+   {
+      fprintf(stderr, "ERROR: Use only 1 process in lite or cycle_accurate mode\n");
+      exit(EXIT_FAILURE);
+   }
+   for (UInt32 i = 0; i < m_num_processes; i++)
+   {
+      if (getSimThreadCount(i) > getCoreListForProcess(i).size())
+      {
+         fprintf(stderr, "ERROR: Process(%i) has more sim threads(%u) than cores(%u)\n",
+               i, getSimThreadCount(i), (UInt32) getCoreListForProcess(i).size());
+         exit(EXIT_FAILURE);
+      }
+   }
 }
 
 Config::~Config()
@@ -102,6 +114,7 @@ Config::~Config()
    delete [] m_proc_to_core_list_map;
 }
 
+// Thread Spawner Core
 core_id_t Config::getThreadSpawnerCoreNum(UInt32 proc_num)
 {
    if (m_simulation_mode == FULL)
@@ -330,6 +343,8 @@ Config::SimulationMode Config::parseSimulationMode(string mode)
       return FULL;
    else if (mode == "lite")
       return LITE;
+   else if (mode == "cycle_accurate")
+      return CYCLE_ACCURATE;
    else
    {
       fprintf(stderr, "Unrecognized Simulation Mode(%s)\n", mode.c_str());

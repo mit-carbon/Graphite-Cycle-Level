@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "min_heap.h"
+#include "log.h"
 
 MinHeap::MinHeap()
 {}
@@ -24,6 +25,7 @@ MinHeap::insert(Node* node)
 bool
 MinHeap::insert(UInt64 key, void* data)
 {
+   LOG_PRINT("Insert(%llu, %p), Size(%u)", key, data, size());
    Node* node = new Node(UINT64_MAX, data, _node_list.size());
    _node_list.push_back(node);
    return decreaseKey(node, key);
@@ -32,6 +34,7 @@ MinHeap::insert(UInt64 key, void* data)
 pair<UInt64,void*>
 MinHeap::min()
 {
+   LOG_PRINT("min(), Size(%u)", size());
    if (_node_list.empty())
       return make_pair<UInt64,void*>(UINT64_MAX, NULL);
    else
@@ -41,6 +44,7 @@ MinHeap::min()
 pair<UInt64,void*>
 MinHeap::extractMin()
 {
+   LOG_PRINT("extractMin(), Size(%u)", size());
    if (_node_list.empty())
       return make_pair<UInt64,void*>(UINT64_MAX, NULL);
 
@@ -81,6 +85,7 @@ bool
 MinHeap::increaseKey(Node* node, UInt64 key)
 {
    assert(node->_key <= key);
+   SInt32 node_index = node->_index;
 
    // Get child with minimum key
    Node* min_child = minChild(node->_index);
@@ -88,14 +93,13 @@ MinHeap::increaseKey(Node* node, UInt64 key)
    {
       swap(min_child, node);
       increaseKey(node, key);
-      return (min_child->_index == 0) ? true : false;
    }
    else
    {
       // Assign Key to node
       node->_key = key;
-      return false;
    }
+   return (node_index == 0) ? true : false;
 }
 
 bool

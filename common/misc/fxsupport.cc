@@ -62,7 +62,7 @@ Fxsupport *Fxsupport::getSingleton()
 
 bool Fxsupport::fxsave()
 {
-   if (Sim()->getCoreManager()->amiUserThread())
+   if (Sim()->getCoreManager()->amiAppThread())
    {
       LOG_PRINT("fxsave() start");
 
@@ -93,7 +93,7 @@ bool Fxsupport::fxsave()
 
 void Fxsupport::fxrstor()
 {
-   if (Sim()->getCoreManager()->amiUserThread())
+   if (Sim()->getCoreManager()->amiAppThread())
    {
       LOG_PRINT("fxrstor() start");
    

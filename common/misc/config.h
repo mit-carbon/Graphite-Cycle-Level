@@ -69,6 +69,7 @@ public:
    {
       FULL = 0,
       LITE,
+      CYCLE_ACCURATE,
       NUM_SIMULATION_MODES
    };
 
@@ -112,7 +113,10 @@ public:
    UInt32 getTotalCores() { return m_total_cores; }
    UInt32 getApplicationCores() { return m_application_cores; }
    // Get the total number of sim threads
-   UInt32 getTotalSimThreads() { return m_total_sim_threads; }
+   // Assume that the sim threads are evenly distributed among participating processes
+   UInt32 getTotalSimThreads() { return m_num_sim_threads_per_process * m_num_processes; }
+   UInt32 getSimThreadCount(UInt32 proc_num) { return m_num_sim_threads_per_process; }
+   UInt32 getLocalSimThreadCount() { return getSimThreadCount(getCurrentProcessNum()); }
 
    // Return an array of core numbers for a given process
    //  The returned array will have numMods(proc_num) elements
@@ -168,11 +172,11 @@ private:
    std::vector<CoreList> computeProcessToCoreMapping();
    void printProcessToCoreMapping();
    
-   UInt32  m_num_processes;         // Total number of processes (incl myself)
-   UInt32  m_total_cores;           // Total number of cores in all processes
-   UInt32  m_application_cores;     // Total number of cores used by the application
-   UInt32  m_total_sim_threads;     // Total number of sim threads
-   UInt32  m_core_id_length;        // Number of bytes needed to store a core_id
+   UInt32  m_num_processes;               // Total number of processes (incl myself)
+   UInt32  m_total_cores;                 // Total number of cores in all processes
+   UInt32  m_application_cores;           // Total number of cores used by the application
+   UInt32  m_num_sim_threads_per_process; // Number of sim threads per process
+   UInt32  m_core_id_length;              // Number of bytes needed to store a core_id
 
    UInt32  m_current_process_num;          // Process number for this process
 
@@ -197,7 +201,7 @@ private:
 
    static UInt32 m_knob_total_cores;
    static UInt32 m_knob_num_process;
-   static UInt32 m_knob_total_sim_threads;
+   static UInt32 m_knob_num_sim_threads_per_process;
    static bool m_knob_simarch_has_shared_mem;
    static std::string m_knob_output_file;
    static bool m_knob_enable_performance_modeling;
