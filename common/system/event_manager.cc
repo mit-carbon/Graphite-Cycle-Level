@@ -1,60 +1,77 @@
+#include "simulator.h"
+#include "sim_thread_manager.h"
 #include "event_manager.h"
+#include "event_queue_manager.h"
+#include "event_heap.h"
+#include "unordered_event_queue.h"
+#include "event_queue.h"
+#include "meta_event_heap.h"
+#include "event.h"
 #include "config.h"
+#include "log.h"
 
-// TODO: Make this multi-process later
 // 1) One EventManager per process
 // 2) One _app_meta_event_heap & One _sim_meta_event_heap per process
 // 3) One _global_meta_event_heap for the entire simulation
 EventManager::EventManager()
-{
+{  
    _global_meta_event_heap = new MetaEventHeap(NUM_THREAD_TYPES);
    _app_meta_event_heap = new MetaEventHeap(Config::getSingleton()->getApplicationCores(), \
          _global_meta_event_heap, APP_THREAD);
    _sim_meta_event_heap = new MetaEventHeap(Config::getSingleton()->getTotalSimThreads(), \
          _global_meta_event_heap, SIM_THREAD);
 
-   for (UInt32 i = 0; i < Config::getSingleton()->getTotalSimThreads(); i++)
-      _sim_event_heap_list.push_back(new EventHeap(i, _sim_meta_event_heap, i));
-
-   // Allocate core ids' to sim thread ids' - Do a simple allocation now and refine later
-   SInt32 sim_thread_id = 0;
-   for (SInt32 i = 0; i < (SInt32) Config::getSingleton()->getTotalCores(); i++)
+   // sim thread event queue managers
+   for (UInt32 i = 0; i < Config::getSingleton()->getLocalSimThreadCount(); i++)
    {
-      _core_id_to_sim_thread_id_mapping[i] = sim_thread_id;
-      sim_thread_id = (sim_thread_id + 1) % Config::getSingleton()->getTotalSimThreads();
+      // There is one EventQueueManager per sim thread.
+      // The EventQueueManager manages the
+      //    1) OrderedEventQueue (aka EventHeap), and the
+      //    2) UnorderedEventQueue
+      // belonging to a particular sim thread
+      // 
+      // 1) The events on the EventHeap are processed in the order of simulated timestamps
+      // 2) The events on the UnorderedEventQueue are processed as and when they come
+      //                (in the order of real time)
+      EventQueueManager* event_queue_manager = new EventQueueManager(i);
+      EventHeap* event_heap = new EventHeap(event_queue_manager, _sim_meta_event_heap, i);
+      UnorderedEventQueue* unordered_event_queue = new UnorderedEventQueue(event_queue_manager);
+      event_queue_manager->setEventQueues(event_heap, unordered_event_queue);
+
+      _event_queue_manager_list.push_back(event_queue_manager);
    }
-   
-   // Allocate Event Memory
-   allocateEventMemory();
 }
 
 EventManager::~EventManager()
 {
-   // Release Event Memory
-   releaseEventMemory();
-
    for (UInt32 i = 0; i < Config::getSingleton()->getTotalSimThreads(); i++)
-      delete _sim_event_heap_list[i];
-   
+   {
+      delete _event_queue_manager_list[i]->getEventQueue(EventQueue::UNORDERED);
+      delete _event_queue_manager_list[i]->getEventQueue(EventQueue::ORDERED);
+      delete _event_queue_manager_list[i];
+   }
    delete _app_meta_event_heap;
    delete _sim_meta_event_heap;
-   
    delete _global_meta_event_heap;
 }
 
-// Always returns the _sim_event_heap
-EventHeap*
-EventManager::getEventHeapFromSimThreadId(SInt32 sim_thread_id)
+EventQueueManager*
+EventManager::getEventQueueManager(SInt32 sim_thread_id)
 {
    assert(sim_thread_id < (SInt32) Config::getSingleton()->getTotalSimThreads());
-   return _sim_event_heap_list[sim_thread_id];
+   return _event_queue_manager_list[sim_thread_id];
 }
 
-EventHeap*
-EventManager::getEventHeapFromCoreId(core_id_t core_id)
+bool
+EventManager::isReady(UInt64 event_time)
 {
-   SInt32 sim_thread_id = _core_id_to_sim_thread_id_mapping[core_id];
-   return getEventHeapFromSimThreadId(sim_thread_id);
+   UInt64 global_time = _global_meta_event_heap->getFirstEventTime();
+   LOG_ASSERT_ERROR(event_time >= global_time,
+         "event time(%llu), global time(%llu)", 
+         event_time, global_time);
+
+   // TODO: Make this a range later
+   return (event_time == _global_meta_event_heap->getFirstEventTime());
 }
 
 void
@@ -62,58 +79,17 @@ EventManager::wakeUpWaiters()
 {
    // Wakes up only the sim threads for now
    // Once instruction and private cache modeling is made cycle-accurate,
-   // wake up app threads also
-   // Now, app threads run uncontrolled
+   // wake up app threads also. Now, app threads run uncontrolled
    for (UInt32 i = 0; i < Config::getSingleton()->getTotalSimThreads(); i++)
-   {
-      if (isReady(_sim_event_heap_list[i]->getFirstEventTime()))
-         _sim_event_heap_list[i]->signalEvent();
-   }
-}
-
-Event*
-EventManager::createEvent(void* obj, UInt64 time, Event::Type event_type, void* processing_entity, SInt32 event_heap_id)
-{
-   ScopedLock sl(_event_memory_lock_list[event_heap_id]);
-   stack<Event*>& free_list = _free_memory_list[event_heap_id];
-
-   Event* event = free_list.top();
-   free_list.pop();
-
-   event->init(obj, time, event_type, processing_entity);
-   return event;
+      _event_queue_manager_list[i]->signalEvent();
 }
 
 void
-EventManager::destroyEvent(Event* event)
+EventManager::processEventInOrder(Event* event, core_id_t core_id, EventQueue::Type event_queue_type)
 {
-   SInt32 event_heap_id = ((SInt32) (event - _event_memory)) / _max_num_outstanding_events_per_heap;
-
-   ScopedLock sl(_event_memory_lock_list[event_heap_id]);
-   stack<Event*>& free_list = _free_memory_list[event_heap_id];
-
-   free_list.push(event);
-}
-
-void
-EventManager::allocateEventMemory()
-{
-   SInt32 max_num_outstanding_events = _max_num_outstanding_events_per_heap * _num_event_heaps;
-
-   // TODO: Cache line align this later
-   _event_memory = new Event[max_num_outstanding_events];
-   _event_memory_lock_list.resize(_num_event_heaps);
-   _free_memory_list.resize(_num_event_heaps);
-
-   for (SInt32 i = 0; i < _num_event_heaps; i++)
-   {
-      for (SInt32 j = 0; j < _max_num_outstanding_events_per_heap; j++)
-         _free_memory_list[i].push(&_event_memory[i * _max_num_outstanding_events_per_heap + j]);
-   }
-}
-
-void
-EventManager::releaseEventMemory()
-{
-   delete _event_memory;
+   SInt32 sim_thread_id = Sim()->getSimThreadManager()->getSimThreadIDFromCoreID(core_id);
+   // EventQueue is defined by (sim_thread_id, event_queue_type)
+   EventQueueManager* event_queue_manager = getEventQueueManager(sim_thread_id);
+   EventQueue* event_queue = event_queue_manager->getEventQueue(event_queue_type);
+   event_queue->push(event);
 }
