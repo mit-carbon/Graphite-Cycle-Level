@@ -13,6 +13,7 @@
 #include "log.h"
 #include "config.h"
 #include "simulator.h" //interface to config file singleton
+#include "sim_thread_manager.h"
 #include "socktransport.h"
 
 // #define __CHECKSUM_ENABLED__     1
@@ -222,7 +223,7 @@ void SockTransport::insertInBufferList(SInt32 tag, Byte *buffer, Header* header)
 
    LOG_ASSERT_ERROR(0 <= list_id && list_id < m_num_lists, "Unexpected list_id value: %d", list_id);
    m_buffer_list_locks[list_id].acquire();
-   m_buffer_lists[list_id].push_back(BufferTagPair(buffer,tag));
+   m_buffer_lists[list_id].push_back(make_pair<Byte*,SInt32>(buffer,tag));
 
 #ifdef __CHECKSUM_ENABLED__
    m_header_lists[list_id].push_back(header);
@@ -332,8 +333,8 @@ SockTransport::SockNode::~SockNode()
 {
 }
 
-void SockTransport::SockNode::globalSend(SInt32 dest_proc, 
-                                         const void *buffer, 
+void SockTransport::SockNode::globalSend(SInt32 dest_proc,
+                                         const void *buffer,
                                          UInt32 length)
 {
    send(dest_proc, GLOBAL_TAG, buffer, length);
@@ -343,15 +344,15 @@ void SockTransport::SockNode::send(core_id_t dest_core,
                                    const void *buffer, 
                                    UInt32 length)
 {
+   LOG_ASSERT_ERROR(Config::getSingleton()->getSimulationMode() != Config::CYCLE_ACCURATE,
+         "Can't be called in Cycle Accurate mode");
+
    int dest_proc = Config::getSingleton()->getProcessNumForCore(dest_core);
    send(dest_proc, dest_core, buffer, length);
 }
 
 SockTransport::BufferTagPair SockTransport::SockNode::recv()
 {
-   LOG_ASSERT_ERROR(Sim()->getConfig()->getSimulationMode() != CYCLE_ACCURATE,
-         "Can't be called in Cycle Accurate mode");
-
    LOG_PRINT("Entering recv");
 
    SInt32 node_id = getNodeId();
@@ -364,7 +365,7 @@ SockTransport::BufferTagPair SockTransport::SockNode::recv()
    
    buffer_list &list = m_transport->m_buffer_lists[list_id];
    LOG_ASSERT_ERROR(!list.empty(), "Buffer list empty after waiting on semaphore.");
-   BufferTagPair& buffer_tag_pair = list.front();
+   BufferTagPair buffer_tag_pair = list.front();
    list.pop_front();
 
 #ifdef __CHECKSUM_ENABLED__
@@ -405,9 +406,6 @@ void SockTransport::SockNode::send(SInt32 dest_proc,
                                    const void *buffer, 
                                    UInt32 length)
 {
-   LOG_ASSERT_ERROR(Sim()->getConfig()->getSimulationMode() != CYCLE_ACCURATE,
-         "Can't be called in Cycle Accurate mode");
-
    // two cases:
    // (1) remote process, use sockets
    // (2) single process, put directly in buffer list
