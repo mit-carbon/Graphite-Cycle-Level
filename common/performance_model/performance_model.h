@@ -37,14 +37,14 @@ public:
    void popDynamicInstructionInfo();
    DynamicInstructionInfo& getDynamicInstructionInfo();
 
-   static PerformanceModel *create(Core* core);
+   static PerformanceModel* create(Core* core);
 
    BranchPredictor *getBranchPredictor() { return m_bp; }
 
    void disable();
    void enable();
    bool isEnabled() { return m_enabled; }
-   virtual void reset();
+   void reset() {}
 
    virtual void outputSummary(std::ostream &os) = 0;
 

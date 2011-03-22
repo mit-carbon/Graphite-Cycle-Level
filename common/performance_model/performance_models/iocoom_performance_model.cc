@@ -186,7 +186,8 @@ void IOCOOMPerformanceModel::handleInstruction(Instruction *instruction)
 pair<UInt64,UInt64>
 IOCOOMPerformanceModel::executeLoad(UInt64 time, const DynamicInstructionInfo &info)
 {
-   bool l1_hit = info.memory_info.num_misses == 0;
+   // FIXME: Make this correct
+   bool l1_hit = true; // info.memory_info.num_misses == 0;
 
    // similarly, a miss in the l1 with a completed entry in the store
    // buffer is treated as an invalidation
@@ -210,7 +211,8 @@ UInt64 IOCOOMPerformanceModel::executeStore(UInt64 time, const DynamicInstructio
 
 void IOCOOMPerformanceModel::modelIcache(IntPtr addr)
 {
-   UInt64 access_time = getCore()->readInstructionMemory(addr, sizeof(IntPtr));
+   // FIXME: Make this Correct
+   UInt64 access_time = 0; // getCore()->readInstructionMemory(addr, sizeof(IntPtr));
    m_cycle_count += access_time;
 }
 
@@ -220,16 +222,6 @@ void IOCOOMPerformanceModel::initializeRegisterScoreboard()
    {
       m_register_scoreboard[i] = 0;
    }
-}
-
-void IOCOOMPerformanceModel::reset()
-{
-   PerformanceModel::reset();
-
-   m_instruction_count = 0;
-   initializeRegisterScoreboard();
-   m_store_buffer->reset();
-   m_load_unit->reset();
 }
 
 // Helper classes 
@@ -274,11 +266,6 @@ void IOCOOMPerformanceModel::LoadUnit::initialize()
    {
       m_scoreboard[i] = 0;
    }
-}
-
-void IOCOOMPerformanceModel::LoadUnit::reset()
-{
-   initialize();
 }
 
 IOCOOMPerformanceModel::StoreBuffer::StoreBuffer(unsigned int num_entries)
@@ -355,9 +342,4 @@ void IOCOOMPerformanceModel::StoreBuffer::initialize()
       m_scoreboard[i] = 0;
       m_addresses[i] = 0;
    }
-}
-
-void IOCOOMPerformanceModel::StoreBuffer::reset()
-{
-   initialize();
 }

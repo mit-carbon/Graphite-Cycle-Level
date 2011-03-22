@@ -1,4 +1,5 @@
 #include "performance_model.h"
+#include "cycle_accurate/performance_model.h"
 #include "simple_performance_model.h"
 #include "iocoom_performance_model.h"
 #include "magic_performance_model.h"
@@ -12,6 +13,10 @@
 
 PerformanceModel* PerformanceModel::create(Core* core)
 {
+   // Create another core model for the cycle-accurate stuff
+   if (Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE)
+      return CycleAccurate::PerformanceModel::create(core);
+
    volatile float frequency = Config::getSingleton()->getCoreFrequency(core->getId());
    string core_model = Config::getSingleton()->getCoreType(core->getId());
 
@@ -90,37 +95,6 @@ void PerformanceModel::disable()
    m_enabled = false;
 }
 
-void PerformanceModel::reset()
-{
-   // Reset Average Frequency & Cycle Count
-   m_average_frequency = 0.0;
-   m_total_time = 0;
-   m_cycle_count = 0;
-   m_checkpointed_cycle_count = 0;
-
-   // Reset Instruction Counters
-   initializeInstructionCounters();
-
-   // Clear BasicBlockQueue
-   while (!m_basic_block_queue.empty())
-   {
-      BasicBlock* bb = m_basic_block_queue.front();
-      if (bb->isDynamic())
-         delete bb;
-      m_basic_block_queue.pop();
-   }
-   m_current_ins_index = 0;
-
-   // Clear Dynamic Instruction Info Queue
-   while (!m_dynamic_info_queue.empty())
-   {
-      m_dynamic_info_queue.pop();
-   }
-
-   // Reset Branch Predictor
-   m_bp->reset();
-}
-
 // This function is called:
 // 1) Whenever frequency is changed
 void PerformanceModel::updateInternalVariablesOnFrequencyChange(volatile float frequency)
@@ -171,11 +145,6 @@ void PerformanceModel::updateInstructionCounters(Instruction* i)
       case INST_RECV:
          m_total_recv_instructions ++;
          m_total_recv_instruction_costs += i->getCost();
-         break;
-
-      case INST_SYNC:
-         m_total_sync_instructions ++;
-         m_total_sync_instruction_costs += i->getCost();
          break;
 
       default:

@@ -73,18 +73,10 @@ bool MagicPerformanceModel::isModeled(InstructionType instruction_type)
    switch(instruction_type)
    {
       case INST_RECV:
-      case INST_SYNC:
       case INST_SPAWN:
          return true;
 
       default:
          return false;
    }
-}
-
-void
-MagicPerformanceModel::reset()
-{
-   PerformanceModel::reset();
-   m_instruction_count = 0;
 }

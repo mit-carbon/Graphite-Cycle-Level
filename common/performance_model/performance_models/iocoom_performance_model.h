@@ -18,7 +18,6 @@ public:
    IOCOOMPerformanceModel(Core* core, float frequency);
    ~IOCOOMPerformanceModel();
 
-   void reset();
    void outputSummary(std::ostream &os);
 
 private:
@@ -40,8 +39,6 @@ private:
       ~LoadUnit();
 
       UInt64 execute(UInt64 time, UInt64 occupancy);
-
-      void reset();
 
    private:
       Scoreboard m_scoreboard;
@@ -75,8 +72,6 @@ private:
         @param addr Address to check.
       */
       Status isAddressAvailable(UInt64 time, IntPtr addr);
-
-      void reset();
 
    private:
       Scoreboard m_scoreboard;

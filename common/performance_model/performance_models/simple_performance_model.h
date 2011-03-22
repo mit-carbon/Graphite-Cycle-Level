@@ -9,7 +9,6 @@ public:
    SimplePerformanceModel(Core *core, float frequency);
    ~SimplePerformanceModel();
 
-   void reset();
    void outputSummary(std::ostream &os);
 
    UInt64 getInstructionCount() { return m_instruction_count; }

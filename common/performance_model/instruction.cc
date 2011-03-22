@@ -45,6 +45,18 @@ void Instruction::initializeStaticInstructionModel()
    }
 }
 
+UInt32 Instruction::getNumOperands(Operand::Type operand_type, Operand::Direction operand_direction)
+{
+   UInt32 number = 0;
+   OperandList::iterator it = m_operands.begin();
+   for ( ; it != m_operands.end(); it ++)
+   {
+      if ( ((*it).m_type == operand_type) && ((*it).m_direction == operand_direction) )
+         number ++;
+   }
+   return number;
+}
+
 // DynamicInstruction
 
 DynamicInstruction::DynamicInstruction(UInt64 cost, InstructionType type)
@@ -99,12 +111,6 @@ UInt64 StringInstruction::getCost()
 
    return cost;
 }
-
-// SyncInstruction
-
-SyncInstruction::SyncInstruction(UInt64 cost)
-   : DynamicInstruction(cost, INST_SYNC)
-{ }
 
 // SpawnInstruction
 

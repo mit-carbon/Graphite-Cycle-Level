@@ -18,7 +18,6 @@ enum InstructionType
    INST_JMP,
    INST_DYNAMIC_MISC,
    INST_RECV,
-   INST_SYNC,
    INST_SPAWN,
    INST_STRING,
    INST_BRANCH,
@@ -81,6 +80,8 @@ public:
    { m_addr = addr; }
    IntPtr getAddress()
    { return m_addr; }
+
+   UInt32 getNumOperands(Operand::Type operand_type, Operand::Direction operand_direction);
 
 private:
    typedef std::vector<unsigned int> StaticInstructionCosts;
@@ -147,12 +148,6 @@ public:
    RecvInstruction(UInt64 cost)
       : DynamicInstruction(cost, INST_RECV)
    {}
-};
-
-class SyncInstruction : public DynamicInstruction
-{
-public:
-   SyncInstruction(UInt64 cost);
 };
 
 // set clock to particular time
