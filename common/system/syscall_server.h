@@ -49,7 +49,7 @@ class SyscallServer
 
       ~SyscallServer();
 
-      void handleSyscall(core_id_t core_id);
+      void handleSyscall(core_id_t core_id, UInt64 time);
 
    private:
       void marshallOpenCall(core_id_t core_id);
@@ -76,14 +76,14 @@ class SyscallServer
 #endif
       void marshallMunmapCall(core_id_t core_id);
       void marshallBrkCall(core_id_t core_id);
-      void marshallFutexCall(core_id_t core_id);
+      void marshallFutexCall(core_id_t core_id, UInt64 curr_time);
 
       // Handling Futexes 
       void futexWait(core_id_t core_id, int *uaddr, int val, int act_val, UInt64 curr_time);
       void futexWake(core_id_t core_id, int *uaddr, int val, UInt64 curr_time);
       void futexCmpRequeue(core_id_t core_id, int *uaddr, int val, int *uaddr2, int val3, int act_val, UInt64 curr_time);
 
-      //Note: These structures are shared with the MCP
+      // Note: These structures are shared with the MCP
    private:
       Network & m_network;
       UnstructuredBuffer & m_send_buff;

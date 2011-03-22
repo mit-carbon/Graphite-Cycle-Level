@@ -5,12 +5,6 @@
 
 using namespace std;
 
-struct Reply
-{
-   UInt32 dummy;
-   UInt64 time __attribute__((packed));
-};
-
 // -- SimMutex -- //
 
 SimMutex::SimMutex()
@@ -164,21 +158,20 @@ SyncServer::SyncServer(Network &network, UnstructuredBuffer &recv_buffer)
 SyncServer::~SyncServer()
 { }
 
-void SyncServer::mutexInit(core_id_t core_id)
+void SyncServer::mutexInit(core_id_t core_id, UInt64 time)
 {
    m_mutexes.push_back(SimMutex());
    UInt32 mux = (UInt32)m_mutexes.size()-1;
 
-   m_network.netSend(core_id, MCP_RESPONSE_TYPE, (char*)&mux, sizeof(mux));
+   NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+         sizeof(mux), (void*) &mux);
+   m_network.netSend(packet);
 }
 
-void SyncServer::mutexLock(core_id_t core_id)
+void SyncServer::mutexLock(core_id_t core_id, UInt64 time)
 {
    carbon_mutex_t mux;
    m_recv_buffer >> mux;
-
-   UInt64 time;
-   m_recv_buffer >> time;
 
    assert((size_t)mux < m_mutexes.size());
 
@@ -187,10 +180,10 @@ void SyncServer::mutexLock(core_id_t core_id)
    if (psimmux->lock(core_id))
    {
       // notify the owner
-      Reply r;
-      r.dummy = SyncClient::MUTEX_LOCK_RESPONSE;
-      r.time = time;
-      m_network.netSend(core_id, MCP_RESPONSE_TYPE, (char*)&r, sizeof(r));
+      UInt32 reply = SyncClient::MUTEX_LOCK_RESPONSE;
+      NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+            sizeof(reply), (void*) &reply);
+      m_network.netSend(packet);
    }
    else
    {
@@ -198,13 +191,10 @@ void SyncServer::mutexLock(core_id_t core_id)
    }
 }
 
-void SyncServer::mutexUnlock(core_id_t core_id)
+void SyncServer::mutexUnlock(core_id_t core_id, UInt64 time)
 {
    carbon_mutex_t mux;
    m_recv_buffer >> mux;
-
-   UInt64 time;
-   m_recv_buffer >> time;
 
    assert((size_t)mux < m_mutexes.size());
 
@@ -215,38 +205,39 @@ void SyncServer::mutexUnlock(core_id_t core_id)
    if (new_owner != SimMutex::NO_OWNER)
    {
       // wake up the new owner
-      Reply r;
-      r.dummy = SyncClient::MUTEX_LOCK_RESPONSE;
-      r.time = time;
-      m_network.netSend(new_owner, MCP_RESPONSE_TYPE, (char*)&r, sizeof(r));
+      UInt32 reply = SyncClient::MUTEX_LOCK_RESPONSE;
+      NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), new_owner,
+            sizeof(reply), (void*) &reply);
+      m_network.netSend(packet);
    }
    else
    {
       // nothing...
    }
 
-   UInt32 dummy = SyncClient::MUTEX_UNLOCK_RESPONSE;
-   m_network.netSend(core_id, MCP_RESPONSE_TYPE, (char*)&dummy, sizeof(dummy));
+   UInt32 reply = SyncClient::MUTEX_UNLOCK_RESPONSE;
+   NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+         sizeof(reply), (void*) &reply);
+   m_network.netSend(packet);
 }
 
 // -- Condition Variable Stuffs -- //
-void SyncServer::condInit(core_id_t core_id)
+void SyncServer::condInit(core_id_t core_id, UInt64 time)
 {
    m_conds.push_back(SimCond());
    UInt32 cond = (UInt32)m_conds.size()-1;
 
-   m_network.netSend(core_id, MCP_RESPONSE_TYPE, (char*)&cond, sizeof(cond));
+   NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+         sizeof(cond), (void*) &cond);
+   m_network.netSend(packet);
 }
 
-void SyncServer::condWait(core_id_t core_id)
+void SyncServer::condWait(core_id_t core_id, UInt64 time)
 {
    carbon_cond_t cond;
    carbon_mutex_t mux;
    m_recv_buffer >> cond;
    m_recv_buffer >> mux;
-
-   UInt64 time;
-   m_recv_buffer >> time;
 
    assert((size_t)mux < m_mutexes.size());
    assert((size_t)cond < m_conds.size());
@@ -259,22 +250,18 @@ void SyncServer::condWait(core_id_t core_id)
    if (new_mutex_owner != SimMutex::NO_OWNER)
    {
       // wake up the new owner
-      Reply r;
-
-      r.dummy = SyncClient::MUTEX_LOCK_RESPONSE;
-      r.time = time;
-      m_network.netSend(new_mutex_owner, MCP_RESPONSE_TYPE, (char*)&r, sizeof(r));
+      UInt32 reply = SyncClient::MUTEX_LOCK_RESPONSE;
+      NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), new_mutex_owner,
+            sizeof(reply), (void*) &reply);
+      m_network.netSend(packet);
    }
 }
 
 
-void SyncServer::condSignal(core_id_t core_id)
+void SyncServer::condSignal(core_id_t core_id, UInt64 time)
 {
    carbon_cond_t cond;
    m_recv_buffer >> cond;
-
-   UInt64 time;
-   m_recv_buffer >> time;
 
    assert((size_t)cond < m_conds.size());
 
@@ -286,10 +273,10 @@ void SyncServer::condSignal(core_id_t core_id)
    {
       // wake up the new owner
       // (note: COND_WAIT_RESPONSE == MUTEX_LOCK_RESPONSE, see header)
-      Reply r;
-      r.dummy = SyncClient::MUTEX_LOCK_RESPONSE;
-      r.time = time;
-      m_network.netSend(woken, MCP_RESPONSE_TYPE, (char*)&r, sizeof(r));
+      UInt32 reply = SyncClient::MUTEX_LOCK_RESPONSE;
+      NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), woken,
+            sizeof(reply), (void*) &reply);
+      m_network.netSend(packet);
    }
    else
    {
@@ -297,17 +284,16 @@ void SyncServer::condSignal(core_id_t core_id)
    }
 
    // Alert the signaler
-   UInt32 dummy = SyncClient::COND_SIGNAL_RESPONSE;
-   m_network.netSend(core_id, MCP_RESPONSE_TYPE, (char*)&dummy, sizeof(dummy));
+   UInt32 reply = SyncClient::COND_SIGNAL_RESPONSE;
+   NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+         sizeof(reply), (void*) &reply);
+   m_network.netSend(packet);
 }
 
-void SyncServer::condBroadcast(core_id_t core_id)
+void SyncServer::condBroadcast(core_id_t core_id, UInt64 time)
 {
    carbon_cond_t cond;
    m_recv_buffer >> cond;
-
-   UInt64 time;
-   m_recv_buffer >> time;
 
    assert((size_t)cond < m_conds.size());
 
@@ -322,18 +308,20 @@ void SyncServer::condBroadcast(core_id_t core_id)
 
       // wake up the new owner
       // (note: COND_WAIT_RESPONSE == MUTEX_LOCK_RESPONSE, see header)
-      Reply r;
-      r.dummy = SyncClient::MUTEX_LOCK_RESPONSE;
-      r.time = time;
-      m_network.netSend(*it, MCP_RESPONSE_TYPE, (char*)&r, sizeof(r));
+      UInt32 reply = SyncClient::MUTEX_LOCK_RESPONSE;
+      NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), *it,
+            sizeof(reply), (void*) &reply);
+      m_network.netSend(packet);
    }
 
    // Alert the signaler
-   UInt32 dummy = SyncClient::COND_BROADCAST_RESPONSE;
-   m_network.netSend(core_id, MCP_RESPONSE_TYPE, (char*)&dummy, sizeof(dummy));
+   UInt32 reply = SyncClient::COND_BROADCAST_RESPONSE;
+   NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+         sizeof(reply), (void*) &reply);
+   m_network.netSend(packet);
 }
 
-void SyncServer::barrierInit(core_id_t core_id)
+void SyncServer::barrierInit(core_id_t core_id, UInt64 time)
 {
    UInt32 count;
    m_recv_buffer >> count;
@@ -341,18 +329,18 @@ void SyncServer::barrierInit(core_id_t core_id)
    m_barriers.push_back(SimBarrier(count));
    UInt32 barrier = (UInt32)m_barriers.size()-1;
 
-   m_network.netSend(core_id, MCP_RESPONSE_TYPE, (char*)&barrier, sizeof(barrier));
+   NetPacket packet(time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+         sizeof(barrier), (void*) &barrier);
+   m_network.netSend(packet);
 }
 
-void SyncServer::barrierWait(core_id_t core_id)
+void SyncServer::barrierWait(core_id_t core_id, UInt64 time)
 {
    carbon_barrier_t barrier;
    m_recv_buffer >> barrier;
 
-   UInt64 time;
-   m_recv_buffer >> time;
-
-   LOG_ASSERT_ERROR(barrier < (core_id_t) m_barriers.size(), "barrier = %i, m_barriers.size()= %u", barrier, m_barriers.size());
+   LOG_ASSERT_ERROR(barrier < (core_id_t) m_barriers.size(),
+         "barrier = %i, m_barriers.size()= %u", barrier, m_barriers.size());
 
    SimBarrier *psimbarrier = &m_barriers[barrier];
 
@@ -364,9 +352,9 @@ void SyncServer::barrierWait(core_id_t core_id)
    for (SimBarrier::WakeupList::iterator it = woken_list.begin(); it != woken_list.end(); it++)
    {
       assert(*it != INVALID_CORE_ID);
-      Reply r;
-      r.dummy = SyncClient::BARRIER_WAIT_RESPONSE;
-      r.time = max_time;
-      m_network.netSend(*it, MCP_RESPONSE_TYPE, (char*)&r, sizeof(r));
+      UInt32 reply = SyncClient::BARRIER_WAIT_RESPONSE;
+      NetPacket packet(max_time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), *it,
+            sizeof(reply), (void*) &reply);
+      m_network.netSend(packet);
    }
 }

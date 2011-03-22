@@ -18,6 +18,7 @@
 #include "mcp.h"
 #include "simulator.h"
 #include "thread_manager.h"
+#include "network.h"
 
 #include "log.h"
 
@@ -41,7 +42,7 @@ SyscallServer::~SyscallServer()
 }
 
 
-void SyscallServer::handleSyscall(core_id_t core_id)
+void SyscallServer::handleSyscall(core_id_t core_id, UInt64 time)
 {
    IntPtr syscall_number;
    m_recv_buff >> syscall_number;
@@ -130,7 +131,7 @@ void SyscallServer::handleSyscall(core_id_t core_id)
       break;
       
    case SYS_futex:
-      marshallFutexCall (core_id);
+      marshallFutexCall (core_id, time);
       break;
 
    default:
@@ -604,7 +605,7 @@ void SyscallServer::marshallBrkCall (core_id_t core_id)
    m_network.netSend (core_id, MCP_RESPONSE_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
 }
 
-void SyscallServer::marshallFutexCall (core_id_t core_id)
+void SyscallServer::marshallFutexCall (core_id_t core_id, UInt64 curr_time)
 {
    int *uaddr;
    int op;
@@ -614,8 +615,6 @@ void SyscallServer::marshallFutexCall (core_id_t core_id)
    int val3;
 
    int timeout_prefix;
-
-   UInt64 curr_time;
 
    m_recv_buff.get(uaddr);
    m_recv_buff.get(op);
@@ -638,15 +637,13 @@ void SyscallServer::marshallFutexCall (core_id_t core_id)
    m_recv_buff.get(uaddr2);
    m_recv_buff.get(val3);
 
-   m_recv_buff.get(curr_time);
-
    LOG_PRINT("Futex syscall: uaddr(0x%x), op(%u), val(%u)", uaddr, op, val);
 
    // Right now, we handle only a subset of the functionality
    // assert the subset
 
 #ifdef KERNEL_LENNY
-   LOG_ASSERT_ERROR((op == FUTEX_WAIT) || (op == (FUTEX_WAIT | FUTEX_PRIVATE_FLAG)) \
+   LOG_ASSERT_ERROR ((op == FUTEX_WAIT) || (op == (FUTEX_WAIT | FUTEX_PRIVATE_FLAG)) \
             || (op == FUTEX_WAKE) || (op == (FUTEX_WAKE | FUTEX_PRIVATE_FLAG)) \
             || (op == FUTEX_CMP_REQUEUE) || (op == (FUTEX_CMP_REQUEUE | FUTEX_PRIVATE_FLAG)) \
             , "op = 0x%x", op);
@@ -679,7 +676,7 @@ void SyscallServer::marshallFutexCall (core_id_t core_id)
    {
       futexWake(core_id, uaddr, val, curr_time);
    }
-   else if((op == FUTEX_CMP_REQUEUE) || (op == (FUTEX_CMP_REQUEUE | FUTEX_PRIVATE_FLAG)))
+   else if ((op == FUTEX_CMP_REQUEUE) || (op == (FUTEX_CMP_REQUEUE | FUTEX_PRIVATE_FLAG)))
    {
       futexCmpRequeue(core_id, uaddr, val, uaddr, val3, act_val, curr_time);
    }
@@ -708,8 +705,9 @@ void SyscallServer::futexWait(core_id_t core_id, int *uaddr, int val, int act_va
    {
       m_send_buff.clear();
       m_send_buff << (int) EWOULDBLOCK;
-      m_send_buff << curr_time;
-      m_network.netSend(core_id, MCP_RESPONSE_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
+      NetPacket packet(curr_time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+            m_send_buff.size(), m_send_buff.getBuffer());
+      m_network.netSend(packet);
    }
    else
    {
@@ -733,14 +731,16 @@ void SyscallServer::futexWake(core_id_t core_id, int *uaddr, int val, UInt64 cur
 
       m_send_buff.clear();
       m_send_buff << (int) 0;
-      m_send_buff << (UInt64) curr_time;
-      m_network.netSend(waiter, MCP_RESPONSE_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
+      NetPacket packet(curr_time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), waiter,
+            m_send_buff.size(), m_send_buff.getBuffer());
+      m_network.netSend(packet);
    }
 
    m_send_buff.clear();
    m_send_buff << num_procs_woken_up;
-   m_send_buff << (UInt64) curr_time;
-   m_network.netSend(core_id, MCP_RESPONSE_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
+   NetPacket packet(curr_time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+         m_send_buff.size(), m_send_buff.getBuffer());
+   m_network.netSend(packet);
 
 }
 
@@ -754,35 +754,37 @@ void SyscallServer::futexCmpRequeue(core_id_t core_id, int *uaddr, int val, int 
    {
       m_send_buff.clear();
       m_send_buff << (int) EAGAIN;
-      m_send_buff << curr_time;
-      m_network.netSend(core_id, MCP_RESPONSE_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
+      NetPacket packet(curr_time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+            m_send_buff.size(), m_send_buff.getBuffer());
+      m_network.netSend(packet);
    }
    else
    {
-      for(int i = 0; i < val; i++)
+      for (int i = 0; i < val; i++)
       {
          core_id_t waiter = sim_futex->dequeueWaiter();
-         if(waiter == INVALID_CORE_ID)
+         if (waiter == INVALID_CORE_ID)
             break;
 
          num_procs_woken_up++;
          
          m_send_buff.clear();
          m_send_buff << (int) 0;
-         m_send_buff << (UInt64) curr_time;
-         m_network.netSend(waiter, MCP_RESPONSE_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
+         NetPacket packet(curr_time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), waiter,
+               m_send_buff.size(), m_send_buff.getBuffer());
+         m_network.netSend(packet);
       }
 
       SimFutex *requeue_futex = &m_futexes[(IntPtr) uaddr2];
 
-      while(true)
+      while (true)
       {
          // dequeueWaiter changes the thread state to
          // RUNNING, which is changed back to STALLED 
          // by enqueueWaiter. Since only the MCP uses this state
          // this should be okay. 
          core_id_t waiter = sim_futex->dequeueWaiter();
-         if(waiter == INVALID_CORE_ID)
+         if (waiter == INVALID_CORE_ID)
             break;
 
          requeue_futex->enqueueWaiter(waiter);
@@ -790,11 +792,10 @@ void SyscallServer::futexCmpRequeue(core_id_t core_id, int *uaddr, int val, int 
 
       m_send_buff.clear();
       m_send_buff << num_procs_woken_up;
-      m_send_buff << (UInt64) curr_time;
-      m_network.netSend(core_id, MCP_RESPONSE_TYPE, m_send_buff.getBuffer(), m_send_buff.size());
+      NetPacket packet(curr_time, MCP_RESPONSE_TYPE, m_network.getCore()->getId(), core_id,
+            m_send_buff.size(), m_send_buff.getBuffer());
+      m_network.netSend(packet);
    }
-
-   return;
 }
 
 // -- SimFutex -- //

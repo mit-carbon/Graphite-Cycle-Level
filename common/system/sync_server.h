@@ -101,17 +101,17 @@ class SyncServer
 
       // Remaining parameters to these functions are stored
       // in the recv buffer and get unpacked
-      void mutexInit(core_id_t);
-      void mutexLock(core_id_t);
-      void mutexUnlock(core_id_t);
+      void mutexInit(core_id_t core_id, UInt64 time);
+      void mutexLock(core_id_t core_id, UInt64 time);
+      void mutexUnlock(core_id_t core_id, UInt64 time);
 
-      void condInit(core_id_t);
-      void condWait(core_id_t);
-      void condSignal(core_id_t);
-      void condBroadcast(core_id_t);
+      void condInit(core_id_t core_id, UInt64 time);
+      void condWait(core_id_t core_id, UInt64 time);
+      void condSignal(core_id_t core_id, UInt64 time);
+      void condBroadcast(core_id_t core_id, UInt64 time);
 
-      void barrierInit(core_id_t);
-      void barrierWait(core_id_t);
+      void barrierInit(core_id_t core_id, UInt64 time);
+      void barrierWait(core_id_t core_id, UInt64 time);
 
    private:
       Network &m_network;
