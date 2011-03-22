@@ -55,12 +55,12 @@ BarrierSyncClient::synchronize(UInt64 cycle_count)
       LOG_PRINT("Core(%i), curr_time(%llu), m_next_sync_time(%llu) sent SIM_BARRIER_WAIT", m_core->getId(), curr_time, m_next_sync_time);
 
       // Receive 'BARRIER_RELEASE' response
-      NetPacket recv_pkt;
+      NetPacket* recv_pkt;
       recv_pkt = m_core->getNetwork()->netRecv(Config::getSingleton()->getMCPCoreNum(), MCP_SYSTEM_RESPONSE_TYPE);
-      assert(recv_pkt.length == sizeof(int));
+      assert(recv_pkt->length == sizeof(int));
 
       unsigned int dummy;
-      m_recv_buff << make_pair(recv_pkt.data, recv_pkt.length);
+      m_recv_buff << make_pair(recv_pkt->data, recv_pkt->length);
       m_recv_buff >> dummy;
       assert(dummy == BARRIER_RELEASE);
 
@@ -70,6 +70,6 @@ BarrierSyncClient::synchronize(UInt64 cycle_count)
       m_next_sync_time = ((curr_time / m_barrier_interval) * m_barrier_interval) + m_barrier_interval;
 
       // Delete the data buffer
-      delete [] (Byte*) recv_pkt.data;
+      recv_pkt->release();
    }
 }
