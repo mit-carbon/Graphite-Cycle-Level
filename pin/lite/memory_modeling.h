@@ -3,7 +3,7 @@
 #include "fixed_types.h"
 #include "pin.H"
 
-namespace lite
+namespace Lite
 {
 
 void addMemoryModeling(INS ins);

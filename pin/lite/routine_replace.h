@@ -6,7 +6,7 @@
 #include "carbon_user.h"
 #include "fixed_types.h"
 
-namespace lite
+namespace Lite
 {
 
 void routineCallback(RTN rtn, void* v);

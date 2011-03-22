@@ -223,14 +223,14 @@ VOID instructionCallback (INS ins, void *v)
       if (INS_IsSyscall(ins))
       {
          INS_InsertCall(ins, IPOINT_BEFORE,
-               AFUNPTR(lite::handleFutexSyscall),
+               AFUNPTR(Lite::handleFutexSyscall),
                IARG_CONTEXT,
                IARG_END);
       }
       else
       {
          // Instrument Memory Operations
-         lite::addMemoryModeling(ins);
+         Lite::addMemoryModeling(ins);
       }
    }
 }
@@ -303,7 +303,8 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
             Core *core = Sim()->getCoreManager()->getCurrentCore();
 
             // main thread clock is not affected by start-up time of other processes
-            core->getNetwork()->netRecv (0, SYSTEM_INITIALIZATION_NOTIFY);
+            NetPacket* pkt = core->getNetwork()->netRecv(0, SYSTEM_INITIALIZATION_NOTIFY);
+            pkt->release();
 
             LOG_PRINT("Process: %i, Start Copying Initial Stack Data");
             copyInitialStackData(reg_esp, core_id);
@@ -428,7 +429,7 @@ int main(int argc, char *argv[])
    if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
       RTN_AddInstrumentFunction(routineCallback, 0);
    else // Sim()->getConfig()->getSimulationMode() == Config::LITE
-      RTN_AddInstrumentFunction(lite::routineCallback, 0);
+      RTN_AddInstrumentFunction(Lite::routineCallback, 0);
 
    PIN_AddThreadStartFunction(threadStartCallback, 0);
    PIN_AddThreadFiniFunction(threadFiniCallback, 0);
@@ -444,8 +445,8 @@ int main(int argc, char *argv[])
       }
       else // Sim()->getConfig()->getSimulationMode() == Config::LITE
       {
-         PIN_AddSyscallEntryFunction(lite::syscallEnterRunModel, 0);
-         PIN_AddSyscallExitFunction(lite::syscallExitRunModel, 0);
+         PIN_AddSyscallEntryFunction(Lite::syscallEnterRunModel, 0);
+         PIN_AddSyscallExitFunction(Lite::syscallExitRunModel, 0);
       }
    }
 

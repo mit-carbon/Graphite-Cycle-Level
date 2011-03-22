@@ -11,7 +11,7 @@ using namespace std;
 // The Pintool can easily read from application memory, so
 // we dont need to explicitly initialize stuff and do a special ret
 
-namespace lite
+namespace Lite
 {
 
 multimap<core_id_t, pthread_t*> tid_to_thread_ptr_map;
@@ -110,7 +110,7 @@ void routineCallback(RTN rtn, void* v)
             PIN_PARG_END());
 
       RTN_ReplaceSignature(rtn,
-            AFUNPTR(lite::nullFunction),
+            AFUNPTR(nullFunction),
             IARG_PROTOTYPE, proto,
             IARG_END);
    }
@@ -122,7 +122,7 @@ void routineCallback(RTN rtn, void* v)
             PIN_PARG_END());
 
       RTN_ReplaceSignature(rtn,
-            AFUNPTR(lite::nullFunction),
+            AFUNPTR(nullFunction),
             IARG_PROTOTYPE, proto,
             IARG_END);
    }
@@ -138,7 +138,7 @@ void routineCallback(RTN rtn, void* v)
             PIN_PARG_END());
 
       RTN_ReplaceSignature(rtn,
-            AFUNPTR(lite::emuCarbonSpawnThread),
+            AFUNPTR(emuCarbonSpawnThread),
             IARG_PROTOTYPE, proto,
             IARG_CONTEXT,
             IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
@@ -157,7 +157,7 @@ void routineCallback(RTN rtn, void* v)
             PIN_PARG_END());
 
       RTN_ReplaceSignature(rtn,
-            AFUNPTR(lite::emuPthreadCreate),
+            AFUNPTR(emuPthreadCreate),
             IARG_PROTOTYPE, proto,
             IARG_CONTEXT,
             IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
@@ -176,7 +176,7 @@ void routineCallback(RTN rtn, void* v)
             PIN_PARG_END());
 
       RTN_ReplaceSignature(rtn,
-            AFUNPTR(lite::emuCarbonJoinThread),
+            AFUNPTR(emuCarbonJoinThread),
             IARG_PROTOTYPE, proto,
             IARG_CONTEXT,
             IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
@@ -192,7 +192,7 @@ void routineCallback(RTN rtn, void* v)
             PIN_PARG_END());
 
       RTN_ReplaceSignature(rtn,
-            AFUNPTR(lite::emuPthreadJoin),
+            AFUNPTR(emuPthreadJoin),
             IARG_PROTOTYPE, proto,
             IARG_CONTEXT,
             IARG_FUNCARG_ENTRYPOINT_VALUE, 0,

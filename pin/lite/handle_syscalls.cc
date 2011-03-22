@@ -8,7 +8,7 @@ using namespace std;
 #include "syscall_model.h"
 #include "log.h"
 
-namespace lite
+namespace Lite
 {
 
 void handleFutexSyscall(CONTEXT* ctx)

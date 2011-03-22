@@ -3,7 +3,7 @@
 #include "pin.H"
 #include "fixed_types.h"
 
-namespace lite
+namespace Lite
 {
 
 void handleFutexSyscall(CONTEXT* ctx);
