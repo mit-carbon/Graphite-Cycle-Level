@@ -159,7 +159,7 @@ bool replaceUserAPIFunction(RTN& rtn, string& name)
 
 void replacementMain (CONTEXT *ctxt)
 {
-   LOG_PRINT("In replacementMain");
+   LOG_PRINT_WARNING("In replacementMain");
    
    if (Sim()->getConfig()->getCurrentProcessNum() == 0)
    {
@@ -171,15 +171,16 @@ void replacementMain (CONTEXT *ctxt)
       {
          // FIXME: 
          // This whole process should probably happen through the MCP
-         core->getNetwork()->netSend (Sim()->getConfig()->getThreadSpawnerCoreNum (i), SYSTEM_INITIALIZATION_NOTIFY, NULL, 0);
+         core->getNetwork()->netSend(Sim()->getConfig()->getThreadSpawnerCoreNum (i), SYSTEM_INITIALIZATION_NOTIFY, NULL, 0);
 
          // main thread clock is not affected by start-up time of other processes
-         core->getNetwork()->netRecv (Sim()->getConfig()->getThreadSpawnerCoreNum (i), SYSTEM_INITIALIZATION_ACK);
+         NetPacket* pkt = core->getNetwork()->netRecv(Sim()->getConfig()->getThreadSpawnerCoreNum (i), SYSTEM_INITIALIZATION_ACK);
+         pkt->release();
       }
       
       for (UInt32 i = 1; i < num_processes; i++)
       {
-         core->getNetwork()->netSend (Sim()->getConfig()->getThreadSpawnerCoreNum (i), SYSTEM_INITIALIZATION_FINI, NULL, 0);
+         core->getNetwork()->netSend(Sim()->getConfig()->getThreadSpawnerCoreNum (i), SYSTEM_INITIALIZATION_FINI, NULL, 0);
       }
 
       spawnThreadSpawner(ctxt);
@@ -192,8 +193,9 @@ void replacementMain (CONTEXT *ctxt)
    {
       // This whole process should probably happen through the MCP
       Core *core = Sim()->getCoreManager()->getCurrentCore();
-      core->getNetwork()->netSend (Sim()->getConfig()->getMainThreadCoreNum(), SYSTEM_INITIALIZATION_ACK, NULL, 0);
-      core->getNetwork()->netRecv (Sim()->getConfig()->getMainThreadCoreNum(), SYSTEM_INITIALIZATION_FINI);
+      core->getNetwork()->netSend(Sim()->getConfig()->getMainThreadCoreNum(), SYSTEM_INITIALIZATION_ACK, NULL, 0);
+      NetPacket* pkt = core->getNetwork()->netRecv(Sim()->getConfig()->getMainThreadCoreNum(), SYSTEM_INITIALIZATION_FINI);
+      pkt->release();
 
       int res;
       ADDRINT reg_eip = PIN_GetContextReg (ctxt, REG_INST_PTR);

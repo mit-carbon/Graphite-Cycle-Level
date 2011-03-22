@@ -44,6 +44,7 @@ int spawnThreadSpawner(CONTEXT *ctxt)
 
 VOID copyStaticData(IMG& img)
 {
+   LOG_PRINT_WARNING("Starting Copying Static Data");
    Core* core = Sim()->getCoreManager()->getCurrentCore();
    LOG_ASSERT_ERROR (core != NULL, "Does not have a valid Core ID");
 
@@ -56,6 +57,7 @@ VOID copyStaticData(IMG& img)
       
       // Copy all the mapped sections except the executable section now
       SEC_TYPE sec_type = SEC_Type(sec);
+      LOG_PRINT_WARNING("Copying Section(%u)", sec_type);
       if (sec_type != SEC_TYPE_EXEC)
       {
          if (SEC_Mapped(sec))
@@ -67,6 +69,7 @@ VOID copyStaticData(IMG& img)
          }
       }
    }
+   LOG_PRINT_WARNING("Finished Copying Static Data");
 }
 
 VOID copyInitialStackData(IntPtr& reg_esp, core_id_t core_id)
