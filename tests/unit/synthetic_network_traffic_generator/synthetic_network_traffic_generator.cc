@@ -218,8 +218,8 @@ void* sendNetworkTraffic(void*)
              (total_packets_sent >= (total_packets_received + outstanding_window_size)) ) ) 
       {
          // Check if a packet has arrived for this core (Should be non-blocking)
-         NetPacket recv_net_packet = core->getNetwork()->netRecvType(_packet_type);
-         delete [] (Byte*) recv_net_packet.data;
+         NetPacket* recv_net_packet = core->getNetwork()->netRecvType(_packet_type);
+         recv_net_packet->release();
          total_packets_received ++;
       }
    }
@@ -340,6 +340,9 @@ void tornadoTrafficGenerator(int core_id, vector<core_id_t>& send_vec, vector<co
    int sx, sy;
    computeEMeshPosition(core_id, sx, sy, mesh_width);
    int dst_core = computeCoreId((sx + mesh_width/2) % mesh_width, (sy + mesh_height/2) % mesh_height, mesh_width);
+
+   send_vec.push_back(dst_core);
+   receive_vec.push_back(dst_core);
 }
 
 void nearestNeighborTrafficGenerator(int core_id, vector<core_id_t>& send_vec, vector<core_id_t>& receive_vec)
