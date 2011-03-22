@@ -39,11 +39,11 @@ static void gatherSummaries(vector<string> &summaries)
 
          Byte *buf;
 
-         buf = global_node->recv();
+         buf = (global_node->recv()).first;
          assert(*((core_id_t*)buf) == cl[c]);
          delete [] buf;
 
-         buf = global_node->recv();
+         buf = (global_node->recv()).first;
          summaries[cl[c]] = string((char*)buf);
          delete [] buf;
       }
@@ -231,7 +231,7 @@ void CoreManager::outputSummary(ostream &os)
    // wait for my turn...
    if (cfg->getCurrentProcessNum() != 0)
    {
-      Byte *buf = global_node->recv();
+      Byte *buf = (global_node->recv()).first;
       assert(*((UInt32*)buf) == cfg->getCurrentProcessNum());
       delete [] buf;
    }

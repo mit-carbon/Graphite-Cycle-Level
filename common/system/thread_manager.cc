@@ -148,7 +148,7 @@ void ThreadManager::masterOnThreadExit(core_id_t core_id, UInt64 time)
    LOG_PRINT("masterOnThreadExit : %d", core_id);
    LOG_ASSERT_ERROR((UInt32)core_id < m_thread_state.size(), "Core id out of range: %d", core_id);
    
-   LOG_ASSERT_ERROR(m_thread_state[core_id].status == Core::RUNNING, \
+   LOG_ASSERT_ERROR(m_thread_state[core_id].status == Core::RUNNING,
          "m_thread_state[%i].status = %u", core_id, m_thread_state[core_id].status);
    m_thread_state[core_id].status = Core::IDLE;
    
@@ -200,18 +200,18 @@ SInt32 ThreadManager::spawnThread(thread_func_t func, void *arg)
    // Set the CoreState to 'STALLED'
    core->setState(Core::STALLED);
 
-   NetPacket pkt = net->netRecvType(MCP_THREAD_SPAWN_REPLY_FROM_MASTER_TYPE);
+   NetPacket* pkt = net->netRecvType(MCP_THREAD_SPAWN_REPLY_FROM_MASTER_TYPE);
    
-   LOG_ASSERT_ERROR(pkt.length == sizeof(SInt32), "Unexpected reply size.");
+   LOG_ASSERT_ERROR(pkt->length == sizeof(SInt32), "Unexpected reply size.");
 
    // Set the CoreState to 'RUNNING'
    core->setState(Core::RUNNING);
 
-   core_id_t core_id = *((core_id_t*) pkt.data);
+   core_id_t core_id = *((core_id_t*) pkt->data);
    LOG_PRINT("Thread spawned on core: %d", core_id);
 
    // Delete the data buffer
-   delete [] (Byte*) pkt.data;
+   pkt->release();
 
    return core_id;
 }
@@ -390,7 +390,8 @@ void ThreadManager::joinThread(core_id_t core_id)
    m_core_manager->getCurrentCore()->setState(Core::STALLED);
 
    // Wait for reply
-   NetPacket pkt = net->netRecvType(MCP_THREAD_JOIN_REPLY);
+   NetPacket* pkt = net->netRecvType(MCP_THREAD_JOIN_REPLY);
+   pkt->release();
 
    // Set the CoreState to 'WAKING_UP'
    m_core_manager->getCurrentCore()->setState(Core::WAKING_UP);
@@ -508,7 +509,7 @@ void ThreadManager::slaveTerminateThreadSpawnerAck(core_id_t core_id)
    {
       if (core_id == config->getThreadSpawnerCoreNum(i))
       {
-         Transport::Node *node = m_core_manager->getCurrentCore()->getNetwork()->getTransport();
+         Transport::Node *node = Transport::getSingleton()->getGlobalNode();
 
          int req_type = LCP_MESSAGE_QUIT_THREAD_SPAWNER_ACK;
 

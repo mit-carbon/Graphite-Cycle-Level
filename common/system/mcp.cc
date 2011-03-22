@@ -41,25 +41,25 @@ void MCP::processPacket()
    m_send_buff.clear();
    m_recv_buff.clear();
 
-   NetPacket recv_pkt;
+   NetPacket* recv_pkt;
 
    NetMatch match;
    match.types.push_back(MCP_REQUEST_TYPE);
    match.types.push_back(MCP_SYSTEM_TYPE);
    recv_pkt = m_network.netRecv(match);
 
-   m_recv_buff << make_pair(recv_pkt.data, recv_pkt.length);
+   m_recv_buff << make_pair(recv_pkt->data, recv_pkt->length);
 
    int msg_type;
 
    m_recv_buff >> msg_type;
 
-   LOG_PRINT("MCP message type(%i), sender(%i)", (SInt32) msg_type, recv_pkt.sender);
+   LOG_PRINT("MCP message type(%i), sender(%i)", (SInt32) msg_type, recv_pkt->sender);
 
    switch (msg_type)
    {
    case MCP_MESSAGE_SYS_CALL:
-      m_syscall_server.handleSyscall(recv_pkt.sender);
+      m_syscall_server.handleSyscall(recv_pkt->sender, recv_pkt->time);
       break;
    case MCP_MESSAGE_QUIT:
       LOG_PRINT("Quit message received.");
@@ -67,71 +67,71 @@ void MCP::processPacket()
       break;
 
    case MCP_MESSAGE_MUTEX_INIT:
-      m_sync_server.mutexInit(recv_pkt.sender);
+      m_sync_server.mutexInit(recv_pkt->sender, recv_pkt->time);
       break;
    case MCP_MESSAGE_MUTEX_LOCK:
-      m_sync_server.mutexLock(recv_pkt.sender);
+      m_sync_server.mutexLock(recv_pkt->sender, recv_pkt->time);
       break;
    case MCP_MESSAGE_MUTEX_UNLOCK:
-      m_sync_server.mutexUnlock(recv_pkt.sender);
+      m_sync_server.mutexUnlock(recv_pkt->sender, recv_pkt->time);
       break;
 
    case MCP_MESSAGE_COND_INIT:
-      m_sync_server.condInit(recv_pkt.sender);
+      m_sync_server.condInit(recv_pkt->sender, recv_pkt->time);
       break;
    case MCP_MESSAGE_COND_WAIT:
-      m_sync_server.condWait(recv_pkt.sender);
+      m_sync_server.condWait(recv_pkt->sender, recv_pkt->time);
       break;
    case MCP_MESSAGE_COND_SIGNAL:
-      m_sync_server.condSignal(recv_pkt.sender);
+      m_sync_server.condSignal(recv_pkt->sender, recv_pkt->time);
       break;
    case MCP_MESSAGE_COND_BROADCAST:
-      m_sync_server.condBroadcast(recv_pkt.sender);
+      m_sync_server.condBroadcast(recv_pkt->sender, recv_pkt->time);
       break;
 
    case MCP_MESSAGE_BARRIER_INIT:
-      m_sync_server.barrierInit(recv_pkt.sender);
+      m_sync_server.barrierInit(recv_pkt->sender, recv_pkt->time);
       break;
    case MCP_MESSAGE_BARRIER_WAIT:
-      m_sync_server.barrierWait(recv_pkt.sender);
+      m_sync_server.barrierWait(recv_pkt->sender, recv_pkt->time);
       break;
 
    case MCP_MESSAGE_UTILIZATION_UPDATE:
-      m_network_model_analytical_server.update(recv_pkt.sender);
+      m_network_model_analytical_server.update(recv_pkt->sender);
       break;
 
    case MCP_MESSAGE_THREAD_SPAWN_REQUEST_FROM_REQUESTER:
-      Sim()->getThreadManager()->masterSpawnThread((ThreadSpawnRequest*)recv_pkt.data);
+      Sim()->getThreadManager()->masterSpawnThread((ThreadSpawnRequest*)recv_pkt->data);
       break;
    case MCP_MESSAGE_THREAD_SPAWN_REPLY_FROM_SLAVE:
-      Sim()->getThreadManager()->masterSpawnThreadReply((ThreadSpawnRequest*)recv_pkt.data);
+      Sim()->getThreadManager()->masterSpawnThreadReply((ThreadSpawnRequest*)recv_pkt->data);
       break;
    case MCP_MESSAGE_THREAD_EXIT:
-      Sim()->getThreadManager()->masterOnThreadExit(*(core_id_t*)((Byte*)recv_pkt.data+sizeof(msg_type)), recv_pkt.time);
+      Sim()->getThreadManager()->masterOnThreadExit(*(core_id_t*)((Byte*)recv_pkt->data+sizeof(msg_type)), recv_pkt->time);
       break;
 
    case MCP_MESSAGE_THREAD_JOIN_REQUEST:
-      Sim()->getThreadManager()->masterJoinThread((ThreadJoinRequest*)recv_pkt.data, recv_pkt.time);
+      Sim()->getThreadManager()->masterJoinThread((ThreadJoinRequest*)recv_pkt->data, recv_pkt->time);
       break;
 
    case MCP_MESSAGE_CLOCK_SKEW_MINIMIZATION:
       assert(m_clock_skew_minimization_server);
-      m_clock_skew_minimization_server->processSyncMsg(recv_pkt.sender);
+      m_clock_skew_minimization_server->processSyncMsg(recv_pkt->sender);
       break;
 
    case MCP_MESSAGE_RESET_CACHE_COUNTERS:
-      Sim()->getPerfCounterManager()->resetCacheCounters(recv_pkt.sender);
+      Sim()->getPerfCounterManager()->resetCacheCounters(recv_pkt->sender);
       break;
 
    case MCP_MESSAGE_DISABLE_CACHE_COUNTERS:
-      Sim()->getPerfCounterManager()->disableCacheCounters(recv_pkt.sender);
+      Sim()->getPerfCounterManager()->disableCacheCounters(recv_pkt->sender);
       break;
 
    default:
-      LOG_PRINT_ERROR("Unhandled MCP message type: %i from %i", msg_type, recv_pkt.sender);
+      LOG_PRINT_ERROR("Unhandled MCP message type: %i from %i", msg_type, recv_pkt->sender);
    }
 
-   delete [](Byte*)recv_pkt.data;
+   recv_pkt->release();
 
    LOG_PRINT("Finished processing message -- type : %d", (int)msg_type);
 }
@@ -165,4 +165,3 @@ void MCP::run()
       processPacket();
    }
 }
-

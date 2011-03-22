@@ -14,12 +14,12 @@ public:
    void finish();
 
 private:
-   void processPacket();
+   void processMessage();
 
    void updateCommId(void *vp);
 
    SInt32 m_proc_num;
-   Transport::Node *m_transport;
+   Transport::Node* m_transport;
    bool m_finished; // FIXME: this should really be part of the thread class somehow
 };
 

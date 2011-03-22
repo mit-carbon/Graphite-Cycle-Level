@@ -4,6 +4,7 @@
 #include "message_types.h"
 #include "thread_manager.h"
 #include "clock_skew_minimization_object.h"
+#include "event.h"
 
 #include "log.h"
 
@@ -26,19 +27,22 @@ void LCP::run()
 
    while (!m_finished)
    {
-      processPacket();
+      processMessage();
    }
 }
 
-void LCP::processPacket()
+void LCP::processMessage()
 {
-   Byte *pkt = m_transport->recv();
+   pair<Byte*,SInt32> msg_tag_pair = m_transport->recv();
+   Byte *msg = msg_tag_pair.first;
+   SInt32 tag = msg_tag_pair.second;
+   assert(tag == -1);
 
-   SInt32 *msg_type = (SInt32*)pkt;
+   SInt32 *msg_type = (SInt32*) msg;
 
    LOG_PRINT("Received message type: %d", *msg_type);
 
-   Byte *data = pkt + sizeof(SInt32);
+   Byte *data = msg + sizeof(SInt32);
 
    switch (*msg_type)
    {
@@ -60,7 +64,7 @@ void LCP::processPacket()
       break;
 
    case LCP_MESSAGE_THREAD_SPAWN_REQUEST_FROM_MASTER:
-      Sim()->getThreadManager()->slaveSpawnThread((ThreadSpawnRequest*)pkt);
+      Sim()->getThreadManager()->slaveSpawnThread((ThreadSpawnRequest*)msg);
       break;
       
    case LCP_MESSAGE_QUIT_THREAD_SPAWNER:
@@ -80,7 +84,7 @@ void LCP::processPacket()
       break;
    }
 
-   delete [] pkt;
+   delete [] msg;
 }
 
 void LCP::finish()
@@ -114,13 +118,15 @@ void LCP::updateCommId(void *vp)
    LOG_PRINT("Initializing comm_id: %d to core_id: %d", update->comm_id, update->core_id);
    Config::getSingleton()->updateCommToCoreMap(update->comm_id, update->core_id);
 
-   NetPacket ack(/*time*/ 0,
-                 /*type*/ LCP_COMM_ID_UPDATE_REPLY,
-                 /*sender*/ 0, // doesn't matter ; see core_manager.cc
-                 /*receiver*/ update->core_id,
-                 /*length*/ 0,
-                 /*data*/ NULL);
-   Byte *buffer = ack.makeBuffer();
-   m_transport->send(update->core_id, buffer, ack.bufferSize());
-   delete [] buffer;
+   NetPacket* ack = new NetPacket(/*time*/ 0,
+                                  /*type*/ LCP_COMM_ID_UPDATE_REPLY,
+                                  /*sender*/ 0, // doesn't matter ; see core_manager.cc
+                                  /*receiver*/ update->core_id,
+                                  /*length*/ 0,
+                                  /*data*/ NULL);
+  
+   UnstructuredBuffer event_args;
+   event_args << update->core_id << ack;
+   EventNetwork* event = new EventNetwork(0, event_args);
+   Event::processInOrder(event, update->core_id, EventQueue::UNORDERED);
 }

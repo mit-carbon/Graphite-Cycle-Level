@@ -246,6 +246,7 @@ bool Simulator::finished()
 
 void Simulator::enablePerformanceModelsInCurrentProcess()
 {
+   LOG_PRINT_WARNING("enablePerformanceModels");
    Sim()->startTimer();
    for (UInt32 i = 0; i < Sim()->getConfig()->getNumLocalCores(); i++)
       Sim()->getCoreManager()->getCoreFromIndex(i)->enablePerformanceModels();
@@ -253,6 +254,7 @@ void Simulator::enablePerformanceModelsInCurrentProcess()
 
 void Simulator::disablePerformanceModelsInCurrentProcess()
 {
+   LOG_PRINT_WARNING("disablePerformanceModels");
    Sim()->stopTimer();
    for (UInt32 i = 0; i < Sim()->getConfig()->getNumLocalCores(); i++)
       Sim()->getCoreManager()->getCoreFromIndex(i)->disablePerformanceModels();
@@ -263,4 +265,3 @@ void Simulator::resetPerformanceModelsInCurrentProcess()
    for (UInt32 i = 0; i < Sim()->getConfig()->getNumLocalCores(); i++)
       Sim()->getCoreManager()->getCoreFromIndex(i)->resetPerformanceModels();
 }
-

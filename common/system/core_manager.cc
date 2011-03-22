@@ -44,8 +44,10 @@ CoreManager::CoreManager()
 
 CoreManager::~CoreManager()
 {
-   for (std::vector<Core *>::iterator i = m_cores.begin(); i != m_cores.end(); i++)
+   for (std::vector<Core*>::iterator i = m_cores.begin(); i != m_cores.end(); i++)
+   {
       delete *i;
+   }
 
    delete m_core_tls;
    delete m_core_index_tls;
@@ -88,7 +90,8 @@ void CoreManager::initializeCommId(SInt32 comm_id)
 
    for (UInt32 i = 0; i < num_procs; i++)
    {
-      network->netRecvType(LCP_COMM_ID_UPDATE_REPLY);
+      NetPacket* packet = network->netRecvType(LCP_COMM_ID_UPDATE_REPLY);
+      packet->release();
       LOG_PRINT("Received reply from proc: %d", i);
    }
 
@@ -173,6 +176,7 @@ Core *CoreManager::getCurrentCore()
 
 UInt32 CoreManager::getCurrentCoreIndex()
 {
+    assert(amiAppThread());
     UInt32 idx = m_core_index_tls->getInt();
     // LOG_ASSERT_ERROR(idx < m_cores.size(),
     //       "Invalid core index, idx(%u) >= m_cores.size(%u)",
@@ -214,7 +218,7 @@ UInt32 CoreManager::getCoreIndexFromID(core_id_t core_id)
 {
    // Look up the index from the core list
    // FIXME: make this more cached
-   const Config::CoreList & cores(Config::getSingleton()->getCoreListForProcess(Config::getSingleton()->getCurrentProcessNum()));
+   const Config::CoreList &cores(Config::getSingleton()->getCoreListForProcess(Config::getSingleton()->getCurrentProcessNum()));
    UInt32 idx = 0;
    for (Config::CLCI i = cores.begin(); i != cores.end(); i++)
    {
@@ -228,7 +232,7 @@ UInt32 CoreManager::getCoreIndexFromID(core_id_t core_id)
    return INVALID_CORE_ID;
 }
 
-core_id_t CoreManager::registerSimThread()
+core_id_t CoreManager::registerSimThread(core_id_t core_id)
 {
     if (getCurrentCore() != NULL)
     {
@@ -238,14 +242,15 @@ core_id_t CoreManager::registerSimThread()
 
     ScopedLock sl(m_num_registered_sim_threads_lock);
 
-    LOG_ASSERT_ERROR(m_num_registered_sim_threads < Config::getSingleton()->getNumLocalCores(),
+    LOG_ASSERT_ERROR(m_num_registered_sim_threads < Config::getSingleton()->getLocalSimThreadCount(),
                      "All sim threads already registered. %d > %d",
-                     m_num_registered_sim_threads+1, Config::getSingleton()->getNumLocalCores());
+                     m_num_registered_sim_threads+1, Config::getSingleton()->getLocalSimThreadCount());
 
-    Core *core = m_cores.at(m_num_registered_sim_threads);
+    SInt32 core_index = getCoreIndexFromID(core_id);
+    Core* core = m_cores.at(core_index);
 
     m_core_tls->set(core);
-    m_core_index_tls->setInt(m_num_registered_sim_threads);
+    m_core_index_tls->setInt(core_index);
     m_thread_type_tls->setInt(SIM_THREAD);
 
     ++m_num_registered_sim_threads;
@@ -253,12 +258,12 @@ core_id_t CoreManager::registerSimThread()
     return core->getId();
 }
 
+bool CoreManager::amiAppThread()
+{
+    return m_thread_type_tls->getInt() == APP_THREAD;
+}
+
 bool CoreManager::amiSimThread()
 {
     return m_thread_type_tls->getInt() == SIM_THREAD;
-}
-
-bool CoreManager::amiUserThread()
-{
-    return m_thread_type_tls->getInt() == APP_THREAD;
 }
