@@ -20,7 +20,6 @@ struct DynamicInstructionInfo
       {
          UInt64 latency;
          IntPtr addr;
-         UInt32 num_misses;
       } memory_info;
 
       // STRING
@@ -49,13 +48,12 @@ struct DynamicInstructionInfo
       memory_info = rhs.memory_info; // "use bigger one"
    }
 
-   static DynamicInstructionInfo createMemoryInfo(UInt64 l, IntPtr a, Operand::Direction dir, UInt32 num_misses)
+   static DynamicInstructionInfo createMemoryInfo(UInt64 l, IntPtr a, Operand::Direction dir)
    {
       DynamicInstructionInfo i;
       i.type = (dir == Operand::READ) ? MEMORY_READ : MEMORY_WRITE;
       i.memory_info.latency = l;
       i.memory_info.addr = a;
-      i.memory_info.num_misses = num_misses;
       return i;
    }
 
