@@ -10,11 +10,14 @@ public:
    SimThreadManager();
    ~SimThreadManager();
 
-   void spawnThreads();
-   void quitThreads();
+   void spawnSimThreads();
+   void quitSimThreads();
 
    SInt32 registerThread();
    void unregisterThread();
+
+   vector<core_id_t>& getCoreIDListFromSimThreadID(SInt32 sim_thread_id);
+   SInt32 getSimThreadIDFromCoreID(core_id_t core_id);
 
 private:
    // Core Id to Sim Thread Id mapping
@@ -25,6 +28,9 @@ private:
 
    Lock m_active_threads_lock;
    UInt32 m_active_threads;
+
+   // Initialization of core id --> sim thread id mapping
+   void initializeSimThreadIDToCoreIDMappings();
 };
 
 #endif // SIM_THREAD_MANAGER

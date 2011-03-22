@@ -3,6 +3,7 @@
 
 #include "thread.h"
 #include "fixed_types.h"
+#include "network.h"
 
 class SimThread : public Runnable
 {

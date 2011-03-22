@@ -5,6 +5,7 @@
 #include "config.h"
 #include "simulator.h"
 #include "transport.h"
+#include "event.h"
 
 SimThreadManager::SimThreadManager()
    : m_active_threads(0)
@@ -27,8 +28,9 @@ SimThreadManager::initializeSimThreadIDToCoreIDMappings()
    SInt32 num_sim_threads = Config::getSingleton()->getLocalSimThreadCount();
    // Compute a stupid mapping -- Refine Later
    SInt32 sim_thread_id = 0;
-   vector<core_id_t>& core_id_list = Config::getSingleton()->getCoreListForCurrentProcess();
-   for (vector<core_id_t>::iterator i = core_id_list.begin(); i != core_id_list.end(); i++)
+   Config::CoreList core_id_list = Config::getSingleton()->getCoreListForCurrentProcess();
+   _sim_thread_id__to__core_id_list__mapping.resize(num_sim_threads);
+   for (Config::CLCI i = core_id_list.begin(); i != core_id_list.end(); i++)
    {
       _core_id__to__sim_thread_id__mapping[*i] = sim_thread_id;
       _sim_thread_id__to__core_id_list__mapping[sim_thread_id].push_back(*i);
@@ -49,7 +51,7 @@ SimThreadManager::getSimThreadIDFromCoreID(core_id_t core_id)
 }
 
 void
-SimThreadManager::spawnThreads(SimThread::Type sim_thread_type)
+SimThreadManager::spawnSimThreads()
 {
    UInt32 num_sim_threads = Config::getSingleton()->getLocalSimThreadCount();
 
@@ -71,27 +73,24 @@ SimThreadManager::spawnThreads(SimThread::Type sim_thread_type)
 }
 
 void
-SimThreadManager::quitThreads()
+SimThreadManager::quitSimThreads()
 {
    LOG_PRINT("Sending quit messages.");
 
-   Transport::Node *global_node = Transport::getSingleton()->getGlobalNode();
    UInt32 num_sim_threads = Config::getSingleton()->getLocalSimThreadCount();
 
    // This is something of a hard-wired emulation of Network::netSend
    // ... not the greatest thing to do, but whatever.
-   NetPacket pkt = new NetPacket(0, SIM_THREAD_TERMINATE_THREADS, 0, 0, 0, NULL);
-
    for (UInt32 i = 0; i < num_sim_threads; i++)
    {
+      NetPacket* pkt = new NetPacket(0, SIM_THREAD_TERMINATE_THREADS, 0, 0, 0, NULL);
       core_id_t core_id = _sim_thread_id__to__core_id_list__mapping[i].front();
-      pkt.receiver = core_id;
+      pkt->receiver = core_id;
 
-      EventNetwork* event = new EventNetwork(0 /* time */,
-                                             pkt.receiver, pkt, 
-                                             global_node)
-      Sim()->getEventManager()->processEventInOrder(event,
-            getSimThreadIDFromCoreID(pkt.receiver), EventQueue::UNORDERED);
+      UnstructuredBuffer event_args;
+      event_args << pkt->receiver << pkt;
+      EventNetwork* event = new EventNetwork(0 /* time */, event_args);
+      Event::processInOrder(event, pkt->receiver, EventQueue::UNORDERED);
    }
 
    LOG_PRINT("Waiting for local sim threads to exit.");
