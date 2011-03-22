@@ -1,33 +1,31 @@
+#define __STDC_LIMIT_MACROS
+#include <climits>
 #include <algorithm>
 #include <string.h>
 
 #include "transport.h"
 #include "core.h"
 #include "network.h"
-#include "memory_manager_base.h"
+#include "memory_manager.h"
 #include "simulator.h"
 #include "core_manager.h"
 #include "clock_converter.h"
 #include "fxsupport.h"
 #include "finite_buffer_network_model.h"
-#include "log.h"
-
-#include "event_manager.h"
-#include "event_heap.h"
 #include "event.h"
+#include "log.h"
 
 using namespace std;
 
 Network::Network(Core *core)
       : _core(core)
+      , _enabled(false)
 {
    LOG_ASSERT_ERROR(sizeof(g_type_to_static_network_map) / sizeof(EStaticNetwork) == NUM_PACKET_TYPES,
                     "Static network type map has incorrect number of entries.");
 
    _numMod = Config::getSingleton()->getTotalCores();
    _tid = _core->getId();
-
-   _transport = Transport::getSingleton()->createNode(_core->getId());
 
    _callbacks = new NetworkCallback [NUM_PACKET_TYPES];
    _callbackObjs = new void* [NUM_PACKET_TYPES];
@@ -51,8 +49,6 @@ Network::~Network()
 
    delete [] _callbackObjs;
    delete [] _callbacks;
-
-   delete _transport;
 
    LOG_PRINT("Destroyed.");
 }
@@ -80,6 +76,35 @@ void Network::outputSummary(std::ostream &out) const
    }
 }
 
+core_id_t Network::getRequester(const NetPacket& packet)
+{
+   // USER network -- (packet.sender)
+   // SHARED_MEM network -- (getRequester(packet))
+   // SYSTEM network -- INVALID_CORE_ID
+   SInt32 network_id = (getNetworkModelFromPacketType(packet.type))->getNetworkId();
+   if ((network_id == STATIC_NETWORK_USER_1) || (network_id == STATIC_NETWORK_USER_2))
+      return packet.sender;
+   else if ((network_id == STATIC_NETWORK_MEMORY_1) || (network_id == STATIC_NETWORK_MEMORY_2))
+      return getCore()->getMemoryManager()->getShmemRequester(packet.data);
+   else // (network_id == STATIC_NETWORK_SYSTEM)
+      return packet.sender; 
+}
+
+bool Network::isModeled(const NetPacket& packet)
+{
+   // USER network -- (true)
+   // SHARED_MEM network -- (requester < Config::getSingleton()->getApplicationCores())
+   // SYSTEM network -- (false)
+   core_id_t requester = getRequester(packet);
+   SInt32 network_id = (getNetworkModelFromPacketType(packet.type))->getNetworkId();
+   if ((network_id == STATIC_NETWORK_USER_1) || (network_id == STATIC_NETWORK_USER_2))
+      return true;
+   else if ((network_id == STATIC_NETWORK_MEMORY_1) || (network_id == STATIC_NETWORK_MEMORY_2))
+      return (requester < (core_id_t) Config::getSingleton()->getApplicationCores());
+   else // (network_id == STATIC_NETWORK_SYSTEM)
+      return false;
+}
+
 // Function that receives packets from the event queue
 void Network::processPacket(NetPacket* packet)
 {
@@ -99,12 +124,12 @@ void Network::processPacket(NetPacket* packet)
       list<NetPacket*> net_packet_list_to_send;
       list<NetPacket*> net_packet_list_to_receive;
       finite_buffer_model->receiveNetPacket(packet, net_packet_list_to_send, net_packet_list_to_receive);
+      
+      // Free the memory occupied by the packet (header + data)
+      packet->release();
 
       // Send packets destined for other cores
       sendPacketList(net_packet_list_to_send);
-      
-      // Free the memory occupied by the flits
-      delete [] (Byte*) packet->data;
       
       // Receive the packets intended for this core
       receivePacketList(net_packet_list_to_receive);
@@ -125,23 +150,24 @@ void Network::processPacket(NetPacket* packet)
       }
       else // if (!(action & NetworkModel::RoutingAction::RECEIVE))
       {
-         if (packet->length > 0)
-            delete [] (Byte*) packet->data;
+         packet->release();
       }
    }
 }
 
 void Network::receivePacket(NetPacket* packet)
-{ 
+{
    LOG_PRINT("receivePacket(%p) enter", packet);
 
    NetworkModel* model = getNetworkModelFromPacketType(packet->type);
    // I have accepted the packet - process the received packet
    model->processReceivedPacket(*packet);
 
+   LOG_PRINT("Before Converting Cycle Count: packet->time(%llu)", packet->time);
+   
    // Convert time (cycle count) from network frequency to core frequency
-   packet->time = convertCycleCount(packet->time, \
-         getNetworkModelFromPacketType(packet->type)->getFrequency(), \
+   packet->time = convertCycleCount(packet->time,
+         getNetworkModelFromPacketType(packet->type)->getFrequency(),
          _core->getPerformanceModel()->getFrequency());
 
    LOG_PRINT("After Converting Cycle Count: packet->time(%llu)", packet->time);
@@ -151,24 +177,24 @@ void Network::receivePacket(NetPacket* packet)
 
    if (callback != NULL)
    {
-      LOG_PRINT("Executing callback on packet : type %i, from %i, to %i, core_id %i, cycle_count %llu", 
-            (SInt32)packet->type, packet->sender, packet->receiver, _core->getId(), packet->time);
+      LOG_PRINT("Executing callback on packet : type %i, from %i, to %i, core_id %i, cycle_count %llu",
+            (SInt32) packet->type, packet->sender, packet->receiver, _core->getId(), packet->time);
       assert(0 <= packet->sender && packet->sender < _numMod);
       assert(0 <= packet->type && packet->type < NUM_PACKET_TYPES);
 
       callback(_callbackObjs[packet->type], *packet);
 
-      if (packet->length > 0)
-         delete [] (Byte*) packet->data;
+      packet->release();
    }
 
    // synchronous I/O support
    else
    {
-      LOG_PRINT("Enqueuing packet : type %i, from %i, to %i, core_id %i, cycle_count %llu", 
+      // Signal the app thread that a packet is available
+      LOG_PRINT("Enqueuing packet : type %i, from %i, to %i, core_id %i, cycle_count %llu",
             (SInt32) packet->type, packet->sender, packet->receiver, _core->getId(), packet->time);
       _netQueueLock.acquire();
-      _netQueue.push_back(*packet);
+      _netQueue.push_back(packet);
       _netQueueLock.release();
       _netQueueCond.broadcast();
    }
@@ -176,22 +202,34 @@ void Network::receivePacket(NetPacket* packet)
    LOG_PRINT("receivePacket(%p) exit", packet);
 }
 
-void Network::sendPacket(const NetPacket* packet, SInt32 receiver)
+void Network::receivePacketList(const list<NetPacket*>& net_packet_list_to_receive)
+{
+   LOG_PRINT("receivePacketList() enter");
+   
+   list<NetPacket*>::const_iterator it = net_packet_list_to_receive.begin();
+   for ( ; it != net_packet_list_to_receive.end(); it ++)
+   {
+      NetPacket* packet_to_receive = *it;
+      assert(packet_to_receive->is_raw);
+      receivePacket(packet_to_receive);
+   }
+ 
+   LOG_PRINT("receivePacketList() exit");
+}
+
+void Network::sendPacket(const NetPacket* packet, SInt32 next_hop)
 {
    LOG_PRINT("sendPacket(%p) enter", packet);
- 
-   // FIXME: Only works for one process now.
-   // Make this work for more than one process later
-   // Event::processing_entity must be an identifier and not a pointer
-   // I need to use the transport layer
-   Core* receiving_core = Sim()->getCoreManager()->getCoreFromID(receiver);
-   LOG_ASSERT_ERROR(receiving_core, "CORE = NULL");
-   Network* receiving_network = receiving_core->getNetwork();
-   EventHeap* event_heap = Sim()->getEventManager()->getEventHeapFromCoreId(receiver);
+   LOG_PRINT("sendPacket(): time(%llu), type(%i), sender(%i), receiver(%i)",
+         packet->time, packet->type, packet->sender, next_hop);
 
-   Event* event = Sim()->getEventManager()->createEvent( \
-         (void*) packet, packet->time, Event::NETWORK, (void*) receiving_network, event_heap->getId());
-   event_heap->push(event);
+   // FIXME: Decide about the event_queue_type
+   UnstructuredBuffer event_args;
+   event_args << next_hop << packet;
+   EventNetwork* event = new EventNetwork(packet->time, event_args);
+   EventQueue::Type event_queue_type = ((_enabled) && (isModeled(*packet))) ?
+                                       EventQueue::ORDERED : EventQueue::UNORDERED;
+   Event::processInOrder(event, next_hop, event_queue_type);
 
    LOG_PRINT("sendPacket(%p) exit", packet);
 }
@@ -214,26 +252,6 @@ void Network::sendPacketList(const list<NetPacket*>& net_packet_list_to_send)
    LOG_PRINT("sendPacketList() exit");
 }
 
-void Network::receivePacketList(const list<NetPacket*>& net_packet_list_to_receive)
-{
-   LOG_PRINT("receivePacketList() enter");
-   
-   list<NetPacket*>::const_iterator it = net_packet_list_to_receive.begin();
-   for ( ; it != net_packet_list_to_receive.end(); it ++)
-   {
-      NetPacket* packet_to_receive = *it;
-      assert(packet_to_receive->is_raw);
-      receivePacket(packet_to_receive);
-      
-      // Delete the packet
-      // The data will be deleted by the receiver
-      LOG_PRINT("NetPacket: release(%p)", packet_to_receive);
-      delete packet_to_receive;
-   }
-   
-   LOG_PRINT("receivePacketList() exit");
-}
-
 SInt32 Network::forwardPacket(const NetPacket* packet)
 {
    LOG_ASSERT_ERROR((packet->type >= 0) && (packet->type < NUM_PACKET_TYPES),
@@ -246,8 +264,8 @@ SInt32 Network::forwardPacket(const NetPacket* packet)
 
    for (UInt32 i = 0; i < hopVec.size(); i++)
    {
-      LOG_PRINT("Send packet : type %i, from %i, to %i, next_hop %i, core_id %i, time %llu", \
-            (SInt32) packet->type, packet->sender, hopVec[i].final_dest, hopVec[i].next_dest, \
+      LOG_PRINT("Send packet : type %i, from %i, to %i, next_hop %i, core_id %i, time %llu",
+            (SInt32) packet->type, packet->sender, hopVec[i].final_dest, hopVec[i].next_dest,
             _core->getId(), hopVec[i].time);
 
       NetPacket* cloned_packet = packet->clone();
@@ -306,7 +324,6 @@ SInt32 Network::netSend(NetPacket& packet)
       return forwardPacket(&packet);
    }
 }
-
 
 // Stupid helper class to eliminate special cases for empty
 // sender/type vectors in a NetMatch
@@ -390,7 +407,7 @@ class NetRecvIterator
       UInt32 _i;
 };
 
-NetPacket Network::netRecv(const NetMatch &match)
+NetPacket* Network::netRecv(const NetMatch &match)
 {
    LOG_PRINT("Entering netRecv.");
 
@@ -426,19 +443,19 @@ NetPacket Network::netRecv(const NetMatch &match)
          // only find packets that match
          for (sender.reset(); !sender.done(); sender.next())
          {
-            if (i->sender != (SInt32)sender.get())
+            if ((*i)->sender != (SInt32)sender.get())
                continue;
 
             for (type.reset(); !type.done(); type.next())
             {
-               if (i->type != (PacketType)type.get())
+               if ((*i)->type != (PacketType)type.get())
                   continue;
 
                found = true;
 
                // find the earliest packet
                if (itr == _netQueue.end() ||
-                   itr->time > i->time)
+                   (*itr)->time > (*i)->time)
                {
                   itr = i;
                }
@@ -454,25 +471,25 @@ NetPacket Network::netRecv(const NetMatch &match)
    }
 
    assert(found == true && itr != _netQueue.end());
-   assert(0 <= itr->sender && itr->sender < _numMod);
-   assert(0 <= itr->type && itr->type < NUM_PACKET_TYPES);
-   assert((itr->receiver == _core->getId()) || (itr->receiver == NetPacket::BROADCAST));
+   assert(0 <= (*itr)->sender && (*itr)->sender < _numMod);
+   assert(0 <= (*itr)->type && (*itr)->type < NUM_PACKET_TYPES);
+   assert(((*itr)->receiver == _core->getId()) || ((*itr)->receiver == NetPacket::BROADCAST));
 
    // Copy result
-   NetPacket packet = *itr;
+   NetPacket* packet = (*itr);
    _netQueue.erase(itr);
    _netQueueLock.release();
 
-   LOG_PRINT("packet.time(%llu), start_time(%llu)", packet.time, start_time);
+   LOG_PRINT("packet.time(%llu), start_time(%llu)", packet->time, start_time);
 
-   if (packet.time > start_time)
+   if (packet->time > start_time)
    {
-      LOG_PRINT("Queueing RecvInstruction(%llu)", packet.time - start_time);
-      Instruction *i = new RecvInstruction(packet.time - start_time);
+      LOG_PRINT("Queueing RecvInstruction(%llu)", packet->time - start_time);
+      Instruction *i = new RecvInstruction(packet->time - start_time);
       _core->getPerformanceModel()->queueDynamicInstruction(i);
    }
 
-   LOG_PRINT("Exiting netRecv : type %i, from %i", (SInt32)packet.type, packet.sender);
+   LOG_PRINT("Exiting netRecv : type %i, from %i", (SInt32)packet->type, packet->sender);
 
    return packet;
 }
@@ -498,7 +515,7 @@ SInt32 Network::netBroadcast(PacketType type, const void *buf, UInt32 len)
    return netSend(NetPacket::BROADCAST, type, buf, len);
 }
 
-NetPacket Network::netRecv(SInt32 src, PacketType type)
+NetPacket* Network::netRecv(SInt32 src, PacketType type)
 {
    NetMatch match;
    match.senders.push_back(src);
@@ -506,14 +523,14 @@ NetPacket Network::netRecv(SInt32 src, PacketType type)
    return netRecv(match);
 }
 
-NetPacket Network::netRecvFrom(SInt32 src)
+NetPacket* Network::netRecvFrom(SInt32 src)
 {
    NetMatch match;
    match.senders.push_back(src);
    return netRecv(match);
 }
 
-NetPacket Network::netRecvType(PacketType type)
+NetPacket* Network::netRecvType(PacketType type)
 {
    NetMatch match;
    match.types.push_back(type);
@@ -522,6 +539,7 @@ NetPacket Network::netRecvType(PacketType type)
 
 void Network::enableModels()
 {
+   _enabled = true;
    for (int i = 0; i < NUM_STATIC_NETWORKS; i++)
    {
       _models[i]->enable();
@@ -530,6 +548,7 @@ void Network::enableModels()
 
 void Network::disableModels()
 {
+   _enabled = false;
    for (int i = 0; i < NUM_STATIC_NETWORKS; i++)
    {
       _models[i]->disable();
@@ -649,10 +668,15 @@ Byte* NetPacket::makeBuffer() const
 
 NetPacket* NetPacket::clone() const
 {
+   assert((data == NULL) == (length == 0));
+   
    // Call default copy constructor
    NetPacket* cloned_net_packet = new NetPacket(*this);
-   cloned_net_packet->data = new Byte[length];
-   memcpy((void*) cloned_net_packet->data, data, length);
+   if (length > 0)
+   {
+      cloned_net_packet->data = new Byte[length];
+      memcpy((void*) cloned_net_packet->data, data, length);
+   }
 
    LOG_PRINT("NetPacket: allocate(%p)", cloned_net_packet);
    LOG_PRINT("Data: allocate(%p)", cloned_net_packet->data);
@@ -661,9 +685,11 @@ NetPacket* NetPacket::clone() const
 
 void NetPacket::release()
 {
-   LOG_PRINT("NetPacket: release(%p)", this);
    LOG_PRINT("Data: release(%p)", data);
+   LOG_PRINT("NetPacket: release(%p)", this);
 
-   delete [] (Byte*) data;
+   assert((data == NULL) == (length == 0));
+   if (length > 0)
+      delete [] (Byte*) data;
    delete this;
 }

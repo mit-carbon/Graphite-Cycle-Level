@@ -58,7 +58,7 @@ public:
    static const SInt32 BROADCAST = 0xDEADBABE;
 };
 
-typedef list<NetPacket> NetQueue;
+typedef list<NetPacket*> NetQueue;
 
 // -- Network Matches -- //
 
@@ -82,7 +82,6 @@ class Network
       ~Network();
 
       Core *getCore() const { return _core; }
-      Transport::Node *getTransport() const { return _transport; }
 
       typedef void (*NetworkCallback)(void*, NetPacket);
 
@@ -99,15 +98,15 @@ class Network
       // -- Main interface -- //
 
       SInt32 netSend(NetPacket& packet);
-      NetPacket netRecv(const NetMatch &match);
+      NetPacket* netRecv(const NetMatch &match);
 
       // -- Wrappers -- //
 
       SInt32 netSend(SInt32 dest, PacketType type, const void *buf, UInt32 len);
       SInt32 netBroadcast(PacketType type, const void *buf, UInt32 len);
-      NetPacket netRecv(SInt32 src, PacketType type);
-      NetPacket netRecvFrom(SInt32 src);
-      NetPacket netRecvType(PacketType type);
+      NetPacket* netRecv(SInt32 src, PacketType type);
+      NetPacket* netRecvFrom(SInt32 src);
+      NetPacket* netRecvType(PacketType type);
 
       void enableModels();
       void disableModels();
@@ -116,8 +115,10 @@ class Network
       // -- Network Models -- //
       NetworkModel* getNetworkModelFromPacketType(PacketType packet_type);
 
-      // Modeling
+      // Modeling Purposes
       UInt32 getModeledLength(const NetPacket& pkt);
+      bool isModeled(const NetPacket& packet);
+      core_id_t getRequester(const NetPacket& packet);
 
    private:
       NetworkModel * _models[NUM_STATIC_NETWORKS];
@@ -126,7 +127,6 @@ class Network
       void **_callbackObjs;
 
       Core *_core;
-      Transport::Node *_transport;
 
       SInt32 _tid;
       SInt32 _numMod;
@@ -134,6 +134,8 @@ class Network
       NetQueue _netQueue;
       Lock _netQueueLock;
       ConditionVariable _netQueueCond;
+
+      bool _enabled;
 
       SInt32 forwardPacket(const NetPacket* packet);
       void sendPacket(const NetPacket* packet, SInt32 receiver);

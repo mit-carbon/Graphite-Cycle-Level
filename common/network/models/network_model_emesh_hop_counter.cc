@@ -6,7 +6,6 @@
 #include "config.h"
 #include "config.h"
 #include "core.h"
-#include "memory_manager_base.h"
 #include "clock_converter.h"
 
 UInt32 NetworkModelEMeshHopCounter::_NUM_OUTPUT_DIRECTIONS = 4;
@@ -179,7 +178,7 @@ NetworkModelEMeshHopCounter::routePacket(const NetPacket &pkt,
             // Update the Dynamic Energy - Need to update the dynamic energy for all routers to the destination
             // We dont keep track of contention here. So, assume contention = 0
             updateDynamicEnergy(pkt, _num_router_ports/2, num_hops);
-            
+ 
             latency += serialization_latency;
          }
 
@@ -224,7 +223,7 @@ NetworkModelEMeshHopCounter::processReceivedPacket(NetPacket &pkt)
 {
    ScopedLock sl(_lock);
 
-   core_id_t requester = getRequester(pkt);
+   core_id_t requester = getNetwork()->getRequester(pkt);
    if ((!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()))
       return;
 
@@ -249,22 +248,6 @@ NetworkModelEMeshHopCounter::computeProcessingTime(UInt32 pkt_length)
       return (UInt64) (num_bits/_link_width);
    else
       return (UInt64) (num_bits/_link_width + 1);
-}
-
-core_id_t
-NetworkModelEMeshHopCounter::getRequester(const NetPacket& pkt)
-{
-   core_id_t requester = INVALID_CORE_ID;
-
-   if ((pkt.type == SHARED_MEM_1) || (pkt.type == SHARED_MEM_2))
-      requester = getNetwork()->getCore()->getMemoryManager()->getShmemRequester(pkt.data);
-   else // Other Packet types
-      requester = pkt.sender;
-   
-   LOG_ASSERT_ERROR((requester >= 0) && (requester < (core_id_t) Config::getSingleton()->getTotalCores()),
-         "requester(%i)", requester);
-
-   return requester;
 }
 
 void
@@ -298,7 +281,7 @@ void
 NetworkModelEMeshHopCounter::updateDynamicEnergy(const NetPacket& pkt,
       UInt32 contention, UInt32 num_hops)
 {
-   core_id_t requester = getRequester(pkt);
+   core_id_t requester = getNetwork()->getRequester(pkt);
    if ((!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()))
       return;
 

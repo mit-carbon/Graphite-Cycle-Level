@@ -5,7 +5,7 @@
 #include "log.h"
 #include "packet_type.h"
 #include "clock_converter.h"
-#include "memory_manager_base.h"
+#include "memory_manager.h"
 #include "utils.h"
 
 FiniteBufferNetworkModel::FiniteBufferNetworkModel(Network* net, SInt32 network_id):
@@ -31,9 +31,8 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
    LOG_PRINT("sendNetPacket(%p) enter", net_packet);
    assert(net_packet->is_raw);
 
-   core_id_t requester = getRequester(*net_packet);
-   if ( (!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()) || \
-        (net_packet->sender == net_packet->receiver) )
+   core_id_t requester = getNetwork()->getRequester(*net_packet);
+   if ( (!getNetwork()->isModeled(*net_packet)) || (net_packet->sender == net_packet->receiver) )
       return;
 
    // Increment Sequence Number
@@ -66,7 +65,7 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
 }
 
 void
-FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet, \
+FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
       list<NetPacket*>& net_packet_list_to_send, list<NetPacket*>& net_packet_list_to_receive)
 {
    ScopedLock sl(_lock);
@@ -285,9 +284,7 @@ FiniteBufferNetworkModel::receiveRawPacket(NetPacket* raw_packet)
    LOG_PRINT("receiveRawPacket(%p) enter", raw_packet);
    assert(raw_packet->is_raw);
 
-   core_id_t requester = getRequester(*raw_packet);
-   if ((!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()) || \
-         (raw_packet->sender == raw_packet->receiver))
+   if ( (!getNetwork()->isModeled(*raw_packet)) || (raw_packet->sender == raw_packet->receiver) )
    {
       LOG_PRINT("receiveRawPacket(%p) exit - Local Msg", raw_packet);
       return true;
@@ -410,8 +407,7 @@ FiniteBufferNetworkModel::processReceivedPacket(NetPacket& packet)
 {
    ScopedLock sl(_lock);
    
-   core_id_t requester = getRequester(packet);
-   if ((!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()))
+   if (!getNetwork()->isModeled(packet))
       return;
 
    UInt32 packet_length = getNetwork()->getModeledLength(packet);
@@ -426,22 +422,6 @@ FiniteBufferNetworkModel::processReceivedPacket(NetPacket& packet)
    _total_bytes_received += packet_length;
    _total_packet_latency += packet_latency;
    _total_contention_delay += contention_delay;
-}
-
-core_id_t
-FiniteBufferNetworkModel::getRequester(const NetPacket& packet)
-{
-   core_id_t requester = INVALID_CORE_ID;
-
-   if ((packet.type == SHARED_MEM_1) || (packet.type == SHARED_MEM_2))
-      requester = getNetwork()->getCore()->getMemoryManager()->getShmemRequester(packet.data);
-   else // Other Packet types
-      requester = packet.sender;
-   
-   LOG_ASSERT_ERROR((requester >= 0) && (requester < (core_id_t) Config::getSingleton()->getTotalCores()),
-         "requester(%i)", requester);
-
-   return requester;
 }
 
 void

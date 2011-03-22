@@ -9,7 +9,6 @@ using namespace std;
 #include "packet_type.h"
 #include "queue_model_history_list.h"
 #include "queue_model_history_tree.h"
-#include "memory_manager_base.h"
 #include "clock_converter.h"
 
 SInt32 NetworkModelEMeshHopByHopGeneric::m_mesh_width = 0;
@@ -202,7 +201,7 @@ NetworkModelEMeshHopByHopGeneric::routePacket(const NetPacket &pkt, vector<Hop> 
 {
    ScopedLock sl(m_lock);
 
-   core_id_t requester = getRequester(pkt);
+   core_id_t requester = getNetwork()->getRequester(pkt);
 
    UInt32 pkt_length = getNetwork()->getModeledLength(pkt);
 
@@ -282,7 +281,7 @@ NetworkModelEMeshHopByHopGeneric::processReceivedPacket(NetPacket& pkt)
 {
    ScopedLock sl(m_lock);
    
-   core_id_t requester = getRequester(pkt);
+   core_id_t requester = getNetwork()->getRequester(pkt);
    if ((!m_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()))
       return;
 
@@ -463,22 +462,6 @@ NetworkModelEMeshHopByHopGeneric::getNextDest(SInt32 final_dest, OutputDirection
       direction = SELF;
       return m_core_id;
    }
-}
-
-core_id_t
-NetworkModelEMeshHopByHopGeneric::getRequester(const NetPacket& pkt)
-{
-   core_id_t requester = INVALID_CORE_ID;
-
-   if ((pkt.type == SHARED_MEM_1) || (pkt.type == SHARED_MEM_2))
-      requester = getNetwork()->getCore()->getMemoryManager()->getShmemRequester(pkt.data);
-   else // Other Packet types
-      requester = pkt.sender;
-   
-   LOG_ASSERT_ERROR((requester >= 0) && (requester < (core_id_t) Config::getSingleton()->getTotalCores()),
-         "requester(%i)", requester);
-
-   return requester;
 }
 
 void
@@ -753,7 +736,7 @@ void
 NetworkModelEMeshHopByHopGeneric::updateDynamicEnergy(const NetPacket& pkt,
       bool is_buffered, UInt32 contention)
 {
-   core_id_t requester = getRequester(pkt);
+   core_id_t requester = getNetwork()->getRequester(pkt);
    if ((!m_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()))
       return;
 

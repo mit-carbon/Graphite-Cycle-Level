@@ -83,7 +83,6 @@ class FiniteBufferNetworkModel : public NetworkModel
       void addNetPacketEndpoints(NetPacket* net_packet, \
             Router::Id& sender_router_id, Router::Id& receiver_router_id);
       SInt32 computeNumFlits(SInt32 packet_length);
-      core_id_t getRequester(const NetPacket& packet);
       UInt64 computePacketId(core_id_t sender, UInt64 sequence_num);
 
       // Initialization

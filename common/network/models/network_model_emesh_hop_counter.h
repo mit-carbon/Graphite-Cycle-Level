@@ -66,7 +66,6 @@ private:
    SInt32 computeDistance(SInt32 x1, SInt32 y1, SInt32 x2, SInt32 y2);
 
    UInt64 computeProcessingTime(UInt32 pkt_length);
-   core_id_t getRequester(const NetPacket& pkt);
 
    void initializePerformanceCounters();
    void initializeActivityCounters();

@@ -77,6 +77,7 @@ class NetworkModel
       virtual void disable() = 0;
       virtual void reset() = 0;
 
+      SInt32 getNetworkId() { return _network_id; }
       bool isFiniteBuffer() { return _is_finite_buffer; }
       static NetworkModel *createModel(Network* network, SInt32 network_id, UInt32 model_type);
       static UInt32 parseNetworkType(std::string str);

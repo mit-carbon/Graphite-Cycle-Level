@@ -73,7 +73,6 @@ class NetworkModelEMeshHopByHopGeneric : public NetworkModel
             core_id_t requester);
       UInt64 computeProcessingTime(UInt32 pkt_length);
       core_id_t getNextDest(core_id_t final_dest, OutputDirection& direction);
-      core_id_t getRequester(const NetPacket& pkt);
 
       // Injection & Ejection Port Queue Models
       UInt64 computeInjectionPortQueueDelay(core_id_t pkt_receiver, UInt64 pkt_time, UInt32 pkt_length);

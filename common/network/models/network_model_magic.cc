@@ -1,6 +1,5 @@
 #include "network.h"
 #include "network_model_magic.h"
-#include "memory_manager_base.h"
 #include "log.h"
 
 NetworkModelMagic::NetworkModelMagic(Network *net, SInt32 network_id) : 
@@ -64,13 +63,7 @@ NetworkModelMagic::processReceivedPacket(NetPacket &pkt)
 {
    ScopedLock sl(_lock);
 
-   core_id_t requester = INVALID_CORE_ID;
-
-   if ((pkt.type == SHARED_MEM_1) || (pkt.type == SHARED_MEM_2))
-      requester = getNetwork()->getCore()->getMemoryManager()->getShmemRequester(pkt.data);
-   else // Other Packet types
-      requester = pkt.sender;
-   
+   core_id_t requester = getNetwork()->getRequester(pkt);
    LOG_ASSERT_ERROR((requester >= 0) && (requester < (core_id_t) Config::getSingleton()->getTotalCores()),
          "requester(%i)", requester);
 
