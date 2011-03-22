@@ -28,14 +28,14 @@ ShmemPerfModel::initializePerformanceCounters()
 ShmemPerfModel::Thread_t 
 ShmemPerfModel::getThreadNum()
 {
-   if (Sim()->getCoreManager()->amiUserThread())
+   if (Sim()->getCoreManager()->amiAppThread())
    {
       assert(!Sim()->getCoreManager()->amiSimThread());
-      return _USER_THREAD;
+      return _APP_THREAD;
    }
    else if (Sim()->getCoreManager()->amiSimThread())
    {
-      assert(!Sim()->getCoreManager()->amiUserThread());
+      assert(!Sim()->getCoreManager()->amiAppThread());
       return _SIM_THREAD;
    }
    else
@@ -87,6 +87,8 @@ ShmemPerfModel::incrCycleCount(UInt64 count)
          t_cycle_count, i_cycle_count);
 
    m_cycle_count[getThreadNum()] = t_cycle_count;
+   LOG_PRINT("incrCycleCount(%llu): initial(%llu), final(%llu)",
+         count, i_cycle_count, t_cycle_count);
 }
 
 void

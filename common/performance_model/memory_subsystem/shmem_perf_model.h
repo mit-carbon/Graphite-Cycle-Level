@@ -13,7 +13,7 @@ class ShmemPerfModel
    public:
       enum Thread_t
       {
-         _USER_THREAD = 0,
+         _APP_THREAD = 0,
          _SIM_THREAD,
          NUM_CORE_THREADS
       };
