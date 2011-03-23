@@ -28,7 +28,6 @@ BinarySemaphore::wait()
       syscall(SYS_futex, (void*) &_futx, FUTEX_WAIT, 0, NULL, NULL, 0);
 
       _lock.acquire();
-      _numWaiting --;
    }
 
    _flag = false;
@@ -43,6 +42,7 @@ BinarySemaphore::signal()
    _flag = true;
    if (_numWaiting > 0)
    {
+      _numWaiting --;
       _futx = 1;
       syscall(SYS_futex, (void*) &_futx, FUTEX_WAKE, 1, NULL, NULL, 0);
    }
