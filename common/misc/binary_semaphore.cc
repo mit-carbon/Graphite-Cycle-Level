@@ -1,4 +1,5 @@
 #include "binary_semaphore.h"
+#include "log.h"
 
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -18,10 +19,12 @@ void
 BinarySemaphore::wait()
 {
    _lock.acquire();
+   LOG_PRINT("Waiting on BinarySemaphore(%p)", this);
    while (!_flag)
    {
       _numWaiting ++;
       _futx = 0;
+      LOG_PRINT("Going to Sleep on BinarySemaphore(%p)", this);
 
       _lock.release();
 
@@ -39,9 +42,11 @@ BinarySemaphore::signal()
 {
    _lock.acquire();
 
+   LOG_PRINT("Signaling on Binary Semaphore(%p)", this);
    _flag = true;
    if (_numWaiting > 0)
    {
+      LOG_PRINT("Waking up a waiter on Binary Semaphore(%p)", this);
       _numWaiting --;
       _futx = 1;
       syscall(SYS_futex, (void*) &_futx, FUTEX_WAKE, 1, NULL, NULL, 0);
