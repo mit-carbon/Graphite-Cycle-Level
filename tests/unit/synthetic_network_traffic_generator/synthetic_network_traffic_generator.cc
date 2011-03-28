@@ -31,6 +31,7 @@ UInt32 EVENT_PUSH_FIRST_EVENTS = 101;
 
 int main(int argc, char* argv[])
 {
+   fprintf(stdout, "Starting Synthetic Network test\n");
    CarbonStartSim(argc, argv);
    LOG_PRINT("Finished CarbonStartSim()");
 
@@ -96,6 +97,8 @@ int main(int argc, char* argv[])
    // Delete Core Specific Variables
    delete [] _core_sp_vars;
 
+   fprintf(stdout, "Finished Synthetic Network test successfully\n");
+   
    Simulator::disablePerformanceModelsInCurrentProcess();
    LOG_PRINT("Simulator::disablePerformanceModelsInCurrentProcess() end");
 
