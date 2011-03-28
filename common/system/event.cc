@@ -8,6 +8,8 @@
 #include "performance_model.h"
 #include "cycle_accurate/performance_model.h"
 
+std::map<UInt32,Event::Handler> Event::_handler_map;
+
 void
 EventNetwork::process()
 {
@@ -124,4 +126,24 @@ Event::processInOrder(Event* event, core_id_t recv_core_id, EventQueue::Type eve
       event->process();
       delete event;
    }
+}
+
+void
+Event::process()
+{
+   _handler_map[_type](this);
+}
+
+void
+Event::registerHandler(UInt32 type, Handler handler)
+{
+   LOG_PRINT("registerHandler(%u, %p)", type, handler);
+   _handler_map[type] = handler;
+}
+
+void
+Event::unregisterHandler(UInt32 type)
+{
+   LOG_PRINT("unregisterHandler(%u)", type);
+   _handler_map.erase(type);
 }

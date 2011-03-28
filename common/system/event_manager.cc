@@ -1,3 +1,5 @@
+#define __STDC_LIMIT_MACROS
+#include <climits>
 #include "simulator.h"
 #include "sim_thread_manager.h"
 #include "event_manager.h"
@@ -14,11 +16,13 @@
 // 2) One _app_meta_event_heap & One _sim_meta_event_heap per process
 // 3) One _global_meta_event_heap for the entire simulation
 EventManager::EventManager()
-{  
+{
+   checkCycleAccurateMode();
+
    _global_meta_event_heap = new MetaEventHeap(NUM_THREAD_TYPES);
-   _app_meta_event_heap = new MetaEventHeap(Config::getSingleton()->getApplicationCores(), \
+   _app_meta_event_heap = new MetaEventHeap(Config::getSingleton()->getApplicationCores(),
          _global_meta_event_heap, APP_THREAD);
-   _sim_meta_event_heap = new MetaEventHeap(Config::getSingleton()->getTotalSimThreads(), \
+   _sim_meta_event_heap = new MetaEventHeap(Config::getSingleton()->getTotalSimThreads(),
          _global_meta_event_heap, SIM_THREAD);
 
    // sim thread event queue managers
@@ -44,6 +48,8 @@ EventManager::EventManager()
 
 EventManager::~EventManager()
 {
+   checkCycleAccurateMode();
+   
    for (UInt32 i = 0; i < Config::getSingleton()->getTotalSimThreads(); i++)
    {
       delete _event_queue_manager_list[i]->getEventQueue(EventQueue::UNORDERED);
@@ -58,6 +64,8 @@ EventManager::~EventManager()
 EventQueueManager*
 EventManager::getEventQueueManager(SInt32 sim_thread_id)
 {
+   checkCycleAccurateMode();
+   
    assert(sim_thread_id < (SInt32) Config::getSingleton()->getTotalSimThreads());
    return _event_queue_manager_list[sim_thread_id];
 }
@@ -65,18 +73,24 @@ EventManager::getEventQueueManager(SInt32 sim_thread_id)
 bool
 EventManager::isReady(UInt64 event_time)
 {
+   checkCycleAccurateMode();
+   
    UInt64 global_time = _global_meta_event_heap->getFirstEventTime();
    LOG_ASSERT_ERROR(event_time >= global_time,
          "event time(%llu), global time(%llu)", 
          event_time, global_time);
 
    // TODO: Make this a range later
-   return (event_time == _global_meta_event_heap->getFirstEventTime());
+   return ( (event_time == _global_meta_event_heap->getFirstEventTime()) && (event_time != UINT64_MAX) );
 }
 
 void
 EventManager::wakeUpWaiters()
 {
+   checkCycleAccurateMode();
+   
+   LOG_PRINT("wakeUpWaiters()");
+   
    // Wakes up only the sim threads for now
    // Once instruction and private cache modeling is made cycle-accurate,
    // wake up app threads also. Now, app threads run uncontrolled
@@ -87,9 +101,22 @@ EventManager::wakeUpWaiters()
 void
 EventManager::processEventInOrder(Event* event, core_id_t core_id, EventQueue::Type event_queue_type)
 {
+   checkCycleAccurateMode();
+   
+   LOG_PRINT("processEventInOrder(%p): Processing CoreId(%i), EventQueueType(%s)",
+         event, core_id, EventQueue::getName(event_queue_type).c_str());
+   
    SInt32 sim_thread_id = Sim()->getSimThreadManager()->getSimThreadIDFromCoreID(core_id);
    // EventQueue is defined by (sim_thread_id, event_queue_type)
    EventQueueManager* event_queue_manager = getEventQueueManager(sim_thread_id);
    EventQueue* event_queue = event_queue_manager->getEventQueue(event_queue_type);
    event_queue->push(event);
+}
+
+void
+EventManager::checkCycleAccurateMode()
+{
+   LOG_ASSERT_ERROR(Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE,
+         "EventManager() functions only called in cycle_accurate mode, curr mode(%u)",
+         Config::getSingleton()->getSimulationMode());
 }

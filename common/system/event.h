@@ -1,14 +1,18 @@
 #pragma once
 
 #include <stdio.h>
+#include <map>
 
 #include "fixed_types.h"
 #include "packetize.h"
 #include "event_queue.h"
+#include "log.h"
 
 class Event
 {
 public:
+   typedef void(*Handler)(Event*);
+
    // Right now only network, but later add core, memory_system, etc
    enum Type
    {
@@ -26,27 +30,35 @@ public:
 
    Event(Type type, UInt64 time, UnstructuredBuffer& event_args)
       : _type(type), _time(time), _event_args(event_args) {}
-   ~Event() {}
+   virtual ~Event() {}
 
    static void processInOrder(Event* event, core_id_t recv_core_id, EventQueue::Type event_queue_type);
+   static void registerHandler(UInt32 type, Handler handler);
+   static void unregisterHandler(UInt32 type);
 
-   virtual void process() = 0;
+   virtual void process();
 
    Type getType() { return _type; }
    UInt64 getTime() { return _time; }
+   UnstructuredBuffer& getArgs() { return _event_args; }
 
 protected:
    Type _type;
    UInt64 _time;
    UnstructuredBuffer _event_args;
+
+private:
+   static std::map<UInt32,Handler> _handler_map;
 };
 
 class EventNetwork : public Event
 {
 public:
    EventNetwork(UInt64 time, UnstructuredBuffer& event_args)
-      : Event(NETWORK, time, event_args) {}
-   ~EventNetwork() {}
+      : Event(NETWORK, time, event_args) 
+   { LOG_PRINT("Created EventNetwork(%p)", this); }
+   ~EventNetwork()
+   { LOG_PRINT("Destroyed EventNetwork(%p)", this); }
 
    void process();
 };

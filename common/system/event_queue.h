@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include "fixed_types.h"
 
 class EventQueueManager;
@@ -21,6 +22,9 @@ class EventQueue
 
       virtual void processEvents() = 0;
       virtual void push(Event* event) = 0;
+
+      static std::string getName(Type type)
+      { return (type == ORDERED) ? "ORDERED" : "UNORDERED"; }
 
    protected:
       EventQueueManager* getEventQueueManager()

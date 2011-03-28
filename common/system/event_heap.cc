@@ -57,6 +57,7 @@ EventHeap::push(Event* event)
 void
 EventHeap::processEvents()
 {
+   LOG_PRINT("EventHeap::processEvents() enter");
    LOG_PRINT("First Event Time on Entry(%llu) - (%p)", _first_event_time, &_first_event_time);
    while (Sim()->getEventManager()->isReady(_first_event_time))
    {
@@ -69,6 +70,7 @@ EventHeap::processEvents()
 
       _lock.release();
 
+      LOG_PRINT("Event: Type(%i), Time(%llu) to be processed", event->getType(), event->getTime());
       // Network, Instruction, Memory Modeling 
       event->process();
       delete event;
@@ -97,4 +99,5 @@ EventHeap::processEvents()
       Sim()->getEventManager()->wakeUpWaiters();
    }
    LOG_PRINT("First Event Time on Exit(%llu) - (%p)", _first_event_time, &_first_event_time);
+   LOG_PRINT("EventHeap::processEvents() exit");
 }
