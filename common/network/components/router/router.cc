@@ -133,7 +133,8 @@ Router::normalizeTime(NetworkMsg* network_msg, bool entry)
             if (entry)
             {
                // Compute normalized time
-               flit->_normalized_time = _time_normalizer->normalize(flit->_net_packet->time, flit->_requester);
+               flit->_normalized_time = flit->_net_packet->time; 
+               // _time_normalizer->normalize(flit->_net_packet->time, flit->_requester);
                // Set the entry time to account for the time spent in the router
                flit->_normalized_time_at_entry = flit->_normalized_time;
                LOG_PRINT("Normalize(DATA, %llu) -> %llu", flit->_net_packet->time, flit->_normalized_time);
@@ -155,15 +156,15 @@ Router::normalizeTime(NetworkMsg* network_msg, bool entry)
             if (entry)
             {
                // Re-normalize according to average rate of progress
-               UInt64 renormalized_time = _time_normalizer->renormalize(buffer_msg->_normalized_time,
-                     buffer_msg->_average_rate_of_progress);
+               UInt64 renormalized_time = buffer_msg->_normalized_time;
+               // _time_normalizer->renormalize(buffer_msg->_normalized_time, buffer_msg->_average_rate_of_progress);
                LOG_PRINT("Renormalize(BUFFER, %llu) -> %llu", buffer_msg->_normalized_time, renormalized_time);
                buffer_msg->_normalized_time = renormalized_time;
             }
             else
             {
                // Set the average rate of progress
-               buffer_msg->_average_rate_of_progress = _time_normalizer->getAverageRateOfProgress();
+               // buffer_msg->_average_rate_of_progress = _time_normalizer->getAverageRateOfProgress();
             }
          }
 

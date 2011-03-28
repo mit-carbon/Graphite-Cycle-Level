@@ -114,7 +114,7 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
 
          LOG_PRINT("Flit [Packet Id(0x%llx), Type(%s)]: Time at Entry(%llu)", \
                computePacketId(flit->_sender, flit->_net_packet->sequence_num), \
-               (flit->getTypeString()).c_str(), flit->_normalized_time);
+               (flit->getTypeString()).c_str(), flit->_net_packet->time);
       }
       else // (network_msg->_type == NetworkMsg::BUFFER_MANAGEMENT)
       {
@@ -245,7 +245,7 @@ FiniteBufferNetworkModel::constructNetPackets(Router* router, \
                BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
 
                // Create new net_packet struct
-               NetPacket* new_net_packet = new NetPacket(0 /* time */, \
+               NetPacket* new_net_packet = new NetPacket(buffer_msg->_normalized_time /* time */, \
                      _flow_control_packet_type, \
                      buffer_msg->size(), (void*) (buffer_msg), \
                      false /* is_raw*/);
