@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
 #include <cmath>
 #include "simulator.h"
@@ -11,52 +10,7 @@
 #include "clock_skew_minimization_object.h"
 #include "carbon_user.h"
 #include "utils.h"
-
-class RandNum
-{
-   public:
-      RandNum(double start, double end):
-         _start(start), _end(end) 
-      { 
-         srand48_r(time(NULL), &rand_buffer); 
-      }
-      ~RandNum() {}
-      double next()
-      {
-         double result;
-         drand48_r(&rand_buffer, &result);
-         return (result * (_end - _start) + _start);
-      }
-
-   private:
-      struct drand48_data rand_buffer;
-      double _start;
-      double _end;
-};
-
-enum NetworkTrafficType
-{
-   UNIFORM_RANDOM = 0,
-   BIT_COMPLEMENT,
-   SHUFFLE,
-   TRANSPOSE,
-   TORNADO,
-   NEAREST_NEIGHBOR,
-   NUM_NETWORK_TRAFFIC_TYPES
-};
-
-void* sendNetworkTraffic(void*);
-void uniformRandomTrafficGenerator(int core_id, vector<int>& send_vec, vector<int>& receive_vec);
-void bitComplementTrafficGenerator(int core_id, vector<int>& send_vec, vector<int>& receive_vec);
-void shuffleTrafficGenerator(int core_id, vector<int>& send_vec, vector<int>& receive_vec);
-void transposeTrafficGenerator(int core_id, vector<int>& send_vec, vector<int>& receive_vec);
-void tornadoTrafficGenerator(int core_id, vector<int>& send_vec, vector<int>& receive_vec);
-void nearestNeighborTrafficGenerator(int core_id, vector<int>& send_vec, vector<int>& receive_vec);
-
-bool canSendPacket(double offered_load, RandNum& rand_num);
-void synchronize(UInt64 time, Core* core);
-void printHelpMessage();
-NetworkTrafficType parseTrafficPattern(string traffic_pattern);
+#include "synthetic_network_traffic_generator.h"
 
 NetworkTrafficType _traffic_pattern_type = UNIFORM_RANDOM;     // Network Traffic Pattern Type
 double _offered_load = 0.1;                                    // Number of packets injected per core per cycle
@@ -67,12 +21,20 @@ PacketType _packet_type = USER_2;                              // Type of each p
 carbon_barrier_t _global_barrier;
 SInt32 _num_cores;
 
+CoreSpVars* _core_sp_vars;
+UInt64 _quantum = 10000;
+
+UInt32 EVENT_NET_SEND = 100;
+UInt32 EVENT_PUSH_FIRST_EVENTS = 101;
+
 int main(int argc, char* argv[])
 {
    CarbonStartSim(argc, argv);
+   LOG_PRINT("Finished CarbonStartSim()");
 
    Simulator::enablePerformanceModelsInCurrentProcess();
-
+   LOG_PRINT("Finished Enabling Peformance Models");
+   
    // Read Command Line Arguments
    for (SInt32 i = 1; i < argc-1; i += 2)
    {
@@ -98,9 +60,19 @@ int main(int argc, char* argv[])
          exit(-1);
       }
    }
+   LOG_PRINT("Finished parsing command line arguments");
 
    _num_cores = (SInt32) Config::getSingleton()->getApplicationCores();
+   LOG_PRINT("Num Application Cores(%i)", _num_cores);
+
+   // Initialize Core Specific Variables
+   _core_sp_vars = new CoreSpVars[_num_cores];
+   // Register (NetSend, PushFirstEvents) Events
+   Event::registerHandler(EVENT_NET_SEND, processNetSendEvent);
+   Event::registerHandler(EVENT_PUSH_FIRST_EVENTS, pushFirstEvents);
+   
    CarbonBarrierInit(&_global_barrier, _num_cores);
+   LOG_PRINT("Initialized global barrier");
 
    carbon_thread_t tid_list[_num_cores-1];
    for (SInt32 i = 0; i < _num_cores-1; i++)
@@ -114,11 +86,19 @@ int main(int argc, char* argv[])
       CarbonJoinThread(tid_list[i]);
    }
    
-   printf("Joined all threads\n");
+   LOG_PRINT("Joined all threads");
+
+   // Unregister NetSend event
+   Event::unregisterHandler(EVENT_PUSH_FIRST_EVENTS);
+   Event::unregisterHandler(EVENT_NET_SEND);
+   // Delete Core Specific Variables
+   delete [] _core_sp_vars;
 
    Simulator::disablePerformanceModelsInCurrentProcess();
+   LOG_PRINT("Simulator::disablePerformanceModelsInCurrentProcess() end");
 
    CarbonStopSim();
+   LOG_PRINT("CarbonStopSim() end");
  
    return 0;
 }
@@ -156,11 +136,9 @@ NetworkTrafficType parseTrafficPattern(string traffic_pattern)
 
 void* sendNetworkTraffic(void*)
 {
-   // Wait for everyone to be spawned
-   CarbonBarrierWait(&_global_barrier);
-
    Core* core = Sim()->getCoreManager()->getCurrentCore();
-   
+   LOG_PRINT("core(%p)", core);
+
    vector<int> send_vec;
    vector<int> receive_vec;
    
@@ -190,48 +168,143 @@ void* sendNetworkTraffic(void*)
          break;
    }
 
-   Byte data[_packet_size];
-   UInt64 outstanding_window_size = 1000;
    RandNum rand_num(0,1);
 
-   for (UInt64 time = 0, total_packets_sent = 0, total_packets_received = 0; 
-         (total_packets_sent < _total_packets) || (total_packets_received < _total_packets);
-         time ++)
+   if (Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE)
    {
-      if ((total_packets_sent < _total_packets) && (canSendPacket(_offered_load, rand_num)))
+      Semaphore* send_semaphore = new Semaphore();
+      // Populate the core specific structure
+      _core_sp_vars[core->getId()].init(&rand_num, send_vec, send_semaphore);
+   }
+   
+   LOG_PRINT("Waiting for Barrier(%p)", &_global_barrier);
+   fprintf(stderr, "Waiting for Barrier(%p)\n", &_global_barrier);
+   // Wait for everyone to be spawned
+   CarbonBarrierWait(&_global_barrier);
+   LOG_PRINT("Barrier(%p) Released", &_global_barrier);
+   fprintf(stderr, "Barrier(%p) Released\n", &_global_barrier);
+   
+   if (Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE)
+   {
+      // Push the first Events onto the queue 
+      if (core->getId() == 0)
       {
-         // Send a packet to its destination core
-         SInt32 receiver = send_vec[total_packets_sent % send_vec.size()];
-         NetPacket net_packet(time, _packet_type, core->getId(), receiver, _packet_size, data);
-         core->getNetwork()->netSend(net_packet);
-         total_packets_sent ++;
+         UnstructuredBuffer event_args;
+         Event* push_first_events = new Event((Event::Type) EVENT_PUSH_FIRST_EVENTS, 0 /* time */, event_args);
+         Event::processInOrder(push_first_events, 0 /* core_id */, EventQueue::ORDERED);
       }
-
-      if (total_packets_sent < _total_packets)
+      
+      for (UInt64 total_packets_received = 0; total_packets_received < _total_packets; 
+            total_packets_received ++)
       {
-         // Synchronize after every few cycles
-         synchronize(time, core);
-      }
-
-      if ( (total_packets_received < _total_packets) &&
-           ( (total_packets_sent == _total_packets) || 
-             (total_packets_sent >= (total_packets_received + outstanding_window_size)) ) ) 
-      {
-         // Check if a packet has arrived for this core (Should be non-blocking)
          NetPacket* recv_net_packet = core->getNetwork()->netRecvType(_packet_type);
          recv_net_packet->release();
-         total_packets_received ++;
+      }
+      
+      _core_sp_vars[core->getId()]._send_semaphore->wait();
+      delete _core_sp_vars[core->getId()]._send_semaphore;
+   }
+
+   else // (mode == FULL) || (mode == LITE)
+   {
+      Byte data[_packet_size];
+      UInt64 outstanding_window_size = 1000;
+
+      for (UInt64 time = 0, total_packets_sent = 0, total_packets_received = 0; 
+            (total_packets_sent < _total_packets) || (total_packets_received < _total_packets);
+            time ++)
+      {
+         if ((total_packets_sent < _total_packets) && (canSendPacket(_offered_load, &rand_num)))
+         {
+            // Send a packet to its destination core
+            SInt32 receiver = send_vec[total_packets_sent % send_vec.size()];
+            NetPacket net_packet(time, _packet_type, core->getId(), receiver, _packet_size, data);
+            core->getNetwork()->netSend(net_packet);
+            total_packets_sent ++;
+         }
+
+         if (total_packets_sent < _total_packets)
+         {
+            // Synchronize after every few cycles
+            synchronize(time, core);
+         }
+
+         if ( (total_packets_received < _total_packets) &&
+              ( (total_packets_sent == _total_packets) || 
+                (total_packets_sent >= (total_packets_received + outstanding_window_size)) ) ) 
+         {
+            // Check if a packet has arrived for this core (Should be non-blocking)
+            NetPacket* recv_net_packet = core->getNetwork()->netRecvType(_packet_type);
+            recv_net_packet->release();
+            total_packets_received ++;
+         }
       }
    }
 
+   fprintf(stderr, "sendNetworkTraffic() finished\n");
    // Wait for everyone to finish
    CarbonBarrierWait(&_global_barrier);
    return NULL;
 }
 
-bool canSendPacket(double offered_load, RandNum& rand_num)
+void processNetSendEvent(Event* event)
 {
-   return (rand_num.next() < offered_load); 
+   assert(event->getType() == (Event::Type) EVENT_NET_SEND);
+   
+   Core* core;
+   UnstructuredBuffer& event_args = event->getArgs();
+   event_args >> core;
+
+   RandNum* rand_num = _core_sp_vars[core->getId()]._rand_num;
+   UInt64& total_packets_sent = _core_sp_vars[core->getId()]._total_packets_sent;
+   vector<int>& send_vec = _core_sp_vars[core->getId()]._send_vec;
+   
+   for (UInt64 time = event->getTime(); time < (event->getTime() + _quantum); time++)
+   {
+      if ((total_packets_sent < _total_packets) && (canSendPacket(_offered_load, rand_num)))
+      {
+         // Send a packet to its destination core
+         Byte data[_packet_size];
+         SInt32 receiver = send_vec[total_packets_sent % send_vec.size()];
+         NetPacket net_packet(time, _packet_type, core->getId(), receiver, _packet_size, data);
+         core->getNetwork()->netSend(net_packet);
+         total_packets_sent ++;
+      }
+   }
+
+   if (total_packets_sent < _total_packets)
+   {
+      pushEvent(event->getTime() + _quantum, core);
+   }
+   else
+   {
+      Semaphore* send_semaphore = _core_sp_vars[core->getId()]._send_semaphore;
+      send_semaphore->signal();
+   }
+}
+
+void pushEvent(UInt64 time, Core* core)
+{
+   UnstructuredBuffer event_args;
+   event_args << core;
+   Event* event = new Event((Event::Type) EVENT_NET_SEND, time, event_args);
+   Event::processInOrder(event, core->getId(), EventQueue::ORDERED);
+}
+
+void pushFirstEvents(Event* event)
+{
+   fprintf(stderr, "pushFirstEvents\n");
+   for (SInt32 i = 0; i < _num_cores; i++)
+   {
+      Core* ith_core = Sim()->getCoreManager()->getCoreFromID(i);
+      // Push the first events
+      pushEvent(0 /* time */, ith_core);
+   }
+}
+
+bool canSendPacket(double offered_load, RandNum* rand_num)
+{
+   return (rand_num->next() < offered_load); 
 }
 
 void synchronize(UInt64 packet_injection_time, Core* core)
