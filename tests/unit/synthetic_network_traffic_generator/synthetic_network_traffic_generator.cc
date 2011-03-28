@@ -12,6 +12,8 @@
 #include "utils.h"
 #include "synthetic_network_traffic_generator.h"
 
+// #define DEBUG 1
+
 NetworkTrafficType _traffic_pattern_type = UNIFORM_RANDOM;     // Network Traffic Pattern Type
 double _offered_load = 0.1;                                    // Number of packets injected per core per cycle
 SInt32 _packet_size = 8;                                       // Size of each Packet in Bytes
@@ -178,12 +180,16 @@ void* sendNetworkTraffic(void*)
    }
    
    LOG_PRINT("Waiting for Barrier(%p)", &_global_barrier);
+#ifdef DEBUG
    fprintf(stderr, "Waiting for Barrier(%p)\n", &_global_barrier);
+#endif
    // Wait for everyone to be spawned
    CarbonBarrierWait(&_global_barrier);
    LOG_PRINT("Barrier(%p) Released", &_global_barrier);
+#ifdef DEBUG
    fprintf(stderr, "Barrier(%p) Released\n", &_global_barrier);
-   
+#endif
+
    if (Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE)
    {
       // Push the first Events onto the queue 
@@ -241,7 +247,10 @@ void* sendNetworkTraffic(void*)
       }
    }
 
+#ifdef DEBUG
    fprintf(stderr, "sendNetworkTraffic() finished\n");
+#endif
+
    // Wait for everyone to finish
    CarbonBarrierWait(&_global_barrier);
    return NULL;
@@ -293,7 +302,9 @@ void pushEvent(UInt64 time, Core* core)
 
 void pushFirstEvents(Event* event)
 {
+#ifdef DEBUG
    fprintf(stderr, "pushFirstEvents\n");
+#endif
    for (SInt32 i = 0; i < _num_cores; i++)
    {
       Core* ith_core = Sim()->getCoreManager()->getCoreFromID(i);
