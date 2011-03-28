@@ -15,6 +15,7 @@ void CarbonDequeueThreadSpawnReq (ThreadSpawnRequest *req);
 
 int CarbonPthreadCreate(pthread_t *tid, int *attr, thread_func_t func, void *arg);
 int CarbonPthreadJoin(pthread_t tid, void **pparg);
+bool CarbonEmulatePthreadCreate(pthread_t* thread);
 
 void CarbonPthreadAttrInitOtherAttr(pthread_attr_t *attr);
 
