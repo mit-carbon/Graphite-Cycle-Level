@@ -220,14 +220,17 @@ void Network::receivePacketList(const list<NetPacket*>& net_packet_list_to_recei
 void Network::sendPacket(const NetPacket* packet, SInt32 next_hop)
 {
    LOG_PRINT("sendPacket(%p) enter", packet);
-   LOG_PRINT("sendPacket(): time(%llu), type(%i), sender(%i), receiver(%i)",
-         packet->time, packet->type, packet->sender, next_hop);
+   LOG_PRINT("sendPacket(): time(%llu), type(%i), sender(%i), receiver(%i), network_name(%s)",
+         packet->time, packet->type, packet->sender, next_hop,
+         getNetworkModelFromPacketType(packet->type)->getNetworkName().c_str());
 
    // FIXME: Decide about the event_queue_type
    UnstructuredBuffer event_args;
    event_args << next_hop << packet;
    EventNetwork* event = new EventNetwork(packet->time, event_args);
-   EventQueue::Type event_queue_type = ((_enabled) && (isModeled(*packet))) ?
+   // EventQueue::Type event_queue_type = ((_enabled) && (isModeled(*packet))) ?
+   //                                     EventQueue::ORDERED : EventQueue::UNORDERED;
+   EventQueue::Type event_queue_type = (g_type_to_static_network_map[packet->type] == STATIC_NETWORK_USER_2) ?
                                        EventQueue::ORDERED : EventQueue::UNORDERED;
    Event::processInOrder(event, next_hop, event_queue_type);
 
@@ -244,9 +247,6 @@ void Network::sendPacketList(const list<NetPacket*>& net_packet_list_to_send)
    {
       NetPacket* packet_to_send = *it;
       sendPacket(packet_to_send, packet_to_send->receiver);
- 
-      // Delete the packet
-      packet_to_send->release();
    }
    
    LOG_PRINT("sendPacketList() exit");
@@ -301,7 +301,9 @@ SInt32 Network::netSend(NetPacket& packet)
    // Note the start time
    packet.start_time = packet.time;
 
-   NetworkModel* model = getNetworkModelFromPacketType(packet.type);
+   NetPacket* cloned_packet = packet.clone();
+
+   NetworkModel* model = getNetworkModelFromPacketType(cloned_packet->type);
    if (model->isFiniteBuffer())
    {
       // Call FiniteBufferNetworkModel functions
@@ -309,19 +311,20 @@ SInt32 Network::netSend(NetPacket& packet)
       
       // Divide Packet into flits
       list<NetPacket*> net_packet_list_to_send;
-      finite_buffer_model->sendNetPacket(&packet, net_packet_list_to_send);
+      finite_buffer_model->sendNetPacket(cloned_packet, net_packet_list_to_send);
       
+      // FIXME: Verify this works for broadcasted packets
       // Send Raw Packet on the network
-      sendPacket(&packet, packet.receiver);
+      sendPacket(cloned_packet, cloned_packet->receiver);
       // Send Flits on the network (also free the memory occupied by flits)
       sendPacketList(net_packet_list_to_send);
 
-      return packet.length;
+      return cloned_packet->length;
    }
    else // (!model->isFiniteBuffer())
    {
-      // Call forwardPacket(&packet)
-      return forwardPacket(&packet);
+      // Call forwardPacket(cloned_packet)
+      return forwardPacket(cloned_packet);
    }
 }
 

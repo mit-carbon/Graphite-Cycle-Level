@@ -26,7 +26,9 @@ Router::Router(Id id, \
 }
 
 Router::~Router()
-{}
+{
+   delete _time_normalizer;
+}
 
 void
 Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_msg_list_to_send)

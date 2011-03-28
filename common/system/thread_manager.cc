@@ -30,7 +30,7 @@ ThreadManager::ThreadManager(CoreManager *core_manager)
       m_thread_state.resize(config->getTotalCores());
       m_thread_state[0].status = Core::RUNNING;
 
-      if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+      if (Config::getSingleton()->getSimulationMode() == Config::FULL)
       {
          // Reserve core-id's 1 to (num_processes) for thread-spawners
          UInt32 first_thread_spawner_id = Sim()->getConfig()->getTotalCores() - Sim()->getConfig()->getProcessCount() - 1;
@@ -56,7 +56,7 @@ ThreadManager::~ThreadManager()
       m_thread_state[Config::getSingleton()->getMCPCoreNum()].status = Core::IDLE;
       LOG_ASSERT_ERROR(Config::getSingleton()->getMCPCoreNum() < (SInt32)m_thread_state.size(), "MCP core num out of range (!?)");
 
-      if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+      if (Config::getSingleton()->getSimulationMode() == Config::FULL)
       {
          // Reserve core-id's 1 to (num_processes) for thread-spawners
          UInt32 first_thread_spawner_id = Sim()->getConfig()->getTotalCores() - Sim()->getConfig()->getProcessCount() - 1;
@@ -68,7 +68,8 @@ ThreadManager::~ThreadManager()
       }
 
       for (UInt32 i = 0; i < m_thread_state.size(); i++)
-         LOG_ASSERT_ERROR(m_thread_state[i].status == Core::IDLE, "Thread %d still active when ThreadManager destructs!", i);
+         LOG_ASSERT_ERROR(m_thread_state[i].status == Core::IDLE,
+               "Thread %d still active when ThreadManager destructs!", i);
    }
 }
 
@@ -235,7 +236,7 @@ void ThreadManager::masterSpawnThread(ThreadSpawnRequest *req)
 
    LOG_ASSERT_ERROR(req->core_id != INVALID_CORE_ID, "No cores available for spawnThread request.");
 
-   if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+   if (Config::getSingleton()->getSimulationMode() == Config::FULL)
    {  
       // Mark the requesting thread as stalled
       stallThread(req->requester);
@@ -250,7 +251,7 @@ void ThreadManager::masterSpawnThread(ThreadSpawnRequest *req)
       
       LOG_ASSERT_ERROR((UInt32)req->core_id < m_thread_state.size(), "Core id out of range: %d", req->core_id);
    }
-   else // Sim()->getConfig()->getSimulationMode() == Config::LITE
+   else // mode = (lite, cycle_accurate)
    {
       LOG_PRINT("New Thread to be spawned with core id(%i)", req->core_id);
       ThreadSpawnRequest *req_cpy = new ThreadSpawnRequest;
@@ -341,7 +342,7 @@ void ThreadManager::masterSpawnThreadReply(ThreadSpawnRequest *req)
    LOG_PRINT("Setting status[%i] -> RUNNING", req->core_id);
    m_thread_state[req->core_id].status = Core::RUNNING;
 
-   if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+   if (Config::getSingleton()->getSimulationMode() == Config::FULL)
    {
       // Resume the requesting thread
       resumeThread(req->requester);

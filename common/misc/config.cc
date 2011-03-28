@@ -119,7 +119,7 @@ core_id_t Config::getThreadSpawnerCoreNum(UInt32 proc_num)
 {
    if (m_simulation_mode == FULL)
       return (getTotalCores() - (1 + getProcessCount() - proc_num));
-   else
+   else // mode = (lite, cycle_accurate)
       return INVALID_CORE_ID;
 }
 
@@ -127,7 +127,7 @@ core_id_t Config::getCurrentThreadSpawnerCoreNum()
 {
    if (m_simulation_mode == FULL)
       return (getTotalCores() - (1 + getProcessCount() - getCurrentProcessNum()));
-   else
+   else // mode = (lite, cycle_accurate)
       return INVALID_CORE_ID;
 }
 

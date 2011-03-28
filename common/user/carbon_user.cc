@@ -46,8 +46,9 @@ int CarbonStartSim(int argc, char **argv)
    {
       // Main process
       Sim()->getCoreManager()->initializeThread(0);
-   
-      CarbonSpawnThreadSpawner();
+  
+      if (Config::getSingleton()->getSimulationMode() == Config::FULL)
+         CarbonSpawnThreadSpawner();
 
       LOG_PRINT("Returning to main()...");
       return 0;
@@ -56,7 +57,8 @@ int CarbonStartSim(int argc, char **argv)
    {
       LOG_PRINT("Replacing main()...");
 
-      CarbonThreadSpawner (NULL);
+      if (Config::getSingleton()->getSimulationMode() == Config::FULL)
+         CarbonThreadSpawner (NULL);
 
       // Not main process
       while (!Sim()->finished())

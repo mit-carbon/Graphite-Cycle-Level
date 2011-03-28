@@ -37,6 +37,9 @@
 
 bool replaceUserAPIFunction(RTN& rtn, string& name)
 {
+   LOG_ASSERT_WARNING(Config::getSingleton()->getSimulationMode() == Config::FULL,
+         "Only Allowed in FULL mode");
+
    AFUNPTR msg_ptr = NULL;
 
    // TODO: Check that the starting stack is located below the text segment

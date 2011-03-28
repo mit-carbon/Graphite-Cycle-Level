@@ -246,6 +246,7 @@ void SyncClient::barrierInit(carbon_barrier_t *barrier, UInt32 count)
 
 void SyncClient::barrierWait(carbon_barrier_t *barrier)
 {
+   LOG_PRINT("barrierWait(%p) start", barrier);
    // Save/Restore Floating Point state
    FloatingPointHandler floating_point_handler;
 
@@ -257,15 +258,19 @@ void SyncClient::barrierWait(carbon_barrier_t *barrier)
 
    m_send_buff << msg_type << *barrier;
 
+   LOG_PRINT("barrierWait::Sending Message to MCP");
    m_network->netSend(Config::getSingleton()->getMCPCoreNum(), MCP_REQUEST_TYPE,
          m_send_buff.getBuffer(), m_send_buff.size());
+   LOG_PRINT("barrierWait::Sent Message to MCP");
 
    // Set the CoreState to 'STALLED'
    m_network->getCore()->setState(Core::STALLED);
 
+   LOG_PRINT("barrierWait::Receiving Reply from MCP");
    NetPacket* recv_pkt;
    recv_pkt = m_network->netRecv(Config::getSingleton()->getMCPCoreNum(), MCP_RESPONSE_TYPE);
    assert(recv_pkt->length == sizeof(unsigned int));
+   LOG_PRINT("barrierWait::Received Reply from MCP");
 
    // Set the CoreState to 'RUNNING'
    m_network->getCore()->setState(Core::WAKING_UP);
@@ -276,4 +281,5 @@ void SyncClient::barrierWait(carbon_barrier_t *barrier)
    assert(dummy == BARRIER_WAIT_RESPONSE);
 
    recv_pkt->release();
+   LOG_PRINT("barrierWait(%p) end", barrier);
 }

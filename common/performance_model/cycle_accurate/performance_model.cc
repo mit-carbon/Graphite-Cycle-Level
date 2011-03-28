@@ -16,7 +16,7 @@ PerformanceModel::create(Core* core)
    volatile float frequency = Config::getSingleton()->getCoreFrequency(core->getId());
    string core_model = Config::getSingleton()->getCoreType(core->getId());
 
-   if (core_model == "simple")
+   if ((core_model == "simple") || (core_model == "magic"))
       return new SimplePerformanceModel(core, frequency);
    else
       LOG_PRINT_ERROR("Invalid perf model type: %s", core_model.c_str());

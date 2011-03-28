@@ -48,10 +48,14 @@
 #include "opcodes.h"
 #include <typeinfo>
 
-// lite directories
+// lite include files
 #include "lite/routine_replace.h"
 #include "lite/memory_modeling.h"
 #include "lite/handle_syscalls.h"
+
+// cycle_accurate include files
+#include "cycle_accurate/routine_replace.h"
+#include "cycle_accurate/instruction_modeling.h"
 
 // ---------------------------------------------------------------
 // FIXME: 
@@ -193,14 +197,19 @@ VOID instructionCallback (INS ins, void *v)
 
    // Core Performance Modeling
    if (Config::getSingleton()->getEnablePerformanceModeling())
-      addInstructionModeling(ins);
+   {
+      if (Config::getSingleton()->getSimulationMode() != Config::CYCLE_ACCURATE)
+         addInstructionModeling(ins);
+      else // mode = CYCLE_ACCURATE
+         CycleAccurate::addInstructionModeling(ins);
+   }
 
    // Progress Trace
    addProgressTrace(ins);
    // Clock Skew Minimization
    addPeriodicSync(ins);
 
-   if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+   if (Config::getSingleton()->getSimulationMode() == Config::FULL)
    {
       // Special handling for futex syscall because of internal Pin lock
       if (INS_IsSyscall(ins))
@@ -218,8 +227,9 @@ VOID instructionCallback (INS ins, void *v)
          else rewriteMemOp (ins);
       }
    }
-   else // Sim()->getConfig()->getSimulationMode() == Config::LITE
+   else // mode = (lite, cycle_accurate)
    {
+      // FIXME: Add new code for cycle_accurate
       if (INS_IsSyscall(ins))
       {
          INS_InsertCall(ins, IPOINT_BEFORE,
@@ -265,7 +275,7 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
    {
       UInt32 curr_process_num = Sim()->getConfig()->getCurrentProcessNum();
 
-      if (Sim()->getConfig()->getSimulationMode() == Config::LITE)
+      if (Sim()->getConfig()->getSimulationMode() != Config::FULL) // (lite, cycle_accurate)
       {
          LOG_ASSERT_ERROR(curr_process_num == 0, "Lite mode can only be run with 1 process");
          Sim()->getCoreManager()->initializeThread(0);
@@ -280,20 +290,17 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
             Sim()->getCoreManager()->initializeThread(0);
 
             ADDRINT reg_eip = PIN_GetContextReg(ctxt, REG_INST_PTR);
+            
             // 1) Copying over Static Data
             // Get the image first
             PIN_LockClient();
             IMG img = IMG_FindByAddress(reg_eip);
             PIN_UnlockClient();
 
-            LOG_PRINT("Process: 0, Start Copying Static Data");
             copyStaticData(img);
-            LOG_PRINT("Process: 0, Finished Copying Static Data");
 
             // 2) Copying over initial stack data
-            LOG_PRINT("Process: 0, Start Copying Initial Stack Data");
             copyInitialStackData(reg_esp, 0);
-            LOG_PRINT("Process: 0, Finished Copying Initial Stack Data");
          }
          else
          {
@@ -306,9 +313,7 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
             NetPacket* pkt = core->getNetwork()->netRecv(0, SYSTEM_INITIALIZATION_NOTIFY);
             pkt->release();
 
-            LOG_PRINT("Process: %i, Start Copying Initial Stack Data");
             copyInitialStackData(reg_esp, core_id);
-            LOG_PRINT("Process: %i, Finished Copying Initial Stack Data");
          }
 
          // Set the current ESP accordingly
@@ -324,7 +329,7 @@ VOID threadStartCallback(THREADID threadIndex, CONTEXT *ctxt, INT32 flags, VOID 
       // This is NOT the main thread
       // 'application' thread or 'thread spawner'
 
-      if (Sim()->getConfig()->getSimulationMode() == Config::LITE)
+      if (Sim()->getConfig()->getSimulationMode() != Config::FULL) // (lite, cycle_accurate)
       {
          ThreadSpawnRequest req;
          Sim()->getThreadManager()->getThreadToSpawn(&req);
@@ -420,30 +425,37 @@ int main(int argc, char *argv[])
    Simulator::allocate();
    Sim()->start();
 
-   if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+   if (Config::getSingleton()->getSimulationMode() == Config::FULL)
       PinConfig::allocate();
 
    // Instrumentation
    LOG_PRINT("Start of instrumentation.");
    
-   if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+   if (Config::getSingleton()->getSimulationMode() == Config::FULL)
       RTN_AddInstrumentFunction(routineCallback, 0);
-   else // Sim()->getConfig()->getSimulationMode() == Config::LITE
+   else if (Config::getSingleton()->getSimulationMode() == Config::LITE)
       RTN_AddInstrumentFunction(Lite::routineCallback, 0);
+   else // mode = cycle_accurate
+      RTN_AddInstrumentFunction(CycleAccurate::routineCallback, 0);
 
    PIN_AddThreadStartFunction(threadStartCallback, 0);
    PIN_AddThreadFiniFunction(threadFiniCallback, 0);
    
    if (cfg->getBool("general/enable_syscall_modeling"))
    {
-      if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+      if (Config::getSingleton()->getSimulationMode() == Config::FULL)
       {
          initializeSyscallModeling();
          PIN_AddSyscallEntryFunction(syscallEnterRunModel, 0);
          PIN_AddSyscallExitFunction(syscallExitRunModel, 0);
          PIN_AddContextChangeFunction(contextChange, NULL);
       }
-      else // Sim()->getConfig()->getSimulationMode() == Config::LITE
+      else if (Config::getSingleton()->getSimulationMode() == Config::LITE)
+      {
+         PIN_AddSyscallEntryFunction(Lite::syscallEnterRunModel, 0);
+         PIN_AddSyscallExitFunction(Lite::syscallExitRunModel, 0);
+      }
+      else // mode = cycle_accurate
       {
          PIN_AddSyscallEntryFunction(Lite::syscallEnterRunModel, 0);
          PIN_AddSyscallExitFunction(Lite::syscallExitRunModel, 0);

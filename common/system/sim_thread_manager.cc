@@ -98,6 +98,8 @@ SimThreadManager::quitSimThreads()
    while (m_active_threads > 0)
       sched_yield();
 
+   delete [] m_sim_threads;
+
    Transport::getSingleton()->barrier();
 
    LOG_PRINT("All threads have exited.");

@@ -14,7 +14,7 @@ EventQueueManager::~EventQueueManager()
 
 void
 EventQueueManager::setEventQueues(EventHeap* event_heap, UnorderedEventQueue* unordered_event_queue)
-{ 
+{
    _event_heap = event_heap;
    _unordered_event_queue = unordered_event_queue;
 }
@@ -31,7 +31,9 @@ EventQueueManager::getEventQueue(EventQueue::Type type)
 void
 EventQueueManager::processEvents()
 {
+   LOG_PRINT("EventQueueManager::processEvents() wait starting");
    _binary_semaphore.wait();
+   LOG_PRINT("EventQueueManager::processEvents() wait finished");
    _event_heap->processEvents();
    _unordered_event_queue->processEvents();
 }

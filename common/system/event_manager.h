@@ -44,4 +44,6 @@ class EventManager
       MetaEventHeap* _app_meta_event_heap;
       MetaEventHeap* _sim_meta_event_heap;
       vector<EventQueueManager*> _event_queue_manager_list;
+
+      void checkCycleAccurateMode();
 };

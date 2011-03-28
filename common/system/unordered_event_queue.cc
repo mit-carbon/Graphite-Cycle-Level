@@ -11,6 +11,7 @@ UnorderedEventQueue::~UnorderedEventQueue()
 void
 UnorderedEventQueue::processEvents()
 {
+   LOG_PRINT("UnorderedEventQueue::processEvents() enter");
    _lock.acquire();
    while(!_queue.empty())
    {
@@ -24,6 +25,7 @@ UnorderedEventQueue::processEvents()
       _lock.acquire();
    }
    _lock.release();
+   LOG_PRINT("UnorderedEventQueue::processEvents() exit");
 }
 
 void

@@ -103,6 +103,7 @@ void Simulator::start()
    Instruction::initializeStaticInstructionModel();
 
    m_transport->barrier();
+   LOG_PRINT("Simulator ctor exit");
 }
 
 Simulator::~Simulator()
@@ -111,8 +112,7 @@ Simulator::~Simulator()
 
    LOG_PRINT("Simulator dtor starting...");
 
-   if ((m_config.getCurrentProcessNum() == 0) && \
-      (m_config.getSimulationMode() == Config::FULL))
+   if ((m_config.getCurrentProcessNum() == 0) && (m_config.getSimulationMode() == Config::FULL))
       m_thread_manager->terminateThreadSpawners();
 
    broadcastFinish();
@@ -148,18 +148,29 @@ Simulator::~Simulator()
    }
 
    delete m_lcp_thread;
+   LOG_PRINT("Deleted lcp_thread");
    delete m_mcp_thread;
+   LOG_PRINT("Deleted mcp_thread");
    delete m_lcp;
+   LOG_PRINT("Deleted lcp");
    delete m_mcp;
+   LOG_PRINT("Deleted mcp");
    delete m_sim_thread_manager;
+   LOG_PRINT("Deleted sim_thread_manager");
    delete m_perf_counter_manager;
+   LOG_PRINT("Deleted perf_counter_manager");
    delete m_thread_manager;
+   LOG_PRINT("Deleted thread_manager");
    delete m_core_manager;
+   LOG_PRINT("Deleted core_manager");
    delete m_event_manager;
+   LOG_PRINT("Deleted event_manager");
    delete m_transport;
+   LOG_PRINT("Deleted transport");
 
    // Delete Orion Config Object
    OrionConfig::release();
+   LOG_PRINT("Released OrionConfig");
 }
 
 void Simulator::startTimer()
@@ -246,18 +257,20 @@ bool Simulator::finished()
 
 void Simulator::enablePerformanceModelsInCurrentProcess()
 {
-   LOG_PRINT_WARNING("enablePerformanceModels");
+   LOG_PRINT("Simulator::enablePerformanceModels start");
    Sim()->startTimer();
    for (UInt32 i = 0; i < Sim()->getConfig()->getNumLocalCores(); i++)
       Sim()->getCoreManager()->getCoreFromIndex(i)->enablePerformanceModels();
+   LOG_PRINT("Simulator::enablePerformanceModels end");
 }
 
 void Simulator::disablePerformanceModelsInCurrentProcess()
 {
-   LOG_PRINT_WARNING("disablePerformanceModels");
+   LOG_PRINT("Simulator::disablePerformanceModels start");
    Sim()->stopTimer();
    for (UInt32 i = 0; i < Sim()->getConfig()->getNumLocalCores(); i++)
       Sim()->getCoreManager()->getCoreFromIndex(i)->disablePerformanceModels();
+   LOG_PRINT("Simulator::disablePerformanceModels end");
 }
 
 void Simulator::resetPerformanceModelsInCurrentProcess()

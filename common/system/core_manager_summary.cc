@@ -155,7 +155,7 @@ void addColHeadings(Table &table)
    UInt32 num_non_system_cores;
    if (Config::getSingleton()->getSimulationMode() == Config::FULL)
       num_non_system_cores = Config::getSingleton()->getTotalCores() - Config::getSingleton()->getProcessCount() - 1;
-   else // Config::getSingleton()->getSimulationMode() == Config::LITE
+   else // mode = (lite, cycle_accurate)
       num_non_system_cores = Config::getSingleton()->getTotalCores() - 1;
 
    for (Table::size_type i = 0; i < num_non_system_cores; i++)

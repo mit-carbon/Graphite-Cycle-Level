@@ -13,8 +13,7 @@ using std::vector;
 
 SimThread::SimThread()
    : m_thread(NULL)
-{
-}
+{}
 
 SimThread::~SimThread()
 {
@@ -65,6 +64,7 @@ void SimThread::run()
       // Wait for an event/net_packet
       if (mode == Config::CYCLE_ACCURATE)
       {
+         LOG_PRINT("SimThread: processEvents()");
          event_queue_manager->processEvents();
       }
       else // (mode == FULL) || (mode == LITE)

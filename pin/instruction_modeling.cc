@@ -31,7 +31,7 @@ void fillOperandListMemOps(OperandList *list, INS ins)
    // rewriteMemOp etc from redirect_memory.cc and it MUST BE
    // MAINTAINED to reflect that code.
 
-   if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+   if (Config::getSingleton()->getSimulationMode() == Config::FULL)
    {
       // string ops
       if ((INS_RepPrefix(ins) || INS_RepnePrefix(ins)))
@@ -112,7 +112,7 @@ void fillOperandListMemOps(OperandList *list, INS ins)
       }
    }
    
-   else // Sim()->getConfig()->getSimulationMode() == Config::LITE
+   else // mode = LITE
    {
       // mem ops
       if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
@@ -205,7 +205,7 @@ VOID addInstructionModeling(INS ins)
 
       case OPCODE_SCASB:
       case OPCODE_CMPSB:
-         if (Sim()->getConfig()->getSimulationMode() == Config::FULL)
+         if (Config::getSingleton()->getSimulationMode() == Config::FULL)
          {
             basic_block->push_back(new StringInstruction(list));
             break;

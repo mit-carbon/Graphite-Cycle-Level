@@ -19,15 +19,15 @@ NetworkModel::NetworkModel(Network *network, SInt32 network_id, bool is_finite_b
    _is_finite_buffer(is_finite_buffer)
 {
    if (network_id == 0)
-      _network_name = "network/user_model_1";
+      _network_name = "USER_1";
    else if (network_id == 1)
-      _network_name = "network/user_model_2";
+      _network_name = "USER_2";
    else if (network_id == 2)
-      _network_name = "network/memory_model_1";
+      _network_name = "MEMORY_1";
    else if (network_id == 3)
-      _network_name = "network/memory_model_2";
+      _network_name = "MEMORY_2";
    else if (network_id == 4)
-      _network_name = "network/system_model";
+      _network_name = "SYSTEM";
    else
       LOG_PRINT_ERROR("Unrecognized Network Num(%u)", network_id);
 }

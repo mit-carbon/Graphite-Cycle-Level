@@ -46,8 +46,12 @@ CoreManager::~CoreManager()
 {
    for (std::vector<Core*>::iterator i = m_cores.begin(); i != m_cores.end(); i++)
    {
+      core_id_t core_id = (*i)->getId();
+      LOG_PRINT("Delete Core(%i) start", core_id);
       delete *i;
+      LOG_PRINT("Delete Core(%i) end", core_id);
    }
+   LOG_PRINT("Deleted Cores");
 
    delete m_core_tls;
    delete m_core_index_tls;
@@ -100,6 +104,8 @@ void CoreManager::initializeCommId(SInt32 comm_id)
 
 void CoreManager::initializeThread()
 {
+   LOG_PRINT("initializeThread() enter");
+
    ScopedLock sl(m_initialized_cores_lock);
 
    for (core_id_t i = 0; i < (core_id_t)m_initialized_cores.size(); i++)
@@ -116,11 +122,14 @@ void CoreManager::initializeThread()
 
 void CoreManager::initializeThread(core_id_t core_id)
 {
+   LOG_PRINT("initializeThread(%i) enter", core_id);
+
    ScopedLock sl(m_initialized_cores_lock);
 
    const Config::CoreList &core_list = Config::getSingleton()->getCoreListForProcess(Config::getSingleton()->getCurrentProcessNum());
    LOG_ASSERT_ERROR(core_list.size() == Config::getSingleton()->getNumLocalCores(),
-                    "Core list size different from num local cores? %d != %d", core_list.size(), Config::getSingleton()->getNumLocalCores());
+                    "Core list size different from num local cores? %d != %d",
+                    core_list.size(), Config::getSingleton()->getNumLocalCores());
 
    for (UInt32 i = 0; i < core_list.size(); i++)
    {

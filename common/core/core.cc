@@ -67,13 +67,17 @@ Core::~Core()
       delete m_shmem_perf_model;
    }
    delete m_performance_model;
+   LOG_PRINT("Deleted performance mode");
    delete m_network;
+   LOG_PRINT("Deleted network");
 }
 
 void Core::outputSummary(std::ostream &os)
 {
+   LOG_PRINT("outputSummary() start");
    if (Config::getSingleton()->getEnablePerformanceModeling())
    {
+      LOG_PRINT("PerformanceModel::outputSummary() printed");
       getPerformanceModel()->outputSummary(os);
    }
    getNetwork()->outputSummary(os);
@@ -83,6 +87,7 @@ void Core::outputSummary(std::ostream &os)
       getShmemPerfModel()->outputSummary(os, Config::getSingleton()->getCoreFrequency(getId()));
       getMemoryManager()->outputSummary(os);
    }
+   LOG_PRINT("outputSummary() end");
 }
 
 int Core::coreSendW(int sender, int receiver, char* buffer, int size, carbon_network_t net_type)

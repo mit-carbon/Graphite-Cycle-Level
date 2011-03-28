@@ -28,6 +28,9 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
 {
    ScopedLock sl(_lock);
 
+   LOG_ASSERT_ERROR(net_packet->receiver != NetPacket::BROADCAST,
+         "Does not work yet for broadcast");
+
    LOG_PRINT("sendNetPacket(%p) enter", net_packet);
    assert(net_packet->is_raw);
 
