@@ -8,10 +8,13 @@
 class InfiniteBufferUsageHistory : public BufferUsageHistory
 {
    public:
-      InfiniteBufferUsageHistory(): BufferUsageHistory() {}
-      ~InfiniteBufferUsageHistory() {}
+      InfiniteBufferUsageHistory();
+      ~InfiniteBufferUsageHistory();
 
-      bool allocate(Flit* flit) { return true; }
-      void prune(UInt64 time) { }
+      bool allocate(Flit* flit);
+      void prune(UInt64 time);
       void receive(BufferManagementMsg* msg) { assert(false); }
+
+   private:
+      UInt64 _channel_time;
 };
