@@ -17,30 +17,30 @@ using namespace std;
 FiniteBufferNetworkModelAtac::FiniteBufferNetworkModelAtac(Network* network, SInt32 network_id):
    FiniteBufferNetworkModel(network, network_id)
 {
-   // Initialize ANet topology related parameters 
+   // Initialize ANet topology related parameters
    initializeANetTopologyParameters();
 
    // Get the configuration parameters
    try
    {
-      _frequency = Sim()->getCfg()->getFloat("network/atac_cluster/frequency");
-      _flit_width = Sim()->getCfg()->getInt("network/atac_cluster/flit_width");
-      _flow_control_scheme = FlowControlScheme::parse( \
-            Sim()->getCfg()->getString("network/atac_cluster/flow_control_scheme"));
+      _frequency = Sim()->getCfg()->getFloat("network/atac/frequency");
+      _flit_width = Sim()->getCfg()->getInt("network/atac/flit_width");
+      _flow_control_scheme = FlowControlScheme::parse(
+            Sim()->getCfg()->getString("network/atac/flow_control_scheme"));
 
-      _num_bnets_in_cluster = Sim()->getCfg()->getInt("network/atac_cluster/num_bnets_in_cluster");
+      _num_bnets_in_cluster = Sim()->getCfg()->getInt("network/atac/num_bnets_in_cluster");
       
       // Global Routing Strategy
       // Local Broadcast Route
       // Local Unicast Route
-      _global_routing_strategy = parseGlobalRoutingStrategy( \
-            Sim()->getCfg()->getString("network/atac_cluster/global_routing_strategy"));
-      _unicast_distance_threshold = Sim()->getCfg()->getInt( \
-            "network/atac_cluster/unicast_distance_threshold");
-      _local_unicast_route = parseLocalRoute( \
-            Sim()->getCfg()->getString("network/atac_cluster/local_unicast_route"));
-      _local_broadcast_route = parseLocalRoute( \
-            Sim()->getCfg()->getString("network/atac_cluster/local_broadcast_route"));
+      _global_routing_strategy = parseGlobalRoutingStrategy(
+            Sim()->getCfg()->getString("network/atac/global_routing_strategy"));
+      _unicast_distance_threshold = Sim()->getCfg()->getInt(
+            "network/atac/unicast_distance_threshold");
+      _local_unicast_route = parseLocalRoute(
+            Sim()->getCfg()->getString("network/atac/local_unicast_route"));
+      _local_broadcast_route = parseLocalRoute(
+            Sim()->getCfg()->getString("network/atac/local_broadcast_route"));
    }
    catch (...)
    {
@@ -105,7 +105,7 @@ FiniteBufferNetworkModelAtac::initializeANetTopologyParameters()
 
    try
    {
-      _cluster_size = Sim()->getCfg()->getInt("network/atac_cluster/cluster_size");
+      _cluster_size = Sim()->getCfg()->getInt("network/atac/cluster_size");
    }
    catch (...)
    {
@@ -214,30 +214,30 @@ FiniteBufferNetworkModelAtac::createRouter(RouterType router_type)
 
    try
    {
-      buffer_management_scheme = BufferManagementScheme::parse( \
-            Sim()->getCfg()->getString("network/atac_cluster/buffer_management_scheme"));
+      buffer_management_scheme = BufferManagementScheme::parse(
+            Sim()->getCfg()->getString("network/atac/buffer_management_scheme"));
       
-      enet_router_input_buffer_size = Sim()->getCfg()->getInt( \
-            "network/atac_cluster/enet/router/input_buffer_size");
-      enet_router_data_pipeline_delay = Sim()->getCfg()->getInt( \
-            "network/atac_cluster/enet/router/data_pipeline_delay");
-      enet_router_credit_pipeline_delay = Sim()->getCfg()->getInt( \
-            "network/atac_cluster/enet/router/credit_pipeline_delay");
+      enet_router_input_buffer_size = Sim()->getCfg()->getInt(
+            "network/atac/enet/router/input_buffer_size");
+      enet_router_data_pipeline_delay = Sim()->getCfg()->getInt(
+            "network/atac/enet/router/data_pipeline_delay");
+      enet_router_credit_pipeline_delay = Sim()->getCfg()->getInt(
+            "network/atac/enet/router/credit_pipeline_delay");
       
-      enet_link_type = Sim()->getCfg()->getString("network/atac_cluster/enet/link/type");
-      enet_link_length = Sim()->getCfg()->getFloat("network/atac_cluster/enet/link/length");
+      enet_link_type = Sim()->getCfg()->getString("network/atac/enet/link/type");
+      enet_link_length = Sim()->getCfg()->getFloat("network/atac/enet/link/length");
 
-      receiving_hub_router_input_buffer_size = Sim()->getCfg()->getInt( \
-            "network/atac_cluster/bnet/router/input_buffer_size");
-      receiving_hub_router_data_pipeline_delay = Sim()->getCfg()->getInt( \
-            "network/atac_cluster/bnet/router/data_pipeline_delay");
-      receiving_hub_router_credit_pipeline_delay = Sim()->getCfg()->getInt( \
-            "network/atac_cluster/bnet/router/credit_pipeline_delay");
+      receiving_hub_router_input_buffer_size = Sim()->getCfg()->getInt(
+            "network/atac/bnet/router/input_buffer_size");
+      receiving_hub_router_data_pipeline_delay = Sim()->getCfg()->getInt(
+            "network/atac/bnet/router/data_pipeline_delay");
+      receiving_hub_router_credit_pipeline_delay = Sim()->getCfg()->getInt(
+            "network/atac/bnet/router/credit_pipeline_delay");
 
-      onet_link_length = Sim()->getCfg()->getFloat("network/atac_cluster/onet/link/length");
+      onet_link_length = Sim()->getCfg()->getFloat("network/atac/onet/link/length");
 
-      bnet_link_type = Sim()->getCfg()->getString("network/atac_cluster/bnet/link/type");
-      bnet_link_length = Sim()->getCfg()->getFloat("network/atac_cluster/bnet/link/length");
+      bnet_link_type = Sim()->getCfg()->getString("network/atac/bnet/link/type");
+      bnet_link_length = Sim()->getCfg()->getFloat("network/atac/bnet/link/length");
    }
    catch (...)
    {
@@ -552,8 +552,8 @@ FiniteBufferNetworkModelAtac::getBNetChannelId(core_id_t sender)
 }
 
 void
-FiniteBufferNetworkModelAtac::computeNextHopsOnONet(Router* curr_router, \
-      core_id_t sender, core_id_t receiver, \
+FiniteBufferNetworkModelAtac::computeNextHopsOnONet(Router* curr_router,
+      core_id_t sender, core_id_t receiver,
       vector<Channel::Endpoint>& output_endpoint_list)
 {
    // See if we are on the sender or receiver cluster
@@ -860,4 +860,36 @@ Router::Id&
 FiniteBufferNetworkModelAtac::getNearestAccessPoint(core_id_t core_id)
 {
    return _access_point_list[computeSubClusterId(core_id)];
+}
+
+pair<bool,SInt32>
+FiniteBufferNetworkModelAtac::computeCoreCountConstraints(SInt32 core_count)
+{
+   // Same as the electrical mesh here
+   SInt32 enet_width = (SInt32) floor (sqrt(core_count));
+   SInt32 enet_height = (SInt32) ceil (1.0 * core_count / enet_width);
+
+   assert(core_count <= enet_width * enet_height);
+   assert(core_count > (enet_width - 1) * enet_height);
+   assert(core_count > enet_width * (enet_height - 1));
+
+   return make_pair(true, enet_height * enet_width);
+}
+
+pair<bool,vector<core_id_t> >
+FiniteBufferNetworkModelAtac::computeMemoryControllerPositions(SInt32 num_memory_controllers)
+{
+   LOG_ASSERT_ERROR(num_memory_controllers < _num_clusters,
+         "num_memory_controllers(%i) >= _num_clusters(%i)", num_memory_controllers, _num_clusters);
+
+   for (SInt32 i = 0; i < _num_clusters; i++)
+   {
+      core_id_t core_id = getCoreIdWithOpticalHub(i);
+
+   }
+}
+
+pair<bool,vector<Config::CoreList> >
+FiniteBufferNetworkModelAtac::computeProcessToCoreMapping()
+{
 }

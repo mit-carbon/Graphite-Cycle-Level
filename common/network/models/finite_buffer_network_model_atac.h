@@ -13,9 +13,9 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       // Output Summary 
       void outputSummary(ostream& out) { /* FIXME: Fill me in */ }
 
-      // static pair<bool,SInt32> computeCoreCountConstraints(SInt32 core_count);
-      // static pair<bool,vector<core_id_t> > computeMemoryControllerPositions(SInt32 num_memory_controllers);
-      // static pair<bool,vector<Config::CoreList> > computeProcessToCoreMapping();
+      static pair<bool,SInt32> computeCoreCountConstraints(SInt32 core_count);
+      static pair<bool,vector<core_id_t> > computeMemoryControllerPositions(SInt32 num_memory_controllers);
+      static pair<bool,vector<Config::CoreList> > computeProcessToCoreMapping();
    
    private:
       ////// Private Enumerators
