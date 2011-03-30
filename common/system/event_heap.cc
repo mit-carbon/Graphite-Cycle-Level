@@ -79,7 +79,9 @@ EventHeap::processEvents()
 
       // Remove the event from the top of the heap
       Event* curr_event = (Event*) ((_heap.extractMin()).second);
-      LOG_ASSERT_ERROR(event == curr_event, "event(%p), curr_event(%p)", event, curr_event);
+      LOG_ASSERT_ERROR(event == curr_event, "Old Event(%p)[%llu,%i], New Event(%p)[%llu,%i]",
+            event, event->getTime(), event->getType(),
+            curr_event, curr_event->getTime(), curr_event->getType());
       
       // Get next event in order of time
       Event* next_event = (Event*) ((_heap.min()).second);
