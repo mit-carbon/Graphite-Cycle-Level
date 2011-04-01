@@ -12,7 +12,7 @@
 #include "utils.h"
 #include "synthetic_network_traffic_generator.h"
 
-// #define DEBUG 1
+#define DEBUG 1
 
 NetworkTrafficType _traffic_pattern_type = UNIFORM_RANDOM;     // Network Traffic Pattern Type
 double _offered_load = 0.1;                                    // Number of packets injected per core per cycle
@@ -28,6 +28,8 @@ UInt64 _quantum = 10000;
 
 UInt32 EVENT_NET_SEND = 100;
 UInt32 EVENT_PUSH_FIRST_EVENTS = 101;
+
+SInt32 _flit_width = 64; // In bits
 
 int main(int argc, char* argv[])
 {
@@ -68,6 +70,10 @@ int main(int argc, char* argv[])
    _num_cores = (SInt32) Config::getSingleton()->getApplicationCores();
    LOG_PRINT("Num Application Cores(%i)", _num_cores);
 
+   // Get Flit Width
+   // FIXME: Hard-coded for now, Change Later
+   _flit_width = 64; // In bits
+
    // Initialize Core Specific Variables
    _core_sp_vars = new CoreSpVars[_num_cores];
    // Register (NetSend, PushFirstEvents) Events
@@ -80,7 +86,13 @@ int main(int argc, char* argv[])
    carbon_thread_t tid_list[_num_cores-1];
    for (SInt32 i = 0; i < _num_cores-1; i++)
    {
+#ifdef DEBUG
+      fprintf(stderr, "Spawning Thread(%i)\n", i);
+#endif
       tid_list[i] = CarbonSpawnThread(sendNetworkTraffic, NULL);
+#ifdef DEBUG
+      fprintf(stderr, "Finished Spawning Thread(%i)\n", i);
+#endif
    }
    sendNetworkTraffic(NULL);
 
@@ -143,6 +155,9 @@ void* sendNetworkTraffic(void*)
 {
    Core* core = Sim()->getCoreManager()->getCurrentCore();
    LOG_PRINT("core(%p)", core);
+#ifdef DEBUG
+   fprintf(stderr, "core(%p)\n", core);
+#endif
 
    vector<int> send_vec;
    vector<int> receive_vec;
@@ -270,6 +285,7 @@ void processNetSendEvent(Event* event)
    RandNum* rand_num = _core_sp_vars[core->getId()]._rand_num;
    UInt64& total_packets_sent = _core_sp_vars[core->getId()]._total_packets_sent;
    vector<int>& send_vec = _core_sp_vars[core->getId()]._send_vec;
+   UInt64& last_packet_time = _core_sp_vars[core->getId()]._last_packet_time;
    
    for (UInt64 time = event->getTime(); time < (event->getTime() + _quantum); time++)
    {
@@ -278,8 +294,12 @@ void processNetSendEvent(Event* event)
          // Send a packet to its destination core
          Byte data[_packet_size];
          SInt32 receiver = send_vec[total_packets_sent % send_vec.size()];
-         NetPacket net_packet(time, _packet_type, core->getId(), receiver, _packet_size, data);
+         
+         last_packet_time = getMax<UInt64>(last_packet_time, time);
+         NetPacket net_packet(last_packet_time, _packet_type, core->getId(), receiver, _packet_size, data);
          core->getNetwork()->netSend(net_packet);
+        
+         last_packet_time += computeNumFlits(core->getNetwork()->getModeledLength(net_packet)); 
          total_packets_sent ++;
       }
    }
@@ -293,6 +313,12 @@ void processNetSendEvent(Event* event)
       Semaphore* send_semaphore = _core_sp_vars[core->getId()]._send_semaphore;
       send_semaphore->signal();
    }
+}
+
+SInt32 computeNumFlits(SInt32 length)
+{
+   SInt32 num_flits = (SInt32) ceil((float) (length * 8) / _flit_width);
+   return num_flits;
 }
 
 void pushEvent(UInt64 time, Core* core)

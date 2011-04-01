@@ -34,7 +34,7 @@ private:
 class CoreSpVars
 {
 public:
-   CoreSpVars() : _total_packets_sent(0) {}
+   CoreSpVars() : _total_packets_sent(0), _last_packet_time(0) {}
    ~CoreSpVars() {}
    void init(RandNum* rand_num, vector<int>& send_vec, Semaphore* send_semaphore)
    {
@@ -47,6 +47,7 @@ public:
    UInt64 _total_packets_sent;
    vector<int> _send_vec;
    Semaphore* _send_semaphore;
+   UInt64 _last_packet_time;
 };
 
 enum NetworkTrafficType
@@ -76,3 +77,5 @@ NetworkTrafficType parseTrafficPattern(string traffic_pattern);
 void processNetSendEvent(Event* event);
 void pushEvent(UInt64 time, Core* core);
 void pushFirstEvents(Event* event);
+
+SInt32 computeNumFlits(SInt32 length);
