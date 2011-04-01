@@ -195,6 +195,7 @@ Config::computeProcessToCoreMapping()
             case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
             case FINITE_BUFFER_NETWORK_EMESH_BASIC:
             case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
+            case FINITE_BUFFER_NETWORK_ATAC:
                return process_to_core_mapping_struct.second;
 
             default:

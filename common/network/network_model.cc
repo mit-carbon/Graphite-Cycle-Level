@@ -9,6 +9,7 @@ using namespace std;
 #include "network_model_emesh_hop_by_hop_broadcast_tree.h"
 #include "finite_buffer_network_model_emesh_basic.h"
 #include "finite_buffer_network_model_emesh_broadcast_tree.h"
+#include "finite_buffer_network_model_atac.h"
 #include "log.h"
 
 #include "network.h"
@@ -57,6 +58,9 @@ NetworkModel::createModel(Network *net, SInt32 network_id, UInt32 model_type)
 
    case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
       return new FiniteBufferNetworkModelEMeshBroadcastTree(net, network_id);
+
+   case FINITE_BUFFER_NETWORK_ATAC:
+      return new FiniteBufferNetworkModelAtac(net, network_id);
 
    default:
       LOG_PRINT_ERROR("Unrecognized Network Model(%u)", model_type);
