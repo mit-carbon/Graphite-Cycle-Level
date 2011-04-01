@@ -85,11 +85,13 @@ NetworkModel::parseNetworkType(string str)
       return FINITE_BUFFER_NETWORK_EMESH_BASIC;
    else if (str == "finite_buffer_emesh_broadcast_tree")
       return FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE;
+   else if (str == "finite_buffer_network_model_atac")
+      return FINITE_BUFFER_NETWORK_ATAC;
    else
       return (UInt32)-1;
 }
 
-pair<bool,SInt32> 
+pair<bool,SInt32>
 NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count)
 {
    switch (network_type)
@@ -97,6 +99,7 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
       case NETWORK_MAGIC:
       case NETWORK_EMESH_HOP_COUNTER:
       case NETWORK_ANALYTICAL_MESH:
+      case FINITE_BUFFER_NETWORK_ATAC:
          return make_pair(false,core_count);
 
       case NETWORK_EMESH_HOP_BY_HOP_BASIC:
@@ -122,6 +125,7 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
       case NETWORK_MAGIC:
       case NETWORK_EMESH_HOP_COUNTER:
       case NETWORK_ANALYTICAL_MESH:
+      case FINITE_BUFFER_NETWORK_ATAC:
          {
             SInt32 core_count = (SInt32) Config::getSingleton()->getTotalCores();
             SInt32 spacing_between_memory_controllers = core_count / num_memory_controllers;
@@ -157,6 +161,7 @@ NetworkModel::computeProcessToCoreMapping(UInt32 network_type)
       case NETWORK_MAGIC:
       case NETWORK_ANALYTICAL_MESH:
       case NETWORK_EMESH_HOP_COUNTER:
+      case FINITE_BUFFER_NETWORK_ATAC:
          return make_pair(false, vector<vector<core_id_t> >());
 
       case NETWORK_EMESH_HOP_BY_HOP_BASIC:

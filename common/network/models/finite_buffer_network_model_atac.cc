@@ -861,35 +861,3 @@ FiniteBufferNetworkModelAtac::getNearestAccessPoint(core_id_t core_id)
 {
    return _access_point_list[computeSubClusterId(core_id)];
 }
-
-pair<bool,SInt32>
-FiniteBufferNetworkModelAtac::computeCoreCountConstraints(SInt32 core_count)
-{
-   // Same as the electrical mesh here
-   SInt32 enet_width = (SInt32) floor (sqrt(core_count));
-   SInt32 enet_height = (SInt32) ceil (1.0 * core_count / enet_width);
-
-   assert(core_count <= enet_width * enet_height);
-   assert(core_count > (enet_width - 1) * enet_height);
-   assert(core_count > enet_width * (enet_height - 1));
-
-   return make_pair(true, enet_height * enet_width);
-}
-
-pair<bool,vector<core_id_t> >
-FiniteBufferNetworkModelAtac::computeMemoryControllerPositions(SInt32 num_memory_controllers)
-{
-   LOG_ASSERT_ERROR(num_memory_controllers < _num_clusters,
-         "num_memory_controllers(%i) >= _num_clusters(%i)", num_memory_controllers, _num_clusters);
-
-   for (SInt32 i = 0; i < _num_clusters; i++)
-   {
-      core_id_t core_id = getCoreIdWithOpticalHub(i);
-
-   }
-}
-
-pair<bool,vector<Config::CoreList> >
-FiniteBufferNetworkModelAtac::computeProcessToCoreMapping()
-{
-}
