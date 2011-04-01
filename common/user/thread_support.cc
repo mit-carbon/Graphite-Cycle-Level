@@ -45,7 +45,7 @@ carbon_thread_t CarbonSpawnThread(thread_func_t func, void *arg)
    pthread_t* thread_ptr = new pthread_t;
    bool spawned = CarbonEmulatePthreadCreate(thread_ptr);
    assert(spawned);
-   LOG_PRINT("pthread_create end");
+   LOG_PRINT("CarbonEmulatePthreadCreate() end");
  
    _tid_to_thread_ptr_map.insert(make_pair<core_id_t, pthread_t*>(tid, thread_ptr));
    return tid;

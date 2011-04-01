@@ -79,28 +79,42 @@ void Simulator::start()
    // Create Orion Config Object
    string orion_cfg_file = "./contrib/orion/orion.cfg";
    OrionConfig::allocate(orion_cfg_file);
+   LOG_PRINT("Allocated OrionConfig");
    // OrionConfig::getSingleton()->print_config(cout);
  
    m_transport = Transport::create();
+   LOG_PRINT("Created m_transport");
    m_event_manager = new EventManager();
+   LOG_PRINT("Created m_event_manager");
    m_core_manager = new CoreManager();
+   LOG_PRINT("Created m_core_manager");
    m_thread_manager = new ThreadManager(m_core_manager);
+   LOG_PRINT("Created m_thread_manager");
    m_perf_counter_manager = new PerfCounterManager(m_thread_manager);
+   LOG_PRINT("Created m_perf_counter_manager");
    m_sim_thread_manager = new SimThreadManager();
+   LOG_PRINT("Created m_sim_thread_manager");
    m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create(getCfg()->getString("clock_skew_minimization/scheme","none"));
+   LOG_PRINT("Created m_clock_skew_minimization_manager");
 
-   // Floating Point Support
+   // FIXME: Only in (FULL,LITE) modes. Floating Point Support
    Fxsupport::allocate();
+   LOG_PRINT("Allocated Space for FxSupport");
 
    startMCP();
+   LOG_PRINT("Started MCP");
 
    m_sim_thread_manager->spawnSimThreads();
+   LOG_PRINT("Spawned Sim Threads");
 
    m_lcp = new LCP();
+   LOG_PRINT("Created LCP");
    m_lcp_thread = Thread::create(m_lcp);
+   LOG_PRINT("Created m_lcp_thread");
    m_lcp_thread->run();
 
    Instruction::initializeStaticInstructionModel();
+   LOG_PRINT("Initialized Static Instruction Model");
 
    m_transport->barrier();
    LOG_PRINT("Simulator ctor exit");

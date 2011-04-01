@@ -197,6 +197,7 @@ SInt32 ThreadManager::spawnThread(thread_func_t func, void *arg)
                 MCP_REQUEST_TYPE,
                 &req,
                 sizeof(req));
+   LOG_PRINT("Sent spawn request to MCP");
 
    // Set the CoreState to 'STALLED'
    core->setState(Core::STALLED);
