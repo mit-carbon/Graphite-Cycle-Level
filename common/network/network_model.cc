@@ -60,7 +60,7 @@ NetworkModel::createModel(Network *net, SInt32 network_id, UInt32 model_type)
       return new FiniteBufferNetworkModelEMeshBroadcastTree(net, network_id);
 
    case FINITE_BUFFER_NETWORK_ATAC:
-      return new FiniteBufferNetworkModelAtac(net, network_id);
+      // return new FiniteBufferNetworkModelAtac(net, network_id);
 
    default:
       LOG_PRINT_ERROR("Unrecognized Network Model(%u)", model_type);
