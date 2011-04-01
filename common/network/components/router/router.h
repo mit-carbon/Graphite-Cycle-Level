@@ -14,6 +14,7 @@ using namespace std;
 #include "channel.h"
 #include "time_normalizer.h"
 
+// FIXME: Is Router or NetworkNode a better name for this?
 class Router
 {
    public:

@@ -191,7 +191,6 @@ Config::computeProcessToCoreMapping()
       {
          switch(network_model)
          {
-            case NETWORK_ATAC_CLUSTER:
             case NETWORK_EMESH_HOP_BY_HOP_BASIC:
             case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
             case FINITE_BUFFER_NETWORK_EMESH_BASIC:

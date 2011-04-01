@@ -152,10 +152,16 @@ void Core::enablePerformanceModels()
    if (m_clock_skew_minimization_client)
       m_clock_skew_minimization_client->enable();
 
-   getShmemPerfModel()->enable();
-   getMemoryManager()->enableModels();
+   if (Config::getSingleton()->isSimulatingSharedMemory())
+   {
+      getShmemPerfModel()->enable();
+      getMemoryManager()->enableModels();
+   }
    getNetwork()->enableModels();
-   getPerformanceModel()->enable();
+   if (Config::getSingleton()->getEnablePerformanceModeling())
+   {
+      getPerformanceModel()->enable();
+   }
 }
 
 void Core::disablePerformanceModels()
@@ -163,10 +169,16 @@ void Core::disablePerformanceModels()
    if (m_clock_skew_minimization_client)
       m_clock_skew_minimization_client->disable();
 
-   getShmemPerfModel()->disable();
-   getMemoryManager()->disableModels();
+   if (Config::getSingleton()->isSimulatingSharedMemory())
+   {
+      getShmemPerfModel()->disable();
+      getMemoryManager()->disableModels();
+   }
    getNetwork()->disableModels();
-   getPerformanceModel()->disable();
+   if (Config::getSingleton()->getEnablePerformanceModeling())
+   {
+      getPerformanceModel()->disable();
+   }
 }
 
 // Models must be disabled when calling this function
@@ -175,18 +187,27 @@ void Core::resetPerformanceModels()
    if (m_clock_skew_minimization_client)
       m_clock_skew_minimization_client->reset();
 
-   getShmemPerfModel()->reset();
-   getMemoryManager()->resetModels();
+   if (Config::getSingleton()->isSimulatingSharedMemory())
+   {
+      getShmemPerfModel()->reset();
+      getMemoryManager()->resetModels();
+   }
    getNetwork()->resetModels();
-   getPerformanceModel()->reset();
+   if (Config::getSingleton()->getEnablePerformanceModeling())
+   {
+      getPerformanceModel()->reset();
+   }
 }
 
 void
 Core::updateInternalVariablesOnFrequencyChange(volatile float frequency)
 {
    getPerformanceModel()->updateInternalVariablesOnFrequencyChange(frequency);
-   getShmemPerfModel()->updateInternalVariablesOnFrequencyChange(frequency);
-   getMemoryManager()->updateInternalVariablesOnFrequencyChange(frequency);
+   if (Config::getSingleton()->isSimulatingSharedMemory())
+   {
+      getShmemPerfModel()->updateInternalVariablesOnFrequencyChange(frequency);
+      getMemoryManager()->updateInternalVariablesOnFrequencyChange(frequency);
+   }
 }
 
 void

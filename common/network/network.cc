@@ -157,6 +157,12 @@ void Network::processPacket(NetPacket* packet)
 
 void Network::receivePacket(NetPacket* packet)
 {
+   if (!Config::getSingleton()->isSimulatingSharedMemory())
+   {
+      LOG_ASSERT_ERROR(packet->type != SHARED_MEM_1 && packet->type != SHARED_MEM_2,
+         "Shared Memory Disabled Currently");
+   }
+
    LOG_PRINT("receivePacket(%p) enter", packet);
 
    NetworkModel* model = getNetworkModelFromPacketType(packet->type);
@@ -193,6 +199,7 @@ void Network::receivePacket(NetPacket* packet)
       // Signal the app thread that a packet is available
       LOG_PRINT("Enqueuing packet : type %i, from %i, to %i, core_id %i, cycle_count %llu",
             (SInt32) packet->type, packet->sender, packet->receiver, _core->getId(), packet->time);
+      
       _netQueueLock.acquire();
       _netQueue.push_back(packet);
       _netQueueLock.release();
