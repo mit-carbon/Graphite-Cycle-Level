@@ -93,7 +93,7 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
       // get the 'NetworkMsg*' object
       NetworkMsg* network_msg = (NetworkMsg*) net_packet->data;
       Router::Id sender_router_id(net_packet->sender, network_msg->_sender_router_index);
-      Router* receiver_router = _router_list[network_msg->_receiver_router_index];
+      NetworkNode* receiver_network_node = _network_node_list[network_msg->_receiver_router_index];
       // populate the '_channel' field in the structure
       // input_channel (for flits)
       // output_channel (for buffer management msgs)
@@ -106,13 +106,13 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
          flit->_net_packet = cloned_net_packet;
          
          // This assumes that each receiving core has at least one router
-         flit->_input_endpoint = receiver_router->getInputEndpointFromRouterId(sender_router_id);
+         flit->_input_endpoint = receiver_network_node->getInputEndpointFromRouterId(sender_router_id);
 
          if (flit->_type == Flit::HEAD)
          {
             Flit* head_flit = flit;
             // Calls the specific network model (emesh, atac, etc.)
-            computeOutputEndpointList(head_flit, receiver_router);
+            computeOutputEndpointList(head_flit, receiver_network_node);
          }
          LOG_PRINT("Flit: Time(%llu), Type(%s), Sender(%i), Receiver(%i), Input Endpoint(%i,%i), Sequence Num(%llu)", \
                flit->_net_packet->time, (flit->getTypeString()).c_str(), \
@@ -122,17 +122,17 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
       }
       else // (network_msg->_type == NetworkMsg::BUFFER_MANAGEMENT)
       {
-         network_msg->_output_endpoint = receiver_router->getOutputEndpointFromRouterId(sender_router_id);
+         network_msg->_output_endpoint = receiver_network_node->getOutputEndpointFromRouterId(sender_router_id);
          LOG_PRINT("Buffer Management: Output Endpoint(%i,%i)", \
                network_msg->_output_endpoint._channel_id, network_msg->_output_endpoint._index);
       }
 
       // process the 'NetworkMsg'
       vector<NetworkMsg*> network_msg_list;
-      receiver_router->processNetworkMsg(network_msg, network_msg_list);
+      receiver_network_node->processNetworkMsg(network_msg, network_msg_list);
       LOG_PRINT("After Processing: Size of msg list(%u)", network_msg_list.size());
 
-      constructNetPackets(receiver_router, network_msg_list, net_packet_list_to_send);
+      constructNetPackets(receiver_network_node, network_msg_list, net_packet_list_to_send);
 
       // Print the list - For Debugging
       // printNetPacketList(net_packet_list_to_send);
@@ -191,12 +191,11 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
 }
 
 void
-FiniteBufferNetworkModel::constructNetPackets(Router* router, \
+FiniteBufferNetworkModel::constructNetPackets(NetworkNode* network_node,
       vector<NetworkMsg*>& network_msg_list, list<NetPacket*>& net_packet_list)
 {
-   LOG_PRINT("constructNetPackets(%i,%i) enter", router->getId()._core_id, router->getId()._index);
-
-   Router::Id sender_router_id(router->getId());
+   Router::Id sender_router_id(network_node->getRouterId());
+   LOG_PRINT("constructNetPackets(%i,%i) enter", sender_router_id._core_id, sender_router_id._index);
 
    vector<NetworkMsg*>::iterator msg_it = network_msg_list.begin();
    for (SInt32 iter = 0; msg_it != network_msg_list.end(); msg_it++, iter++)
@@ -215,12 +214,12 @@ FiniteBufferNetworkModel::constructNetPackets(Router* router, \
                vector<Router::Id> receiving_router_id_list;
                if (flit->_output_endpoint._index == Channel::Endpoint::ALL)
                {
-                  receiving_router_id_list = router->getRouterIdListFromOutputChannel(
+                  receiving_router_id_list = network_node->getRouterIdListFromOutputChannel(
                         flit->_output_endpoint._channel_id);
                }
                else
                {
-                  receiving_router_id_list.push_back(router->getRouterIdFromOutputEndpoint(
+                  receiving_router_id_list.push_back(network_node->getRouterIdFromOutputEndpoint(
                            flit->_output_endpoint));
                }
 
@@ -273,7 +272,7 @@ FiniteBufferNetworkModel::constructNetPackets(Router* router, \
                
                // Get receiver router id
                Router::Id& receiver_router_id =
-                     router->getRouterIdFromInputEndpoint(buffer_msg->_input_endpoint);
+                     network_node->getRouterIdFromInputEndpoint(buffer_msg->_input_endpoint);
                LOG_PRINT("Buffer Management: Next Router Id(%i,%i)", \
                      receiver_router_id._core_id, receiver_router_id._index);
 
@@ -289,7 +288,7 @@ FiniteBufferNetworkModel::constructNetPackets(Router* router, \
       }
    }
    
-   LOG_PRINT("constructNetPackets(%i,%i) exit", router->getId()._core_id, router->getId()._index);
+   LOG_PRINT("constructNetPackets(%i,%i) exit", sender_router_id._core_id, sender_router_id._index);
 }
 
 void
@@ -484,11 +483,11 @@ FiniteBufferNetworkModel::outputSummary(ostream& out)
    // Mispredicted Normalization Requests
    UInt64 total_mispredicted_normalization_requests = 0;
    UInt64 total_normalization_requests = 0;
-   for (UInt32 i = 0; i < _router_list.size(); i++)
+   for (UInt32 i = 0; i < _network_node_list.size(); i++)
    {
       total_mispredicted_normalization_requests += \
-            _router_list[i]->getTimeNormalizer()->getTotalMispredicted();
-      total_normalization_requests += _router_list[i]->getTimeNormalizer()->getTotalRequests();
+            _network_node_list[i]->getTimeNormalizer()->getTotalMispredicted();
+      total_normalization_requests += _network_node_list[i]->getTimeNormalizer()->getTotalRequests();
    }
    out << "    mispredicted normalization requests (%): "
        << ((double) total_mispredicted_normalization_requests) * 100 / total_normalization_requests 

@@ -1,8 +1,8 @@
-#include "router.h"
+#include "network_node.h"
 #include "utils.h"
 #include "log.h"
 
-Router::Router(Id id, \
+NetworkNode::NetworkNode(Router::Id router_id, \
       UInt32 flit_width, \
       RouterPerformanceModel* router_performance_model, \
       RouterPowerModel* router_power_model, \
@@ -10,7 +10,7 @@ Router::Router(Id id, \
       vector<LinkPowerModel*>& link_power_model_list, \
       vector<vector<Router::Id> >& input_channel_to_router_id_list__mapping, \
       vector<vector<Router::Id> >& output_channel_to_router_id_list__mapping):
-   _id(id),
+   _router_id(router_id),
    _flit_width(flit_width),
    _router_performance_model(router_performance_model),
    _router_power_model(router_power_model),
@@ -25,13 +25,13 @@ Router::Router(Id id, \
    _time_normalizer = TimeNormalizer::create(Config::getSingleton()->getApplicationCores());
 }
 
-Router::~Router()
+NetworkNode::~NetworkNode()
 {
    delete _time_normalizer;
 }
 
 void
-Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_msg_list_to_send)
+NetworkNode::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_msg_list_to_send)
 {
    LOG_PRINT("processNetworkMsg(%p, %p) enter", this, network_msg);
 
@@ -80,7 +80,7 @@ Router::processNetworkMsg(NetworkMsg* network_msg, vector<NetworkMsg*>& network_
 }
 
 void
-Router::performRouterAndLinkTraversal(NetworkMsg* network_msg_to_send)
+NetworkNode::performRouterAndLinkTraversal(NetworkMsg* network_msg_to_send)
 {
    switch (network_msg_to_send->_type)
    {
@@ -122,7 +122,7 @@ Router::performRouterAndLinkTraversal(NetworkMsg* network_msg_to_send)
 }
 
 void
-Router::normalizeTime(NetworkMsg* network_msg, bool entry)
+NetworkNode::normalizeTime(NetworkMsg* network_msg, bool entry)
 {
    switch (network_msg->_type)
    {
@@ -177,7 +177,7 @@ Router::normalizeTime(NetworkMsg* network_msg, bool entry)
 }
 
 void
-Router::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, \
+NetworkNode::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, \
       Router::Id& router_id)
 {
    vector<Router::Id> router_id_list(1, router_id);
@@ -185,14 +185,14 @@ Router::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list
 }
 
 void
-Router::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, \
+NetworkNode::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, \
       vector<Router::Id>& router_id_list)
 {
    channel_to_router_id_list__mapping.push_back(router_id_list);
 }
 
 void
-Router::createMappings()
+NetworkNode::createMappings()
 {
    for (SInt32 i = 0; i < (SInt32) _input_channel_to_router_id_list__mapping.size(); i++)
    {
@@ -222,32 +222,32 @@ Router::createMappings()
 }
 
 Channel::Endpoint&
-Router::getInputEndpointFromRouterId(Router::Id& router_id)
+NetworkNode::getInputEndpointFromRouterId(Router::Id& router_id)
 {
    return _router_id_to_input_endpoint_mapping[router_id];
 }
 
 Channel::Endpoint&
-Router::getOutputEndpointFromRouterId(Router::Id& router_id)
+NetworkNode::getOutputEndpointFromRouterId(Router::Id& router_id)
 {
    return _router_id_to_output_endpoint_mapping[router_id];
 }
 
 Router::Id&
-Router::getRouterIdFromInputEndpoint(Channel::Endpoint& input_endpoint)
+NetworkNode::getRouterIdFromInputEndpoint(Channel::Endpoint& input_endpoint)
 {
    assert(input_endpoint._index != Channel::Endpoint::ALL);
    return _input_channel_to_router_id_list__mapping[input_endpoint._channel_id][input_endpoint._index];
 }
 
 Router::Id&
-Router::getRouterIdFromOutputEndpoint(Channel::Endpoint& output_endpoint)
+NetworkNode::getRouterIdFromOutputEndpoint(Channel::Endpoint& output_endpoint)
 {
    return _output_channel_to_router_id_list__mapping[output_endpoint._channel_id][output_endpoint._index];
 }
 
 vector<Router::Id>&
-Router::getRouterIdListFromOutputChannel(SInt32 output_channel_id)
+NetworkNode::getRouterIdListFromOutputChannel(SInt32 output_channel_id)
 {
    return _output_channel_to_router_id_list__mapping[output_channel_id];
 }

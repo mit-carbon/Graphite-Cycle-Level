@@ -18,14 +18,14 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
       static pair<bool,vector<Config::CoreList> > computeProcessToCoreMapping();
    
    private:
-      enum RouterType
+      enum NodeType
       {
          CORE_INTERFACE = -1,
          EMESH = 0
       };
 
       // Private Functions
-      Router* createRouter();
+      NetworkNode* createNetworkNode();
 
       void computeEMeshPosition(core_id_t core_id, SInt32& x, SInt32& y);
       core_id_t computeCoreId(SInt32 x, SInt32 y);
@@ -35,7 +35,7 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
       static void computeEMeshTopologyParameters(SInt32& emesh_width, SInt32& emesh_height);
 
       // Main Routing Function
-      void computeOutputEndpointList(Flit* head_flit, Router* curr_router);
+      void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
       // Compute Unloaded Delay
       UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits);
 

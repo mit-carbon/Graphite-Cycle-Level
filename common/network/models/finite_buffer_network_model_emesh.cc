@@ -36,15 +36,15 @@ FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net, \
    }
 
    // Instantiate the routers 
-   Router* router = createRouter();
-   _router_list.push_back(router);
+   NetworkNode* network_node = createNetworkNode();
+   _network_node_list.push_back(network_node);
 }
 
 FiniteBufferNetworkModelEMesh::~FiniteBufferNetworkModelEMesh()
 {}
 
-Router*
-FiniteBufferNetworkModelEMesh::createRouter()
+NetworkNode*
+FiniteBufferNetworkModelEMesh::createNetworkNode()
 {
    // FIXME: Change channel -> link , channel -> port later
    // Read necessary parameters from cfg file
@@ -85,8 +85,8 @@ FiniteBufferNetworkModelEMesh::createRouter()
 
    // Add the core interface
    Router::Id core_interface(_core_id, CORE_INTERFACE);
-   Router::addChannelMapping(input_channel_to_router_id_list__mapping, core_interface);
-   Router::addChannelMapping(output_channel_to_router_id_list__mapping, core_interface);
+   NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, core_interface);
+   NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, core_interface);
    num_input_endpoints_list.push_back(1);
    num_output_endpoints_list.push_back(1);
 
@@ -102,8 +102,8 @@ FiniteBufferNetworkModelEMesh::createRouter()
       if (core_id != INVALID_CORE_ID)
       {
          Router::Id router_id(core_id, EMESH);
-         Router::addChannelMapping(input_channel_to_router_id_list__mapping, router_id);
-         Router::addChannelMapping(output_channel_to_router_id_list__mapping, router_id);
+         NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, router_id);
+         NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, router_id);
          num_input_endpoints_list.push_back(1);
          num_output_endpoints_list.push_back(1);
       }
@@ -163,7 +163,7 @@ FiniteBufferNetworkModelEMesh::createRouter()
    }
   
    // Create the router model 
-   return new Router(Router::Id(_core_id, EMESH), \
+   return new NetworkNode(Router::Id(_core_id, EMESH), \
          _flit_width, \
          router_performance_model, \
          router_power_model, \
@@ -174,11 +174,11 @@ FiniteBufferNetworkModelEMesh::createRouter()
 }
 
 void
-FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Router* curr_router)
+FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node)
 {
-   LOG_PRINT("computeOutputEndpointList(%p,%p) enter", head_flit, curr_router);
+   LOG_PRINT("computeOutputEndpointList(%p,%p) enter", head_flit, curr_network_node);
 
-   Router::Id curr_router_id = curr_router->getId();
+   Router::Id curr_router_id = curr_network_node->getRouterId();
    core_id_t curr_core_id = curr_router_id._core_id;
    SInt32 cx, cy;
    computeEMeshPosition(curr_core_id, cx, cy);
@@ -258,7 +258,7 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Router
 
       Router::Id router_id(*it, router_index);
       Channel::Endpoint& output_endpoint = \
-            curr_router->getOutputEndpointFromRouterId(router_id);
+            curr_network_node->getOutputEndpointFromRouterId(router_id);
       output_endpoint_list.push_back(output_endpoint);
       
       LOG_PRINT("Next Router(%i,%i), Output Endpoint(%i,%i)", \
@@ -270,7 +270,7 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Router
    head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_list);
    
    LOG_PRINT("computeOutputEndpointList(%p,%p) exit, channel_endpoint_list.size(%u)", \
-         head_flit, curr_router, head_flit->_output_endpoint_list->size());
+         head_flit, curr_network_node, head_flit->_output_endpoint_list->size());
 }
 
 void

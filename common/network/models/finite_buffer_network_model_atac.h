@@ -34,7 +34,7 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
          CLUSTER_BASED,
          NUM_GLOBAL_ROUTING_STRATEGIES
       };
-      enum RouterType
+      enum NodeType
       {
          CORE_INTERFACE = -1,
          EMESH = 0,
@@ -99,7 +99,7 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       // Computing access points
       void createAccessPointList();
       // Creating router object
-      Router* createRouter(RouterType router_type);
+      NetworkNode* createNetworkNode(NodeType node_type);
 
       //// Routing Functions
       // Compute the Global route taken by a packet (ENet / ONet)
@@ -113,18 +113,18 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       LocalRoute parseLocalRoute(string str);
 
       // Compute Next Hops
-      void computeNextHopsOnENet(Router* curr_router, \
+      void computeNextHopsOnENet(NetworkNode* curr_network_node, \
             core_id_t sender, core_id_t receiver, \
             vector<Channel::Endpoint>& output_endpoint_list);
-      void computeNextHopsOnONet(Router* curr_router, \
+      void computeNextHopsOnONet(NetworkNode* curr_network_node, \
             core_id_t sender, core_id_t receiver, \
             vector<Channel::Endpoint>& output_endpoint_list);
-      void computeNextHopsOnBNet(Router* curr_router, \
+      void computeNextHopsOnBNet(NetworkNode* curr_network_node, \
             core_id_t sender, core_id_t receiver, \
             vector<Channel::Endpoint>& output_endpoint_list);
       
       // Virtual Function in FiniteBufferNetworkModel
-      void computeOutputEndpointList(Flit* head_flit, Router* curr_router);
+      void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
       UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits)
       { return 0; /* FIXME: Fill me in */ }
 };

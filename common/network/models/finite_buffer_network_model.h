@@ -6,7 +6,7 @@ using namespace std;
 
 #include "network_model.h"
 #include "network.h"
-#include "router.h"
+#include "network_node.h"
 #include "lock.h"
 
 class FiniteBufferNetworkModel : public NetworkModel
@@ -18,10 +18,10 @@ class FiniteBufferNetworkModel : public NetworkModel
       void enable() { _enabled = true; }
       void disable() { _enabled = false; }
 
-      // FIXME: Virtual Functions which are pure in network_model.h
+      // Virtual Functions which are pure in network_model.h
       void reset() { }
-      UInt32 computeAction(const NetPacket& pkt) { return 0; }
-      void routePacket(const NetPacket& pkt, vector<Hop>& nextHops) { }
+      UInt32 computeAction(const NetPacket& pkt) { assert(false); return 0; }
+      void routePacket(const NetPacket& pkt, vector<Hop>& nextHops) { assert(false); }
       
       // Process Received Packet to record packet delays
       void processReceivedPacket(NetPacket& pkt);
@@ -34,17 +34,17 @@ class FiniteBufferNetworkModel : public NetworkModel
       void receiveNetPacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list_to_send, \
             list<NetPacket*>& net_packet_list_to_receive);
 
-      // Get Router
-      Router* getRouter(SInt32 router_index)
-      { return _router_list[router_index]; }
+      // Get NetworkNode
+      NetworkNode* getNetworkNode(SInt32 node_index)
+      { return _network_node_list[node_index]; }
 
    protected:
       // If the network model is enabled
       bool _enabled;
       // Core Id on which this object is present
       core_id_t _core_id;
-      // Routers that are present on this core: There is a one-to-one mapping here
-      vector<Router*> _router_list;
+      // Network Nodes that are present on this core: There is a one-to-one mapping here
+      vector<NetworkNode*> _network_node_list;
       // Flow Control Scheme
       FlowControlScheme::Type _flow_control_scheme;
       // Flit Width
@@ -67,12 +67,12 @@ class FiniteBufferNetworkModel : public NetworkModel
       UInt64 _total_contention_delay;
 
       // Compute the output endpoints->[channel, index] of a particular flit
-      virtual void computeOutputEndpointList(Flit* head_flit, Router* curr_router) = 0;
+      virtual void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node) = 0;
       // Compute Unloaded delay
       virtual UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits) = 0;
 
       // Construct NetPacket from NetworkMsg
-      void constructNetPackets(Router* curr_router, vector<NetworkMsg*>& network_msg_list, \
+      void constructNetPackets(NetworkNode* curr_network_node, vector<NetworkMsg*>& network_msg_list,
             list<NetPacket*>& net_packet_list);
       // Receive raw packet containing actual application data (non-modeling packet)
       bool receiveRawPacket(NetPacket* raw_packet);
@@ -80,7 +80,7 @@ class FiniteBufferNetworkModel : public NetworkModel
       NetPacket* receiveModelingPacket(NetPacket* modeling_packet);
 
       // Utils
-      void addNetPacketEndpoints(NetPacket* net_packet, \
+      void addNetPacketEndpoints(NetPacket* net_packet,
             Router::Id& sender_router_id, Router::Id& receiver_router_id);
       SInt32 computeNumFlits(SInt32 packet_length);
       UInt64 computePacketId(core_id_t sender, UInt64 sequence_num);
