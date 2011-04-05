@@ -491,7 +491,7 @@ FiniteBufferNetworkModelAtac::computeOutputEndpointList(Flit* head_flit, Network
    assert(_core_id == curr_router_id._core_id);
 
    // Output Endpoint List
-   vector<Channel::Endpoint> output_endpoint_list;
+   vector<Channel::Endpoint> output_endpoint_vec;
 
    // First make the routing decision (ENet/ONet)
    // 1) ENet - go completely on ENet
@@ -500,15 +500,15 @@ FiniteBufferNetworkModelAtac::computeOutputEndpointList(Flit* head_flit, Network
    if (global_route == GLOBAL_ENET)
    {
       computeNextHopsOnENet(curr_network_node, head_flit->_sender, head_flit->_receiver, \
-            output_endpoint_list);
+            output_endpoint_vec);
    }
    else if (global_route == GLOBAL_ONET)
    {
       computeNextHopsOnONet(curr_network_node, head_flit->_sender, head_flit->_receiver, \
-            output_endpoint_list);
+            output_endpoint_vec);
    }
 
-   head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_list);
+   head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_vec);
 }
 
 FiniteBufferNetworkModelAtac::GlobalRoute
@@ -554,7 +554,7 @@ FiniteBufferNetworkModelAtac::getBNetChannelId(core_id_t sender)
 void
 FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_node,
       core_id_t sender, core_id_t receiver,
-      vector<Channel::Endpoint>& output_endpoint_list)
+      vector<Channel::Endpoint>& output_endpoint_vec)
 {
    // See if we are on the sender or receiver cluster
    Router::Id curr_router_id = curr_network_node->getRouterId();
@@ -568,7 +568,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
          LocalRoute local_route = computeLocalRoute(receiver);
          if (local_route == LOCAL_BNET)
          {
-            computeNextHopsOnBNet(curr_network_node, sender, receiver, output_endpoint_list);
+            computeNextHopsOnBNet(curr_network_node, sender, receiver, output_endpoint_vec);
          }
          else // (local_route == LOCAL_ENET)
          {
@@ -579,7 +579,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
                {
                   Channel::Endpoint& output_endpoint = \
                         curr_network_node->getOutputEndpointFromRouterId(*it);
-                  output_endpoint_list.push_back(output_endpoint);
+                  output_endpoint_vec.push_back(output_endpoint);
                }
             }
             else // (receiver != NetPacket::BROADCAST)
@@ -587,7 +587,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
                Router::Id& access_point = getNearestAccessPoint(receiver);
                Channel::Endpoint& output_endpoint = \
                      curr_network_node->getOutputEndpointFromRouterId(access_point);
-               output_endpoint_list.push_back(output_endpoint);
+               output_endpoint_vec.push_back(output_endpoint);
             }
          }
       }
@@ -596,7 +596,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
          // Route is ENet by default since BNet takes the flit directly to the core
          // (curr_network_node, sender, receiver, next_hop_list)
          Router::Id& access_point = getNearestAccessPoint(curr_router_id._core_id);
-         computeNextHopsOnENet(curr_network_node, access_point._core_id, receiver, output_endpoint_list);
+         computeNextHopsOnENet(curr_network_node, access_point._core_id, receiver, output_endpoint_vec);
       }
    }
 
@@ -610,7 +610,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
          {
             // One channel -> 0, Broadcast -> Channel::Endpoint::ALL
             Channel::Endpoint output_endpoint(0, Channel::Endpoint::ALL);
-            output_endpoint_list.push_back(output_endpoint);
+            output_endpoint_vec.push_back(output_endpoint);
          }
          else // (receiver != NetPacket::BROADCAST)
          {
@@ -620,7 +620,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
 
             Channel::Endpoint& output_endpoint = \
                   curr_network_node->getOutputEndpointFromRouterId(receiver_router_id);
-            output_endpoint_list.push_back(output_endpoint);
+            output_endpoint_vec.push_back(output_endpoint);
          }
       }
       else if (isAccessPoint(curr_router_id))
@@ -630,13 +630,13 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
 
          Channel::Endpoint& output_endpoint = \
                curr_network_node->getOutputEndpointFromRouterId(receiver_router_id);
-         output_endpoint_list.push_back(output_endpoint);
+         output_endpoint_vec.push_back(output_endpoint);
       }
       else // (!isHub(curr_router_id) && !isAccessPoint(curr_router_id))
       {
          Router::Id access_point = getNearestAccessPoint(curr_router_id._core_id);
-         // (sender, access_point /* receiver */, output_endpoint_list)
-         computeNextHopsOnENet(curr_network_node, sender, access_point._core_id, output_endpoint_list);
+         // (sender, access_point /* receiver */, output_endpoint_vec)
+         computeNextHopsOnENet(curr_network_node, sender, access_point._core_id, output_endpoint_vec);
       }
    }
 }
@@ -644,7 +644,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
 void
 FiniteBufferNetworkModelAtac::computeNextHopsOnENet(NetworkNode* curr_network_node,
       core_id_t sender, core_id_t receiver,
-      vector<Channel::Endpoint>& output_endpoint_list)
+      vector<Channel::Endpoint>& output_endpoint_vec)
 {
    Router::Id curr_router_id = curr_network_node->getRouterId();
    core_id_t curr_core_id = curr_router_id._core_id;
@@ -712,26 +712,26 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnENet(NetworkNode* curr_network_no
    {
       Channel::Endpoint& output_endpoint = \
             curr_network_node->getOutputEndpointFromRouterId(*it);
-      output_endpoint_list.push_back(output_endpoint);
+      output_endpoint_vec.push_back(output_endpoint);
    }
 }
 
 void
 FiniteBufferNetworkModelAtac::computeNextHopsOnBNet(NetworkNode* curr_network_node,
       core_id_t sender, core_id_t receiver,
-      vector<Channel::Endpoint>& output_endpoint_list)
+      vector<Channel::Endpoint>& output_endpoint_vec)
 {
    if (receiver == NetPacket::BROADCAST)
    {
       Channel::Endpoint output_endpoint(getBNetChannelId(sender), Channel::Endpoint::ALL);
-      output_endpoint_list.push_back(output_endpoint);
+      output_endpoint_vec.push_back(output_endpoint);
    }
    else // (receiver != NetPacket::BROADCAST)
    {
       Router::Id receiver_router_id(receiver, CORE_INTERFACE);
       Channel::Endpoint& output_endpoint = \
             curr_network_node->getOutputEndpointFromRouterId(receiver_router_id);
-      output_endpoint_list.push_back(output_endpoint);
+      output_endpoint_vec.push_back(output_endpoint);
    }
 }
 

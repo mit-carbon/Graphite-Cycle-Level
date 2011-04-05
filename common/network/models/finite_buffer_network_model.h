@@ -71,17 +71,12 @@ class FiniteBufferNetworkModel : public NetworkModel
       // Compute Unloaded delay
       virtual UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits) = 0;
 
-      // Construct NetPacket from NetworkMsg
-      void constructNetPackets(NetworkNode* curr_network_node, vector<NetworkMsg*>& network_msg_list,
-            list<NetPacket*>& net_packet_list);
       // Receive raw packet containing actual application data (non-modeling packet)
       bool receiveRawPacket(NetPacket* raw_packet);
       // Receive modeling packet containing timing information (non-raw packet)
       NetPacket* receiveModelingPacket(NetPacket* modeling_packet);
 
       // Utils
-      void addNetPacketEndpoints(NetPacket* net_packet,
-            Router::Id& sender_router_id, Router::Id& receiver_router_id);
       SInt32 computeNumFlits(SInt32 packet_length);
       UInt64 computePacketId(core_id_t sender, UInt64 sequence_num);
 

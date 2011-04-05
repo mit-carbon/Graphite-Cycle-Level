@@ -163,13 +163,13 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
    }
   
    // Create the router model 
-   return new NetworkNode(Router::Id(_core_id, EMESH), \
-         _flit_width, \
-         router_performance_model, \
-         router_power_model, \
-         link_performance_model_list, \
-         link_power_model_list, \
-         input_channel_to_router_id_list__mapping, \
+   return new NetworkNode(Router::Id(_core_id, EMESH),
+         _flit_width,
+         router_performance_model,
+         router_power_model,
+         link_performance_model_list,
+         link_power_model_list,
+         input_channel_to_router_id_list__mapping,
          output_channel_to_router_id_list__mapping);
 }
 
@@ -184,7 +184,7 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Networ
    computeEMeshPosition(curr_core_id, cx, cy);
 
    list<core_id_t> next_dest_list;
-   vector<Channel::Endpoint> output_endpoint_list;
+   vector<Channel::Endpoint> output_endpoint_vec;
 
    if (head_flit->_receiver == NetPacket::BROADCAST)
    {
@@ -259,7 +259,7 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Networ
       Router::Id router_id(*it, router_index);
       Channel::Endpoint& output_endpoint = \
             curr_network_node->getOutputEndpointFromRouterId(router_id);
-      output_endpoint_list.push_back(output_endpoint);
+      output_endpoint_vec.push_back(output_endpoint);
       
       LOG_PRINT("Next Router(%i,%i), Output Endpoint(%i,%i)", \
             router_id._core_id, router_id._index, \
@@ -267,7 +267,7 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Networ
    }
 
    // Initialize the output channel struct inside head_flit
-   head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_list);
+   head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_vec);
    
    LOG_PRINT("computeOutputEndpointList(%p,%p) exit, channel_endpoint_list.size(%u)", \
          head_flit, curr_network_node, head_flit->_output_endpoint_list->size());

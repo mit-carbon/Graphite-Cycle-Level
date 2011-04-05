@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-using namespace std;
 
 class BufferManagementScheme
 {
@@ -14,5 +13,6 @@ class BufferManagementScheme
          NUM_BUFFER_MANAGEMENT_SCHEMES
       };
 
-      static Type parse(string buffer_management_scheme_str);
+      static Type parse(std::string buffer_management_scheme_str);
+      static std::string getTypeString(Type type);
 };

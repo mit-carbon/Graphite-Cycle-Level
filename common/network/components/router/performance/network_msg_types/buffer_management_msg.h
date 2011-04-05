@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include "network_msg.h"
 #include "buffer_management_scheme.h"
 
@@ -23,4 +24,5 @@ class BufferManagementMsg : public NetworkMsg
      
       NetworkMsg* clone() { return new BufferManagementMsg(*this); }
       UInt32 size() { return sizeof(*this); }
+      std::string getTypeString() { return BufferManagementScheme::getTypeString(_type); }
 };
