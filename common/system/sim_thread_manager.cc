@@ -29,12 +29,21 @@ SimThreadManager::initializeSimThreadIDToCoreIDMappings()
    // Compute a stupid mapping -- Refine Later
    SInt32 sim_thread_id = 0;
    Config::CoreList core_id_list = Config::getSingleton()->getCoreListForCurrentProcess();
+   
+   SInt32 num_cores_per_sim_thread = core_id_list.size() / num_sim_threads;
    _sim_thread_id__to__core_id_list__mapping.resize(num_sim_threads);
+
+   SInt32 core_index = 0;
    for (Config::CLCI i = core_id_list.begin(); i != core_id_list.end(); i++)
    {
       _core_id__to__sim_thread_id__mapping[*i] = sim_thread_id;
+      fprintf(stderr, "Core Id(%i), Sim Thread Id(%i)\n", (*i), sim_thread_id);
       _sim_thread_id__to__core_id_list__mapping[sim_thread_id].push_back(*i);
-      sim_thread_id = (sim_thread_id + 1) % num_sim_threads;
+      
+      core_index ++;
+      if ((core_index % num_cores_per_sim_thread) == 0)
+         sim_thread_id = ((sim_thread_id + 1) % num_sim_threads);
+      assert(sim_thread_id < num_sim_threads);
    }
 }
 
