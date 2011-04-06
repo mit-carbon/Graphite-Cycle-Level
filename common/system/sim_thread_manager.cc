@@ -37,7 +37,6 @@ SimThreadManager::initializeSimThreadIDToCoreIDMappings()
    for (Config::CLCI i = core_id_list.begin(); i != core_id_list.end(); i++)
    {
       _core_id__to__sim_thread_id__mapping[*i] = sim_thread_id;
-      fprintf(stderr, "Core Id(%i), Sim Thread Id(%i)\n", (*i), sim_thread_id);
       _sim_thread_id__to__core_id_list__mapping[sim_thread_id].push_back(*i);
       
       core_index ++;
