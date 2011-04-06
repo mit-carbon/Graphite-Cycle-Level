@@ -11,7 +11,7 @@
 #include "carbon_user.h"
 #include "synthetic_network.h"
 
-#define DEBUG 1
+// #define DEBUG 1
 
 // Network Traffic Pattern Type
 NetworkTrafficType _traffic_pattern_type = UNIFORM_RANDOM;
@@ -30,7 +30,7 @@ PacketType _packet_type = USER_2;
 SInt32 _flit_width = 64;
 
 CoreSpVars* _core_sp_vars;
-UInt64 _quantum = 10000;
+UInt64 _quantum = 1000;
 Semaphore _semaphore;
 
 UInt32 EVENT_NET_SEND = 100;
@@ -74,6 +74,7 @@ int main(int argc, char* argv[])
          exit(-1);
       }
    }
+
    debug_printf("Finished parsing command line arguments\n");
 
    _num_cores = (SInt32) Config::getSingleton()->getApplicationCores();
@@ -179,10 +180,10 @@ void initializeCoreSpVars()
             break;
       }
 
-      RandNum rand_num(0,1 /* range */, i /* seed */);
+      RandNum* rand_num = new RandNum(0,1 /* range */, i /* seed */);
 
       // Populate the core specific structure
-      _core_sp_vars[i].init(&rand_num, send_vec, receive_vec);
+      _core_sp_vars[i].init(rand_num, send_vec, receive_vec);
    }
 }
 
@@ -208,6 +209,12 @@ void processNetSendEvent(Event* event)
    {
       if ((total_packets_sent < _total_packets) && (canSendPacket(_offered_load, rand_num)))
       {
+         if ((core->getId() == 0) && ((total_packets_sent % 100) == 0))
+         {
+            printf("Core(0) sending packet(%llu), Time(%llu)\n", \
+                  (long long unsigned int) total_packets_sent, (long long unsigned int) event->getTime());
+         }
+
          // Send a packet to its destination core
          Byte data[_packet_size];
          SInt32 receiver = send_vec[total_packets_sent % send_vec.size()];
@@ -236,7 +243,15 @@ void processRecvdPacket(void* obj, NetPacket net_packet)
    Core* recv_core = (Core*) obj;
    core_id_t receiver = recv_core->getId();
    assert((receiver >= 0) && (receiver < _num_cores));
+   
    UInt64& total_packets_received = _core_sp_vars[receiver]._total_packets_received;
+   
+   if ((recv_core->getId() == 0) && ((total_packets_received % 100) == 0))
+   {
+      printf("Core(0) receiving packet(%llu), Time(%llu)\n", \
+            (long long unsigned int) total_packets_received, (long long unsigned int) net_packet.time);
+   }
+
    total_packets_received ++;
 
    if (total_packets_received == _total_packets)

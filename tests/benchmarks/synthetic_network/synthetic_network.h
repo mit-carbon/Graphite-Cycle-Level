@@ -22,7 +22,8 @@ public:
    {
       double result;
       drand48_r(&rand_buffer, &result);
-      return (result * (_end - _start) + _start);
+      double num = result * (_end - _start) + _start;
+      return num;
    }
 
 private:
@@ -35,7 +36,7 @@ class CoreSpVars
 {
 public:
    CoreSpVars() : _total_packets_sent(0), _total_packets_received(0), _last_packet_time(0) {}
-   ~CoreSpVars() {}
+   ~CoreSpVars() { delete _rand_num; }
    void init(RandNum* rand_num, vector<int>& send_vec, vector<int>& receive_vec)
    {
       _rand_num = rand_num;
