@@ -31,6 +31,8 @@ MetaEventHeap::updateTime(SInt32 event_index, UInt64 time)
 {
    _lock.acquire();
 
+   UInt64 initial_time = _first_event_time;
+
    LOG_PRINT("MetaEventHeap(%p): updateTime(%i, %llu)", this, event_index, time);   
    bool top_of_heap_change = _heap.updateKey(_heap_nodes[event_index], time);
    if (top_of_heap_change)
@@ -40,6 +42,13 @@ MetaEventHeap::updateTime(SInt32 event_index, UInt64 time)
          _parent_event_heap->updateTime(_event_heap_index_in_parent, next_event_time);
       
       _first_event_time = next_event_time;
+
+      UInt64 final_time = _first_event_time;
+      if (!_parent_event_heap)
+      {
+         LOG_ASSERT_ERROR((initial_time == UINT64_MAX) || (final_time > initial_time),
+               "Initial (%llu), Final(%llu)", initial_time, final_time);
+      }
    }
 
    _lock.release();

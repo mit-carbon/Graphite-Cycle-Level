@@ -57,12 +57,12 @@ EventHeap::push(Event* event)
 void
 EventHeap::processEvents()
 {
+   _lock.acquire();
+   
    LOG_PRINT("EventHeap::processEvents() enter");
    LOG_PRINT("First Event Time on Entry(%llu) - (%p)", _first_event_time, &_first_event_time);
    while (Sim()->getEventManager()->isReady(_first_event_time))
    {
-      _lock.acquire();
-
       // Process the event at the top of the heap
       Event* event = (Event*) (_heap.min()).second;
       LOG_ASSERT_ERROR(event && (Sim()->getEventManager()->isReady(event->getTime())),
@@ -95,11 +95,12 @@ EventHeap::processEvents()
       // Update _first_event_time
       _first_event_time = next_event_time;
 
-      _lock.release();
-
       // Wake up others(/sim_threads) who are sleeping who have ready events
       Sim()->getEventManager()->wakeUpWaiters();
    }
+      
    LOG_PRINT("First Event Time on Exit(%llu) - (%p)", _first_event_time, &_first_event_time);
    LOG_PRINT("EventHeap::processEvents() exit");
+   
+   _lock.release(); 
 }

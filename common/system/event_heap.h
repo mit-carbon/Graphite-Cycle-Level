@@ -22,7 +22,7 @@ class EventHeap : public EventQueue
 
    private:
       // Timestamp of the most recent event
-      UInt64 _first_event_time;
+      volatile UInt64 _first_event_time;
       MinHeap _heap;
 
       // Locking the event heap
