@@ -74,6 +74,9 @@ private:
    map<Router::Id, Channel::Endpoint> _router_id_to_input_endpoint_mapping;
    map<Router::Id, Channel::Endpoint> _router_id_to_output_endpoint_mapping;
 
+   // Error Checking
+   UInt64 _last_net_packet_time;
+
    // Normalize Time
    void normalizeTime(NetworkMsg* network_msg);
    // Communicate Progress Rate Info to adjoining router
@@ -87,4 +90,7 @@ private:
   
    // Create Router <-> Channel Mappings 
    void createMappings();
+
+   // Print NetPacket
+   void printNetPacket(NetPacket* net_packet, bool is_input_msg = false);
 };

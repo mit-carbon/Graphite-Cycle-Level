@@ -1,5 +1,9 @@
+#include <sstream>
+using std::ostringstream;
 #include "network_node.h"
 #include "utils.h"
+#include "credit_msg.h"
+#include "on_off_msg.h"
 #include "log.h"
 
 NetworkNode::NetworkNode(Router::Id router_id, \
@@ -17,7 +21,8 @@ NetworkNode::NetworkNode(Router::Id router_id, \
    _link_performance_model_list(link_performance_model_list),
    _link_power_model_list(link_power_model_list),
    _input_channel_to_router_id_list__mapping(input_channel_to_router_id_list__mapping),
-   _output_channel_to_router_id_list__mapping(output_channel_to_router_id_list__mapping)
+   _output_channel_to_router_id_list__mapping(output_channel_to_router_id_list__mapping),
+   _last_net_packet_time(0)
 {
    assert(_router_performance_model);
    createMappings();
@@ -34,7 +39,13 @@ NetworkNode::~NetworkNode()
 void
 NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& output_net_packet_list)
 {
-   LOG_PRINT("processNetPacket(%p, %p) enter", this, input_net_packet);
+   LOG_ASSERT_ERROR(input_net_packet->time >= _last_net_packet_time,
+         "Curr Net Packet Time(%llu), Last Net Packet Time(%llu)", input_net_packet->time, _last_net_packet_time);
+   _last_net_packet_time = input_net_packet->time;
+
+   LOG_PRINT("#########################################################");
+   printNetPacket(input_net_packet, true);
+   LOG_PRINT("=========================================================");
 
    NetworkMsg* input_network_msg = (NetworkMsg*) input_net_packet->data;
    vector<NetworkMsg*> output_network_msg_list;
@@ -58,12 +69,6 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
          // input_endpoint (for flits)
          flit->_input_endpoint = getInputEndpointFromRouterId(sender_router_id);
          
-         LOG_PRINT("Flit: Time(%llu), Type(%s), Sender(%i), Receiver(%i), Input Endpoint(%i,%i), Sequence Num(%llu)", \
-               flit->_net_packet->time, (flit->getTypeString()).c_str(), \
-               flit->_sender, flit->_receiver, \
-               flit->_input_endpoint._channel_id, flit->_input_endpoint._index, \
-               flit->_net_packet->sequence_num);
-
          normalizeTime(flit);
 
          _router_performance_model->processDataMsg(flit, output_network_msg_list);
@@ -79,9 +84,6 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
          // output_endpoint (for buffer management msgs)
          buffer_msg->_output_endpoint = getOutputEndpointFromRouterId(sender_router_id);
  
-         LOG_PRINT("Buffer Management: Output Endpoint(%i,%i)", \
-               buffer_msg->_output_endpoint._channel_id, buffer_msg->_output_endpoint._index);
-
          normalizeTime(buffer_msg);
 
          // Add Credit Pipeline Delay
@@ -112,8 +114,15 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
       // Construct NetPacket and add to list
       constructNetPackets(output_network_msg, output_net_packet_list);
    }
- 
-   LOG_PRINT("processNetPacket(%p, %p) exit", this, input_net_packet);
+
+   for (list<NetPacket*>::iterator it = output_net_packet_list.begin();
+         it != output_net_packet_list.end(); it ++)
+   {
+      if (it != output_net_packet_list.begin())
+         LOG_PRINT("_________________________________________________________");
+      printNetPacket(*it);
+   }
+   LOG_PRINT("#########################################################");
 }
 
 void
@@ -140,17 +149,10 @@ NetworkNode::constructNetPackets(NetworkMsg* network_msg, list<NetPacket*>& net_
             receiving_router_id_list.push_back(getRouterIdFromOutputEndpoint(flit->_output_endpoint));
          }
 
-         LOG_PRINT("Flit: Time(%llu), Type(%s), Output Endpoint(%i,%i)", \
-               (long long unsigned int) flit->_net_packet->time, \
-               (flit->getTypeString()).c_str(), \
-               flit->_output_endpoint._channel_id, flit->_output_endpoint._index);
-
          vector<Router::Id>::iterator router_it = receiving_router_id_list.begin();
          for ( ; (router_it + 1) != receiving_router_id_list.end(); router_it ++)
          {
             Router::Id& receiver_router_id = *router_it;
-            LOG_PRINT("Flit: Next Router Id(%i,%i)", \
-                  receiver_router_id._core_id, receiver_router_id._index);
             
             // Clone NetPacket and Flit
             NetPacket* cloned_net_packet = flit->_net_packet->clone();
@@ -162,9 +164,7 @@ NetworkNode::constructNetPackets(NetworkMsg* network_msg, list<NetPacket*>& net_
          }
 
          Router::Id& receiver_router_id = *router_it;
-         LOG_PRINT("Flit: Next Router Id(%i,%i)", \
-               receiver_router_id._core_id, receiver_router_id._index);
-            
+ 
          addNetPacketEndpoints(flit->_net_packet, getRouterId(), receiver_router_id);
          net_packet_list.push_back(flit->_net_packet);
       }
@@ -185,14 +185,8 @@ NetworkNode::constructNetPackets(NetworkMsg* network_msg, list<NetPacket*>& net_
                buffer_msg->size(), (void*) (buffer_msg),
                false /* is_raw*/);
         
-         LOG_PRINT("Buffer Management: Time(%llu), Input Endpoint(%i,%i)", \
-               (long long unsigned int) new_net_packet->time, \
-               buffer_msg->_input_endpoint._channel_id, buffer_msg->_input_endpoint._index);
-         
          // Get receiver router id
          Router::Id& receiver_router_id = getRouterIdFromInputEndpoint(buffer_msg->_input_endpoint);
-         LOG_PRINT("Buffer Management: Next Router Id(%i,%i)", \
-               receiver_router_id._core_id, receiver_router_id._index);
 
          addNetPacketEndpoints(new_net_packet, getRouterId(), receiver_router_id);
          net_packet_list.push_back(new_net_packet);
@@ -283,7 +277,6 @@ NetworkNode::normalizeTime(NetworkMsg* network_msg)
             // _time_normalizer->normalize(flit->_net_packet->time, flit->_requester);
             // Set the entry time to account for the time spent in the router
             flit->_normalized_time_at_entry = flit->_normalized_time;
-            LOG_PRINT("Normalize(DATA, %llu) -> %llu", flit->_net_packet->time, flit->_normalized_time);
          }
 
          break;
@@ -295,7 +288,6 @@ NetworkNode::normalizeTime(NetworkMsg* network_msg)
             // Re-normalize according to average rate of progress
             UInt64 renormalized_time = buffer_msg->_normalized_time;
             // _time_normalizer->renormalize(buffer_msg->_normalized_time, buffer_msg->_average_rate_of_progress);
-            LOG_PRINT("Renormalize(BUFFER, %llu) -> %llu", buffer_msg->_normalized_time, renormalized_time);
             buffer_msg->_normalized_time = renormalized_time;
          }
 
@@ -398,4 +390,83 @@ NetworkNode::getRouterIdListFromOutputChannel(SInt32 output_channel_id)
 {
    assert( (output_channel_id >= 0) && (output_channel_id < (SInt32) _output_channel_to_router_id_list__mapping.size()) );
    return _output_channel_to_router_id_list__mapping[output_channel_id];
+}
+
+void
+NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
+{
+   NetworkMsg* network_msg = (NetworkMsg*) net_packet->data;
+
+   LOG_PRINT("Network Msg [Type(%s), Time(%llu), Normalized Time(%llu), Sender Router(%i,%i), Receiver Router(%i,%i), Input Endpoint(%i,%i), Output Endpoint(%i,%i)]",
+         network_msg->getTypeString().c_str(),
+         (long long unsigned int) net_packet->time,
+         (long long unsigned int) network_msg->_normalized_time,
+         net_packet->sender, network_msg->_sender_router_index,
+         net_packet->receiver, network_msg->_receiver_router_index,
+         network_msg->_input_endpoint._channel_id, network_msg->_input_endpoint._index,
+         network_msg->_output_endpoint._channel_id, network_msg->_output_endpoint._index);
+
+   switch (network_msg->_type)
+   {
+
+   case NetworkMsg::DATA:
+      
+      {
+         Flit* flit = (Flit*) network_msg;
+         LOG_PRINT("Flit [Type(%s), Normalized Time at Entry(%llu), Delay(%llu), Length(%i), Sender(%i), Receiver(%i), Requester(%i), Net Packet(%p), Output Endpoint List(%p)]",
+               flit->getTypeString().c_str(),
+               (long long unsigned int) flit->_normalized_time_at_entry,
+               (long long unsigned int) (flit->_normalized_time - flit->_normalized_time_at_entry),
+               flit->_length,
+               flit->_sender,
+               flit->_receiver,
+               flit->_requester,
+               flit->_net_packet,
+               flit->_output_endpoint_list);
+
+         if ((flit->_type == Flit::HEAD) && (is_input_msg))
+         {
+            ChannelEndpointList* endpoint_list = flit->_output_endpoint_list;
+
+            ostringstream endpoints_str;
+            endpoints_str << "Head Flit [Output Endpoint List( ";
+            
+            while (endpoint_list->curr() != endpoint_list->last())
+            {
+               endpoints_str << "(" << endpoint_list->curr()._channel_id << "," << endpoint_list->curr()._index << "), ";
+               endpoint_list->incr();
+            }
+            endpoints_str <<  "(" << endpoint_list->curr()._channel_id << "," << endpoint_list->curr()._index << ") )]";
+            endpoint_list->incr();
+
+            LOG_PRINT("%s", endpoints_str.str().c_str());
+         }
+      }
+
+      break;
+
+   case NetworkMsg::BUFFER_MANAGEMENT:
+            
+      {
+         BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
+         LOG_PRINT("Buffer Management Msg [Type(%s)]", buffer_msg->getTypeString().c_str());
+
+         if (buffer_msg->_type == BufferManagementScheme::CREDIT)
+         {
+            CreditMsg* credit_msg = (CreditMsg*) buffer_msg;
+            LOG_PRINT("Credit Msg [Num Credits(%i)]", credit_msg->_num_credits);            
+         }
+         else if (buffer_msg->_type == BufferManagementScheme::ON_OFF)
+         {
+            OnOffMsg* on_off_msg = (OnOffMsg*) buffer_msg;
+            LOG_PRINT("On Off Msg [Status(%s)]", on_off_msg->_on_off_status ? "TRUE" : "FALSE");
+         }
+      }
+
+      break;
+
+   default:
+      LOG_PRINT_ERROR("Unrecognized Network Msg Type(%u)", network_msg->_type);
+      break;
+   }
 }
