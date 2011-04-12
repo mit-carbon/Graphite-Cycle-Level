@@ -14,6 +14,13 @@ using namespace std;
 #include "config.h"
 #include "log.h"
 
+// Static Variables
+SInt32 FiniteBufferNetworkModelAtac::_enet_width;
+SInt32 FiniteBufferNetworkModelAtac::_enet_height;
+SInt32 FiniteBufferNetworkModelAtac::_num_clusters;
+SInt32 FiniteBufferNetworkModelAtac::_cluster_size;
+SInt32 FiniteBufferNetworkModelAtac::_sqrt_cluster_size;
+
 FiniteBufferNetworkModelAtac::FiniteBufferNetworkModelAtac(Network* network, SInt32 network_id):
    FiniteBufferNetworkModel(network, network_id)
 {
@@ -487,7 +494,10 @@ FiniteBufferNetworkModelAtac::createNetworkNode(NodeType node_type)
 void
 FiniteBufferNetworkModelAtac::computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node)
 {
+   LOG_PRINT("computeOutputEndpointList(%p, %p) start", head_flit, curr_network_node);
    Router::Id curr_router_id = curr_network_node->getRouterId();
+   LOG_PRINT("Router Id [%i,%i])", curr_router_id._core_id, curr_router_id._index);
+   
    assert(_core_id == curr_router_id._core_id);
 
    // Output Endpoint List
@@ -499,16 +509,20 @@ FiniteBufferNetworkModelAtac::computeOutputEndpointList(Flit* head_flit, Network
    GlobalRoute global_route = computeGlobalRoute(head_flit->_sender, head_flit->_receiver);
    if (global_route == GLOBAL_ENET)
    {
+      LOG_PRINT("Global Route: ENET");
       computeNextHopsOnENet(curr_network_node, head_flit->_sender, head_flit->_receiver, \
             output_endpoint_vec);
    }
    else if (global_route == GLOBAL_ONET)
    {
+      LOG_PRINT("Global Route: ONET");
       computeNextHopsOnONet(curr_network_node, head_flit->_sender, head_flit->_receiver, \
             output_endpoint_vec);
    }
 
    head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_vec);
+   
+   LOG_PRINT("computeOutputEndpointList(%p, %p) end", head_flit, curr_network_node);
 }
 
 FiniteBufferNetworkModelAtac::GlobalRoute
@@ -618,6 +632,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
             core_id_t core_id_with_hub = getCoreIdWithOpticalHub(receiver_cluster_id);
             Router::Id receiver_router_id(core_id_with_hub, RECEIVING_HUB);
 
+            LOG_PRINT("Receiver Router Id(%i,%i)", receiver_router_id._core_id, receiver_router_id._index);
             Channel::Endpoint& output_endpoint = \
                   curr_network_node->getOutputEndpointFromRouterId(receiver_router_id);
             output_endpoint_vec.push_back(output_endpoint);
@@ -710,8 +725,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnENet(NetworkNode* curr_network_no
    list<Router::Id>::iterator it = next_dest_list.begin();
    for ( ; it != next_dest_list.end(); it ++)
    {
-      Channel::Endpoint& output_endpoint = \
-            curr_network_node->getOutputEndpointFromRouterId(*it);
+      Channel::Endpoint& output_endpoint = curr_network_node->getOutputEndpointFromRouterId(*it);
       output_endpoint_vec.push_back(output_endpoint);
    }
 }
@@ -859,4 +873,43 @@ Router::Id&
 FiniteBufferNetworkModelAtac::getNearestAccessPoint(core_id_t core_id)
 {
    return _access_point_list[computeSubClusterId(core_id)];
+}
+
+void
+FiniteBufferNetworkModelAtac::outputSummary(ostream& out)
+{
+   FiniteBufferNetworkModel::outputSummary(out);
+}
+
+pair<bool,SInt32>
+FiniteBufferNetworkModelAtac::computeCoreCountConstraints(SInt32 core_count)
+{
+   // This is before 'total_cores' is decided
+   SInt32 enet_width = (SInt32) floor (sqrt(core_count));
+   SInt32 enet_height = (SInt32) ceil (1.0 * core_count / enet_width);
+
+   assert(core_count <= enet_width * enet_height);
+   assert(core_count > (enet_width - 1) * enet_height);
+   assert(core_count > enet_width * (enet_height - 1));
+
+   return make_pair(true, enet_height * enet_width);
+}
+
+pair<bool,vector<core_id_t> >
+FiniteBufferNetworkModelAtac::computeMemoryControllerPositions(SInt32 num_memory_controllers)
+{
+   // Initialize the topology parameters in case called by an external model
+   initializeANetTopologyParameters();
+   // _enet_width, _enet_height, _cluster_size, _sqrt_cluster_size, _num_clusters
+
+   LOG_ASSERT_ERROR(num_memory_controllers <= _num_clusters,
+         "num_memory_controllers(%i), num_clusters(%i)", num_memory_controllers, _num_clusters);
+
+   vector<core_id_t> core_id_list_with_memory_controllers;
+   for (SInt32 i = 0; i < num_memory_controllers; i++)
+   {
+      core_id_list_with_memory_controllers.push_back(getCoreIdWithOpticalHub(i));
+   }
+
+   return (make_pair(true, core_id_list_with_memory_controllers));
 }

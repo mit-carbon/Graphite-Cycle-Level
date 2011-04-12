@@ -11,7 +11,10 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       volatile float getFrequency() { return _frequency; }
     
       // Output Summary 
-      void outputSummary(ostream& out) { /* FIXME: Fill me in */ }
+      void outputSummary(ostream& out);
+
+      static pair<bool,SInt32> computeCoreCountConstraints(SInt32 core_count);
+      static pair<bool,vector<core_id_t> > computeMemoryControllerPositions(SInt32 num_memory_controllers);
 
    private:
       ////// Private Enumerators
@@ -70,8 +73,6 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       LocalRoute _local_broadcast_route;
       LocalRoute _local_unicast_route;
 
-      // FIXME: Remove some of these to (non-static)
-
       //// Utilities
       static core_id_t computeCoreId(SInt32 x, SInt32 y);
       static void computeENetPosition(core_id_t core_id, SInt32& x, SInt32& y);
@@ -95,7 +96,8 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       SInt32 computeClusterHeight();
 
       //// Initialization
-      void initializeANetTopologyParameters();
+      static void initializeANetTopologyParameters();
+      
       // Computing access points
       void createAccessPointList();
       // Creating router object
@@ -125,6 +127,4 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       
       // Virtual Function in FiniteBufferNetworkModel
       void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
-      UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits)
-      { return 0; /* FIXME: Fill me in */ }
 };

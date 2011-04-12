@@ -60,7 +60,7 @@ NetworkModel::createModel(Network *net, SInt32 network_id, UInt32 model_type)
       return new FiniteBufferNetworkModelEMeshBroadcastTree(net, network_id);
 
    case FINITE_BUFFER_NETWORK_ATAC:
-      // return new FiniteBufferNetworkModelAtac(net, network_id);
+      return new FiniteBufferNetworkModelAtac(net, network_id);
 
    default:
       LOG_PRINT_ERROR("Unrecognized Network Model(%u)", model_type);
@@ -85,10 +85,13 @@ NetworkModel::parseNetworkType(string str)
       return FINITE_BUFFER_NETWORK_EMESH_BASIC;
    else if (str == "finite_buffer_emesh_broadcast_tree")
       return FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE;
-   else if (str == "finite_buffer_network_model_atac")
+   else if (str == "finite_buffer_atac")
       return FINITE_BUFFER_NETWORK_ATAC;
    else
-      return (UInt32)-1;
+   {
+      fprintf(stderr, "Unrecognized Network Type(%s)\n", str.c_str());
+      exit(EXIT_FAILURE);
+   }
 }
 
 pair<bool,SInt32>
@@ -99,7 +102,6 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
       case NETWORK_MAGIC:
       case NETWORK_EMESH_HOP_COUNTER:
       case NETWORK_ANALYTICAL_MESH:
-      case FINITE_BUFFER_NETWORK_ATAC:
          return make_pair(false,core_count);
 
       case NETWORK_EMESH_HOP_BY_HOP_BASIC:
@@ -109,6 +111,9 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
       case FINITE_BUFFER_NETWORK_EMESH_BASIC:
       case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
          return FiniteBufferNetworkModelEMesh::computeCoreCountConstraints(core_count);
+
+      case FINITE_BUFFER_NETWORK_ATAC:
+         return FiniteBufferNetworkModelAtac::computeCoreCountConstraints(core_count);
 
       default:
          fprintf(stderr, "Unrecognized network type(%u)\n", network_type);
@@ -125,7 +130,6 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
       case NETWORK_MAGIC:
       case NETWORK_EMESH_HOP_COUNTER:
       case NETWORK_ANALYTICAL_MESH:
-      case FINITE_BUFFER_NETWORK_ATAC:
          {
             SInt32 core_count = (SInt32) Config::getSingleton()->getTotalCores();
             SInt32 spacing_between_memory_controllers = core_count / num_memory_controllers;
@@ -146,6 +150,9 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
       case FINITE_BUFFER_NETWORK_EMESH_BASIC:
       case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
          return FiniteBufferNetworkModelEMesh::computeMemoryControllerPositions(num_memory_controllers);
+      
+      case FINITE_BUFFER_NETWORK_ATAC:
+         return FiniteBufferNetworkModelAtac::computeMemoryControllerPositions(num_memory_controllers);
 
       default:
          LOG_PRINT_ERROR("Unrecognized network type(%u)", network_type);
