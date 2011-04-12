@@ -68,10 +68,13 @@ EventInitiateMemoryAccess::process()
 void
 EventCompleteMemoryAccess::process()
 {
-   PerformanceModel* performance_model;
+   Core* core;
    DynamicInstructionInfo info;
 
-   _event_args >> performance_model >> info;
+   _event_args >> core >> info;
+
+   PerformanceModel* performance_model = core->getPerformanceModel();
+   assert(performance_model);
 
    if (Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE)
       ((CycleAccurate::PerformanceModel*) performance_model)->processDynamicInstructionInfo(info);

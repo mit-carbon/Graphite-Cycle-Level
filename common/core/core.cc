@@ -298,7 +298,7 @@ Core::completeMemoryAccess(MemoryAccessStatus& memory_access_status)
                                     (memory_access_status._mem_op_type == WRITE) ? Operand::WRITE : Operand::READ);
        
       UnstructuredBuffer event_args;
-      event_args << m_performance_model << info; 
+      event_args << this << info; 
       EventCompleteMemoryAccess* event = new EventCompleteMemoryAccess(memory_access_status._curr_time,
                                                                        event_args);
       Event::processInOrder(event, m_core_id, EventQueue::ORDERED);
