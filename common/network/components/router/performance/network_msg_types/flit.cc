@@ -4,6 +4,7 @@
 Flit::Flit(Type type, SInt32 length, core_id_t sender, core_id_t receiver, core_id_t requester):
    NetworkMsg(DATA),
    _normalized_time_at_entry(0),
+   _zero_load_delay(0),
    _length(length),
    _type(type),
    _sender(sender),
@@ -16,6 +17,7 @@ Flit::Flit(Type type, SInt32 length, core_id_t sender, core_id_t receiver, core_
 Flit::Flit(const Flit& rhs):
    NetworkMsg(rhs),
    _normalized_time_at_entry(rhs._normalized_time_at_entry),
+   _zero_load_delay(rhs._zero_load_delay),
    _length(rhs._length),
    _type(rhs._type),
    _sender(rhs._sender),

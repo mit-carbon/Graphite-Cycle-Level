@@ -28,6 +28,7 @@ class Flit : public NetworkMsg
       
       // Data Fields
       UInt64 _normalized_time_at_entry;
+      UInt64 _zero_load_delay;
       SInt32 _length;
       Type _type;
       core_id_t _sender;
