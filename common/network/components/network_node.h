@@ -50,8 +50,8 @@ public:
    { return _router_performance_model; }
 
    // Time Normalizer
-   TimeNormalizer* getTimeNormalizer()
-   { return _time_normalizer; }
+   // TimeNormalizer* getTimeNormalizer()
+   // { return _time_normalizer; }
 
 private:
    Router::Id _router_id;
@@ -66,7 +66,7 @@ private:
    vector<LinkPowerModel*> _link_power_model_list;
 
    // Time Normalizer
-   TimeNormalizer* _time_normalizer;
+   // TimeNormalizer* _time_normalizer;
 
    // Endpoint <-> Router Id mapping
    vector<vector<Router::Id> > _input_channel_to_router_id_list__mapping;

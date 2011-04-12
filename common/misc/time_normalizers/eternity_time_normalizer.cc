@@ -22,7 +22,8 @@ EternityTimeNormalizer::EternityTimeNormalizer(SInt32 num_entities):
 
 EternityTimeNormalizer::~EternityTimeNormalizer()
 {
-   assert(_num_active_entities == _num_entities);
+   LOG_ASSERT_ERROR(_num_active_entities == _num_entities,
+         "num_active_entities(%i), num_entities(%i)", _num_active_entities, _num_entities);
    delete [] _rate_of_progress_list;
 }
 

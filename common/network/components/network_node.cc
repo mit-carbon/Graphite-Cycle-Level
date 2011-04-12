@@ -28,12 +28,12 @@ NetworkNode::NetworkNode(Router::Id router_id, \
    createMappings();
 
    // Time Normalizer
-   _time_normalizer = TimeNormalizer::create(Config::getSingleton()->getApplicationCores());
+   // _time_normalizer = TimeNormalizer::create(Config::getSingleton()->getApplicationCores());
 }
 
 NetworkNode::~NetworkNode()
 {
-   delete _time_normalizer;
+   // delete _time_normalizer;
 }
 
 void

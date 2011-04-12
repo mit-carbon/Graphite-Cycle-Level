@@ -336,18 +336,18 @@ FiniteBufferNetworkModel::outputSummary(ostream& out)
       out << "    average packet latency (in ns): 0" << endl;
    }
 
-   // Mispredicted Normalization Requests
-   UInt64 total_mispredicted_normalization_requests = 0;
-   UInt64 total_normalization_requests = 0;
-   for (UInt32 i = 0; i < _network_node_list.size(); i++)
-   {
-      total_mispredicted_normalization_requests += \
-            _network_node_list[i]->getTimeNormalizer()->getTotalMispredicted();
-      total_normalization_requests += _network_node_list[i]->getTimeNormalizer()->getTotalRequests();
-   }
-   out << "    mispredicted normalization requests (%): "
-       << ((double) total_mispredicted_normalization_requests) * 100 / total_normalization_requests 
-       << endl;
+   // FIXME: Mispredicted Normalization Requests
+   // UInt64 total_mispredicted_normalization_requests = 0;
+   // UInt64 total_normalization_requests = 0;
+   // for (UInt32 i = 0; i < _network_node_list.size(); i++)
+   // {
+   //    total_mispredicted_normalization_requests +=
+   //          _network_node_list[i]->getTimeNormalizer()->getTotalMispredicted();
+   //    total_normalization_requests += _network_node_list[i]->getTimeNormalizer()->getTotalRequests();
+   // }
+   // out << "    mispredicted normalization requests (%): "
+   //     << ((double) total_mispredicted_normalization_requests) * 100 / total_normalization_requests 
+   //     << endl;
 }
 
 SInt32
