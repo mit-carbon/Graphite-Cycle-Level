@@ -1,5 +1,5 @@
-TARGET=network_node_test
-SOURCES = network_node_test.cc
+TARGET=network_node_test1
+SOURCES = network_node_test1.cc
 
 CORES ?= 1
 MODE ?= 
