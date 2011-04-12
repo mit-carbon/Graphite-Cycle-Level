@@ -8,29 +8,7 @@ using std::vector;
 using std::string;
 
 #include "event.h"
-
-class RandNum
-{
-public:
-   RandNum(double start, double end, SInt32 seed):
-      _start(start), _end(end)
-   { 
-      srand48_r(seed, &rand_buffer); 
-   }
-   ~RandNum() {}
-   double next()
-   {
-      double result;
-      drand48_r(&rand_buffer, &result);
-      double num = result * (_end - _start) + _start;
-      return num;
-   }
-
-private:
-   struct drand48_data rand_buffer;
-   double _start;
-   double _end;
-};
+#include "rand_num.h"
 
 class CoreSpVars
 {
