@@ -22,8 +22,8 @@ public:
 
       SInt32 _channel_id;
       SInt32 _index;
-      const static SInt32 ALL = 0xdeadbeef;
+      static const SInt32 ALL;
    };
 
-   const static SInt32 INVALID = 0xbabecafe;
+   static const SInt32 INVALID;
 };

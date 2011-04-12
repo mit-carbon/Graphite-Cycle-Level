@@ -69,8 +69,6 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
       LOG_PRINT_ERROR("Could not read Electrical mesh parameters from the cfg file");
    }
      
-   _router_data_pipeline_delay = data_pipeline_delay;
-
    BufferManagementScheme::Type buffer_management_scheme = \
          BufferManagementScheme::parse(buffer_management_scheme_str);
    
@@ -153,8 +151,6 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
          ElectricalLinkPerformanceModel::create(link_type, \
                _frequency, link_length, _flit_width, 1);
       link_performance_model_list.push_back(link_performance_model);
-
-      _link_delay = link_performance_model->getDelay();
 
       ElectricalLinkPowerModel* link_power_model = \
          ElectricalLinkPowerModel::create(link_type, \
@@ -438,16 +434,6 @@ FiniteBufferNetworkModelEMesh::computeProcessToCoreMapping()
    }
 
    return (make_pair(true, process_to_core_mapping));
-}
-
-UInt64
-FiniteBufferNetworkModelEMesh::computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits)
-{
-   if (sender != receiver)
-      return ((computeEMeshDistance(sender, receiver) + 1) * (_router_data_pipeline_delay + _link_delay)) \
-             + (num_flits - 1);
-   else
-      return 0;
 }
 
 void

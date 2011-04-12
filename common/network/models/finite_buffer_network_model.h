@@ -22,9 +22,8 @@ class FiniteBufferNetworkModel : public NetworkModel
       void reset() { }
       UInt32 computeAction(const NetPacket& pkt) { assert(false); return 0; }
       void routePacket(const NetPacket& pkt, vector<Hop>& nextHops) { assert(false); }
+      void processReceivedPacket(NetPacket& pkt) { assert(false); }
       
-      // Process Received Packet to record packet delays
-      void processReceivedPacket(NetPacket& pkt);
       // Output Summary
       void outputSummary(ostream& out);
 
@@ -68,9 +67,10 @@ class FiniteBufferNetworkModel : public NetworkModel
 
       // Compute the output endpoints->[channel, index] of a particular flit
       virtual void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node) = 0;
-      // Compute Unloaded delay
-      virtual UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits) = 0;
 
+      // Process Received Packet to record packet delays
+      void updatePacketStatistics(NetPacket& pkt, UInt64 zero_load_delay);
+      
       // Receive raw packet containing actual application data (non-modeling packet)
       bool receiveRawPacket(NetPacket* raw_packet);
       // Receive modeling packet containing timing information (non-raw packet)
@@ -84,5 +84,5 @@ class FiniteBufferNetworkModel : public NetworkModel
       void initializePerformanceCounters();
 
       // misc
-      void printNetPacketList(const list<NetPacket*>& net_packet_list);
+      void printNetPacketList(const list<NetPacket*>& net_packet_list) const;
 };

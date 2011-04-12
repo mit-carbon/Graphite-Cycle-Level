@@ -36,8 +36,6 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
 
       // Main Routing Function
       void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
-      // Compute Unloaded Delay
-      UInt64 computeUnloadedDelay(core_id_t sender, core_id_t receiver, SInt32 num_flits);
 
       // Private Variables
       volatile float _frequency;
@@ -47,7 +45,4 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
       // Topology Parameters
       SInt32 _emesh_width;
       SInt32 _emesh_height;
-      // Delay Parameters
-      SInt32 _router_data_pipeline_delay;
-      SInt32 _link_delay;
 };

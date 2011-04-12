@@ -125,9 +125,6 @@ void Network::processPacket(NetPacket* packet)
       list<NetPacket*> net_packet_list_to_receive;
       finite_buffer_model->receiveNetPacket(packet, net_packet_list_to_send, net_packet_list_to_receive);
       
-      // Free the memory occupied by the packet (header + data)
-      packet->release();
-
       // Send packets destined for other cores
       sendPacketList(net_packet_list_to_send);
       
@@ -166,8 +163,12 @@ void Network::receivePacket(NetPacket* packet)
    LOG_PRINT("receivePacket(%p) enter", packet);
 
    NetworkModel* model = getNetworkModelFromPacketType(packet->type);
-   // I have accepted the packet - process the received packet
-   model->processReceivedPacket(*packet);
+   
+   if (!model->isFiniteBuffer())
+   {
+      // I have accepted the packet - process the received packet
+      model->processReceivedPacket(*packet);
+   }
 
    LOG_PRINT("Before Converting Cycle Count: packet->time(%llu)", packet->time);
    
@@ -231,10 +232,10 @@ void Network::sendPacket(const NetPacket* packet, SInt32 next_hop)
          packet->time, packet->type, packet->sender, next_hop,
          getNetworkModelFromPacketType(packet->type)->getNetworkName().c_str());
 
-   // FIXME: Decide about the event_queue_type
    UnstructuredBuffer event_args;
    event_args << next_hop << packet;
    EventNetwork* event = new EventNetwork(packet->time, event_args);
+   // FIXME: Decide about the event_queue_type
    // EventQueue::Type event_queue_type = ((_enabled) && (isModeled(*packet))) ?
    //                                     EventQueue::ORDERED : EventQueue::UNORDERED;
    EventQueue::Type event_queue_type = (g_type_to_static_network_map[packet->type] == STATIC_NETWORK_USER_2) ?

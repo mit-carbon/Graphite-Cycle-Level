@@ -60,15 +60,13 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
    case NetworkMsg::DATA:
 
       {
-         // Duplicate the NetPacket
-         NetPacket* cloned_net_packet = input_net_packet->clone();
-         input_network_msg = (NetworkMsg*) cloned_net_packet->data;
          Flit* flit = (Flit*) input_network_msg;
-         flit->_net_packet = cloned_net_packet;
+         flit->_net_packet = input_net_packet;
          
          // input_endpoint (for flits)
          flit->_input_endpoint = getInputEndpointFromRouterId(sender_router_id);
-         
+        
+         // Normalize Time 
          normalizeTime(flit);
 
          _router_performance_model->processDataMsg(flit, output_network_msg_list);
@@ -83,13 +81,17 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
  
          // output_endpoint (for buffer management msgs)
          buffer_msg->_output_endpoint = getOutputEndpointFromRouterId(sender_router_id);
- 
+
+         // Normalize Time 
          normalizeTime(buffer_msg);
 
-         // Add Credit Pipeline Delay
-         buffer_msg->_normalized_time += _router_performance_model->getCreditPipelineDelay();
+         // Perform Router and Link Traversal
+         performRouterAndLinkTraversal(buffer_msg);
 
          _router_performance_model->processBufferManagementMsg(buffer_msg, output_network_msg_list);
+
+         // Delete the NetPacket
+         input_net_packet->release();
       }
 
       break;
@@ -104,12 +106,17 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
    for ( ; msg_it != output_network_msg_list.end(); msg_it ++)
    {
       NetworkMsg* output_network_msg = *msg_it;
-      // Account for router and link delays + update dynamic energy
-      performRouterAndLinkTraversal(output_network_msg);
       
-      // Set rate of progress info
-      if (output_network_msg->_type == NetworkMsg::BUFFER_MANAGEMENT)
+      if (output_network_msg->_type == NetworkMsg::DATA)
+      {
+         // Account for router and link delays + update dynamic energy
+         performRouterAndLinkTraversal(output_network_msg);
+      }
+      else if (output_network_msg->_type == NetworkMsg::BUFFER_MANAGEMENT)
+      {
+         // Set rate of progress info
          communicateProgressRateInfo((BufferManagementMsg*) output_network_msg);
+      }
 
       // Construct NetPacket and add to list
       constructNetPackets(output_network_msg, output_net_packet_list);
@@ -128,6 +135,7 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
 void
 NetworkNode::constructNetPackets(NetworkMsg* network_msg, list<NetPacket*>& net_packet_list)
 {
+   LOG_PRINT("constructNetPackets(%p) start", network_msg);
    switch (network_msg->_type)
    {
 
@@ -199,6 +207,7 @@ NetworkNode::constructNetPackets(NetworkMsg* network_msg, list<NetPacket*>& net_
       break;
 
    }
+   LOG_PRINT("constructNetPackets(%p) end", network_msg);
 }
 
 void
@@ -216,51 +225,60 @@ NetworkNode::addNetPacketEndpoints(NetPacket* net_packet,
 void
 NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
 {
+   LOG_PRINT("performRouterAndLinkTraversal(%p) start", output_network_msg)
    switch (output_network_msg->_type)
    {
-      case NetworkMsg::DATA:
-         
-         {
-            Flit* flit = (Flit*) output_network_msg;
-            SInt32 output_channel = flit->_output_endpoint._channel_id;
+   case NetworkMsg::DATA:
+      
+      {
+         Flit* flit = (Flit*) output_network_msg;
+         SInt32 output_channel = flit->_output_endpoint._channel_id;
 
-            // Router Performance Model (Data Pipeline delay)
-            flit->_normalized_time += _router_performance_model->getDataPipelineDelay();
-            
-            // Router Power Model
-            if (_router_power_model)
-               _router_power_model->updateDynamicEnergy(_flit_width/2, flit->_length);
-            
-            // Link Performance Model (Link delay)
-            if (_link_performance_model_list[output_channel])
-               flit->_normalized_time += _link_performance_model_list[output_channel]->getDelay();
-            
-            // Link Power Model
-            if (_link_power_model_list[output_channel])
-               _link_power_model_list[output_channel]->updateDynamicEnergy(_flit_width/2, flit->_length);
-         }
+         // Router Performance Model (Data Pipeline delay)
+         flit->_normalized_time += _router_performance_model->getDataPipelineDelay();
          
-         break;
-
-      case NetworkMsg::BUFFER_MANAGEMENT:
+         // Router Power Model
+         if (_router_power_model)
+            _router_power_model->updateDynamicEnergy(_flit_width/2, flit->_length);
          
-         {
-            BufferManagementMsg* buffer_msg = (BufferManagementMsg*) output_network_msg;
-            SInt32 input_channel = buffer_msg->_input_endpoint._channel_id;
-
-            // FIXME: No power modeling for the buffer management messages
-            
-            // Link Performance Model
-            if (_link_performance_model_list[input_channel])
-               buffer_msg->_normalized_time += _link_performance_model_list[input_channel]->getDelay();
-         }
+         // Link Performance Model (Link delay)
+         if (_link_performance_model_list[output_channel])
+            flit->_normalized_time += _link_performance_model_list[output_channel]->getDelay();
          
-         break;
+         // Link Power Model
+         if (_link_power_model_list[output_channel])
+            _link_power_model_list[output_channel]->updateDynamicEnergy(_flit_width/2, flit->_length);
 
-      default:
-         LOG_PRINT_ERROR("Unrecognized NetworkMsg Type(%u)", output_network_msg->_type);
-         break;
+         // Incremenet Zero Load Delay
+         flit->_zero_load_delay += (_router_performance_model->getDataPipelineDelay() +
+                                    _link_performance_model_list[output_channel]->getDelay());
+      }
+      
+      break;
+
+   case NetworkMsg::BUFFER_MANAGEMENT:
+      
+      {
+         BufferManagementMsg* buffer_msg = (BufferManagementMsg*) output_network_msg;
+         SInt32 output_channel = buffer_msg->_output_endpoint._channel_id;
+
+         // Link Performance Model - Is there a separate channel for buffer management msgs ?
+         if (_link_performance_model_list[output_channel])
+            buffer_msg->_normalized_time += _link_performance_model_list[output_channel]->getDelay();
+      
+         // Add Credit Pipeline Delay
+         buffer_msg->_normalized_time += _router_performance_model->getCreditPipelineDelay();
+         
+         // FIXME: No power modeling for the buffer management messages           
+      }
+      
+      break;
+
+   default:
+      LOG_PRINT_ERROR("Unrecognized NetworkMsg Type(%u)", output_network_msg->_type);
+      break;
    }
+   LOG_PRINT("performRouterAndLinkTraversal(%p) end", output_network_msg)
 }
 
 void
