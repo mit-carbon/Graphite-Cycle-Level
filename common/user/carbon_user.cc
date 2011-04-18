@@ -37,7 +37,7 @@ int CarbonStartSim(int argc, char **argv)
    cfg.load(config_path);
    handle_args(args, cfg);
 
-   Simulator::setConfig(&cfg);
+   Simulator::setConfigFile(&cfg);
 
    Simulator::allocate();
    Sim()->start();

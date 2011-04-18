@@ -31,7 +31,12 @@ void Simulator::allocate()
    m_singleton = new Simulator();
 }
 
-void Simulator::setConfig(config::Config *cfg)
+config::Config* Simulator::getConfigFile()
+{
+   return m_config_file;
+}
+
+void Simulator::setConfigFile(config::Config *cfg)
 {
    m_config_file = cfg;
 }
@@ -137,10 +142,12 @@ Simulator::~Simulator()
       delete m_clock_skew_minimization_manager;
 
    m_sim_thread_manager->quitSimThreads();
+   LOG_PRINT("Quit Sim Threads");
 
    m_transport->barrier();
 
    m_lcp->finish();
+   LOG_PRINT("Finished LCP");
 
    if (Config::getSingleton()->getCurrentProcessNum() == 0)
    {

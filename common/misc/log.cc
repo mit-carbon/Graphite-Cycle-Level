@@ -16,7 +16,7 @@ const size_t Log::MODULE_LENGTH;
 
 static string formatFileName(const char* s)
 {
-   return Sim()->getConfig()->formatOutputFileName(s);
+   return Config::getSingleton()->formatOutputFileName(s);
 }
 
 Log::Log(Config &config)

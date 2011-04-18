@@ -420,7 +420,7 @@ int main(int argc, char *argv[])
 
    handle_args(args, *cfg);
 
-   Simulator::setConfig(cfg);
+   Simulator::setConfigFile(cfg);
 
    Simulator::allocate();
    Sim()->start();

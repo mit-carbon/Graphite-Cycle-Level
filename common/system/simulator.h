@@ -25,7 +25,8 @@ public:
    void start();
 
    static Simulator* getSingleton();
-   static void setConfig(config::Config * cfg);
+   static config::Config* getConfigFile();
+   static void setConfigFile(config::Config * cfg);
    static void allocate();
    static void release();
 
