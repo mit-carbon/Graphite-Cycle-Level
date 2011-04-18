@@ -24,6 +24,7 @@ public:
       COMPLETE_MEMORY_ACCESS,
       // MMU -> Cache
       INITIATE_CACHE_ACCESS,
+      RE_INITIATE_CACHE_ACCESS,
       COMPLETE_CACHE_ACCESS,
       NUM_TYPES
    };
@@ -36,7 +37,7 @@ public:
    static void registerHandler(UInt32 type, Handler handler);
    static void unregisterHandler(UInt32 type);
 
-   virtual void process();
+   void process();
 
    Type getType() { return _type; }
    UInt64 getTime() { return _time; }
@@ -49,6 +50,7 @@ protected:
 
 private:
    static std::map<UInt32,Handler> _handler_map;
+   virtual void processPrivate() {}
 };
 
 class EventNetwork : public Event
@@ -59,8 +61,8 @@ public:
    { LOG_PRINT("Created EventNetwork(%p)", this); }
    ~EventNetwork()
    { LOG_PRINT("Destroyed EventNetwork(%p)", this); }
-
-   void process();
+private:
+   void processPrivate();
 };
 
 class EventInstruction : public Event
@@ -69,8 +71,8 @@ public:
    EventInstruction(UInt64 time, UnstructuredBuffer& event_args)
       : Event(INSTRUCTION, time, event_args) {}
    ~EventInstruction() {}
-
-   void process();
+private:
+   void processPrivate();
 };
 
 class EventInitiateMemoryAccess : public Event
@@ -79,8 +81,8 @@ public:
    EventInitiateMemoryAccess(UInt64 time, UnstructuredBuffer& event_args)                       
       : Event(INITIATE_MEMORY_ACCESS, time, event_args) {}
    ~EventInitiateMemoryAccess() {}
-
-   void process();
+private:
+   void processPrivate();
 };
 
 class EventCompleteMemoryAccess : public Event
@@ -89,8 +91,8 @@ public:
    EventCompleteMemoryAccess(UInt64 time, UnstructuredBuffer& event_args)
       : Event(COMPLETE_MEMORY_ACCESS, time, event_args) {}
    ~EventCompleteMemoryAccess() {}
-
-   void process();
+private:
+   void processPrivate();
 };
 
 class EventInitiateCacheAccess : public Event
@@ -99,8 +101,18 @@ public:
    EventInitiateCacheAccess(UInt64 time, UnstructuredBuffer& event_args)
       : Event(INITIATE_CACHE_ACCESS, time, event_args) {}
    ~EventInitiateCacheAccess() {}
+private:
+   void processPrivate();
+};
 
-   void process();
+class EventReInitiateCacheAccess : public Event
+{
+public:
+   EventReInitiateCacheAccess(UInt64 time, UnstructuredBuffer& event_args)
+      : Event(RE_INITIATE_CACHE_ACCESS, time, event_args) {}
+   ~EventReInitiateCacheAccess() {}
+private:
+   void processPrivate();
 };
 
 class EventCompleteCacheAccess : public Event
@@ -109,6 +121,6 @@ public:
    EventCompleteCacheAccess(UInt64 time, UnstructuredBuffer& event_args)
       : Event(COMPLETE_CACHE_ACCESS, time, event_args) {}
    ~EventCompleteCacheAccess() {}
-
-   void process();
+private:
+   void processPrivate();
 };

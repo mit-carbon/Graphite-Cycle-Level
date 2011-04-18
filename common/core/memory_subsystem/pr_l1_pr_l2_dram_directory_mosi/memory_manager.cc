@@ -208,25 +208,33 @@ MemoryManager::~MemoryManager()
 }
 
 void
-MemoryManager::coreInitiateCacheAccess(UInt64 time,
-      UInt32 memory_access_id,
-      MemComponent::component_t mem_component,
-      Core::lock_signal_t lock_signal,
-      Core::mem_op_t mem_op_type,
-      IntPtr address, UInt32 offset,
-      Byte* data_buf, UInt32 data_length,
-      bool modeled)
+MemoryManager::initiateCacheAccess(UInt64 time,
+                                   MemComponent::component_t mem_component,
+                                   UInt32 memory_access_id,
+                                   Core::lock_signal_t lock_signal,
+                                   Core::mem_op_t mem_op_type,
+                                   IntPtr address, UInt32 offset,
+                                   Byte* data_buf, UInt32 data_length,
+                                   bool modeled)
 {
    getShmemPerfModel()->setCycleCount(time);
 
-   return m_l1_cache_cntlr->processMemOpFromCore(
-         memory_access_id,
-         mem_component, 
-         lock_signal, 
-         mem_op_type, 
-         address, offset, 
-         data_buf, data_length,
-         modeled);
+   m_l1_cache_cntlr->processMemOpFromCore(memory_access_id,
+                                          mem_component, 
+                                          lock_signal, 
+                                          mem_op_type, 
+                                          address, offset, 
+                                          data_buf, data_length,
+                                          modeled);
+}
+
+void
+MemoryManager::reInitiateCacheAccess(UInt64 time,
+                                     MemComponent::component_t mem_component,
+                                     MissStatus* miss_status)
+{
+   getShmemPerfModel()->setCycleCount(time);
+   LOG_PRINT_ERROR("Implementation for Non-Blocking Caches not yet done");
 }
 
 void

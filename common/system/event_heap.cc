@@ -70,7 +70,7 @@ EventHeap::processEvents()
 
       _lock.release();
 
-      LOG_PRINT("Event: Type(%i), Time(%llu) to be processed", event->getType(), event->getTime());
+      LOG_PRINT("Event(%p): Type(%i), Time(%llu) to be processed", event, event->getType(), event->getTime());
       // Network, Instruction, Memory Modeling 
       event->process();
       delete event;

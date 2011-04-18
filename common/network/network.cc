@@ -236,10 +236,10 @@ void Network::sendPacket(const NetPacket* packet, SInt32 next_hop)
    event_args << next_hop << packet;
    EventNetwork* event = new EventNetwork(packet->time, event_args);
    // FIXME: Decide about the event_queue_type
-   // EventQueue::Type event_queue_type = ((_enabled) && (isModeled(*packet))) ?
-   //                                     EventQueue::ORDERED : EventQueue::UNORDERED;
-   EventQueue::Type event_queue_type = (g_type_to_static_network_map[packet->type] == STATIC_NETWORK_USER_2) ?
+   EventQueue::Type event_queue_type = ((_enabled) && (isModeled(*packet))) ?
                                        EventQueue::ORDERED : EventQueue::UNORDERED;
+   // EventQueue::Type event_queue_type = (g_type_to_static_network_map[packet->type] == STATIC_NETWORK_USER_2) ?
+   //                                     EventQueue::ORDERED : EventQueue::UNORDERED;
    Event::processInOrder(event, next_hop, event_queue_type);
 
    LOG_PRINT("sendPacket(%p) exit", packet);

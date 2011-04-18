@@ -183,6 +183,7 @@ MemoryManager::MemoryManager(Core* core,
 
 MemoryManager::~MemoryManager()
 {
+   LOG_PRINT("Memory Manager dtor start");
    getNetwork()->unregisterCallback(SHARED_MEM_1);
    getNetwork()->unregisterCallback(SHARED_MEM_2);
 
@@ -190,37 +191,57 @@ MemoryManager::~MemoryManager()
    delete m_l1_icache_perf_model;
    delete m_l1_dcache_perf_model;
    delete m_l2_cache_perf_model;
+   LOG_PRINT("Deleted Cache Performance Models");
 
    delete m_dram_directory_home_lookup;
+   LOG_PRINT("Deleted Dram Directory Home Lookup");
    delete m_l1_cache_cntlr;
+   LOG_PRINT("Deleted L1 Cache Cntlr");
    delete m_l2_cache_cntlr;
+   LOG_PRINT("Deleted L2 Cache Cntlr");
    if (m_dram_cntlr_present)
    {
       delete m_dram_cntlr;
+      LOG_PRINT("Deleted Dram Cntlr");
       delete m_dram_directory_cntlr;
+      LOG_PRINT("Deleted Dram Directory Cntlr");
    }
+   LOG_PRINT("Memory Manager dtor end");
 }
 
 void
-MemoryManager::coreInitiateCacheAccess(UInt64 time,
-      UInt32 memory_access_id,
-      MemComponent::component_t mem_component,
-      Core::lock_signal_t lock_signal,
-      Core::mem_op_t mem_op_type,
-      IntPtr address, UInt32 offset,
-      Byte* data_buf, UInt32 data_length,
-      bool modeled)
+MemoryManager::initiateCacheAccess(UInt64 time,
+                                   MemComponent::component_t mem_component,
+                                   UInt32 memory_access_id,
+                                   Core::lock_signal_t lock_signal,
+                                   Core::mem_op_t mem_op_type,
+                                   IntPtr address, UInt32 offset,
+                                   Byte* data_buf, UInt32 data_length,
+                                   bool modeled)
 {
    getShmemPerfModel()->setCycleCount(time);
 
-   m_l1_cache_cntlr->processMemOpFromCore(
-         memory_access_id,
-         mem_component, 
-         lock_signal, 
-         mem_op_type, 
-         address, offset, 
-         data_buf, data_length,
-         modeled);
+   assert((mem_component == MemComponent::L1_ICACHE) || (mem_component == MemComponent::L1_DCACHE));
+   
+   m_l1_cache_cntlr->initiateCacheAccess(mem_component,
+                                         memory_access_id,
+                                         lock_signal, 
+                                         mem_op_type, 
+                                         address, offset, 
+                                         data_buf, data_length,
+                                         modeled);
+}
+
+void
+MemoryManager::reInitiateCacheAccess(UInt64 time,
+                                     MemComponent::component_t mem_component,
+                                     MissStatus* miss_status)
+{
+   getShmemPerfModel()->setCycleCount(time);
+
+   assert((mem_component == MemComponent::L1_ICACHE) || (mem_component == MemComponent::L1_DCACHE));
+
+   m_l1_cache_cntlr->reInitiateCacheAccess(mem_component, (L1MissStatus*) miss_status);
 }
 
 void
@@ -235,8 +256,8 @@ MemoryManager::handleMsgFromNetwork(NetPacket& packet)
    MemComponent::component_t receiver_mem_component = shmem_msg->getReceiverMemComponent();
    MemComponent::component_t sender_mem_component = shmem_msg->getSenderMemComponent();
 
-   LOG_PRINT("Got Shmem Msg: type(%i), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), sender(%i), receiver(%i)", 
-         shmem_msg->getMsgType(), shmem_msg->getAddress(), sender_mem_component, receiver_mem_component, sender, packet.receiver);    
+   LOG_PRINT("Core Id(%i): Got Shmem Msg: type(%i), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), sender(%i), receiver(%i)", 
+         getCore()->getId(), shmem_msg->getMsgType(), shmem_msg->getAddress(), sender_mem_component, receiver_mem_component, sender, packet.receiver);    
 
    switch (receiver_mem_component)
    {
@@ -303,7 +324,7 @@ MemoryManager::sendMsg(ShmemMsg::msg_t msg_type, MemComponent::component_t sende
    Byte* msg_buf = shmem_msg.makeMsgBuf();
    UInt64 msg_time = getShmemPerfModel()->getCycleCount();
 
-   LOG_PRINT("Sending Msg: type(%u), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), requester(%i), sender(%i), receiver(%i)", msg_type, address, sender_mem_component, receiver_mem_component, requester, getCore()->getId(), receiver);
+   LOG_PRINT("Core Id(%i): Sending Msg: type(%u), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), requester(%i), sender(%i), receiver(%i)", getCore()->getId(), msg_type, address, sender_mem_component, receiver_mem_component, requester, getCore()->getId(), receiver);
 
    NetPacket packet(msg_time, SHARED_MEM_1,
          getCore()->getId(), receiver,
@@ -323,7 +344,7 @@ MemoryManager::broadcastMsg(ShmemMsg::msg_t msg_type, MemComponent::component_t 
    Byte* msg_buf = shmem_msg.makeMsgBuf();
    UInt64 msg_time = getShmemPerfModel()->getCycleCount();
 
-   LOG_PRINT("Sending Msg: type(%u), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), requester(%i), sender(%i), receiver(%i)", msg_type, address, sender_mem_component, receiver_mem_component, requester, getCore()->getId(), NetPacket::BROADCAST);
+   LOG_PRINT("Core Id(%i): Sending Msg: type(%u), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), requester(%i), sender(%i), receiver(%i)", getCore()->getId(), msg_type, address, sender_mem_component, receiver_mem_component, requester, getCore()->getId(), NetPacket::BROADCAST);
 
    NetPacket packet(msg_time, SHARED_MEM_1,
          getCore()->getId(), NetPacket::BROADCAST,

@@ -289,8 +289,8 @@ Core::continueMemoryAccess(MemoryAccessStatus& memory_access_status)
    // from data_buffer
    UnstructuredBuffer event_args;
    event_args << getMemoryManager()
-              << memory_access_status._access_id
               << memory_access_status._mem_component
+              << memory_access_status._access_id
               << memory_access_status._lock_signal << memory_access_status._mem_op_type
               << address_aligned << offset
               << memory_access_status._data_buffer << memory_access_status._curr_bytes

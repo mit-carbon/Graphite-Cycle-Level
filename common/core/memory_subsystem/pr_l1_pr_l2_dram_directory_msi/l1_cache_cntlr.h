@@ -62,24 +62,20 @@ namespace PrL1PrL2DramDirectoryMSI
          MemoryManager* getMemoryManager() { return m_memory_manager; }
          ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
 
-         // Reprocess request from core
-         void reprocessMemOpFromCore(MemComponent::component_t mem_component, L1MissStatus* l1_miss_status);
-         // Complete request from core
-         void completeMemOpFromCore(UInt32 memory_access_id);
+         // Initiate Actual Cache Access
+         void doInitiateCacheAccess(MemComponent::component_t mem_component,
+                                    UInt32 memory_access_id,
+                                    Core::lock_signal_t lock_signal,
+                                    Core::mem_op_t mem_op_type, 
+                                    IntPtr ca_address, UInt32 offset,
+                                    Byte* data_buf, UInt32 data_length,
+                                    bool modeled,
+                                    L1MissStatus* l1_miss_status);
+         // Complete Cache Request
+         void completeCacheRequest(MemComponent::component_t mem_component, UInt32 memory_access_id, L1MissStatus* l1_miss_status);
+         // Process Next Cache Request 
+         void processNextCacheRequest(MemComponent::component_t mem_component, IntPtr address);
 
-         // Wait for Sim Thread
-         void waitForSimThread()
-         { m_app_thread_semaphore.wait(); }
-         // Wake up Sim Thread
-         void wakeUpSimThread(void)
-         { m_sim_thread_semaphore.signal(); }
-         // Wait for App Thread
-         void waitForAppThread(void)
-         { m_sim_thread_semaphore.wait(); }
-         // Wake up App Thread
-         void wakeUpAppThread(void)
-         { m_app_thread_semaphore.signal(); }
-         
       public:
          L1CacheCntlr(core_id_t core_id,
                MemoryManager* memory_manager,
@@ -97,16 +93,17 @@ namespace PrL1PrL2DramDirectoryMSI
 
          void setL2CacheCntlr(L2CacheCntlr* l2_cache_cntlr);
 
-         // Called from core to process a memory operation
-         void processMemOpFromCore(
-               UInt32 memory_access_id,
-               MemComponent::component_t mem_component,
-               Core::lock_signal_t lock_signal,
-               Core::mem_op_t mem_op_type, 
-               IntPtr ca_address, UInt32 offset,
-               Byte* data_buf, UInt32 data_length,
-               bool modeled);
-
+         // Called from memory manager to start L1 cache access
+         void initiateCacheAccess(MemComponent::component_t mem_component,
+                                  UInt32 memory_access_id,
+                                  Core::lock_signal_t lock_signal,
+                                  Core::mem_op_t mem_op_type, 
+                                  IntPtr ca_address, UInt32 offset,
+                                  Byte* data_buf, UInt32 data_length,
+                                  bool modeled);
+         // Called from memory manager to re-start L1 cache access
+         void reInitiateCacheAccess(MemComponent::component_t mem_component, L1MissStatus* l1_miss_status);
+         
          // Called from L2 cache cntlr to indicate that a memory request has been processed
          void signalDataReady(MemComponent::component_t mem_component, IntPtr address);
 

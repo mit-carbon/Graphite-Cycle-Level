@@ -1,33 +1,103 @@
 #include "miss_status.h"
 #include "log.h"
 
-bool MissStatusMap::insert(MissStatus* miss_status)
-{  
+MissStatus*
+MissStatusMap::get(IntPtr address)
+{
+   LOG_PRINT("MissStatusMap(%p): Address(0x%llx), get()", this, address);
+   MissStatusInfo::iterator it = _miss_status_info.find(address);
+   if (it == _miss_status_info.end())
+      return (MissStatus*) NULL;
+   
+   MissStatusQueue* miss_status_queue = (*it).second;
+   assert(miss_status_queue && !miss_status_queue->empty());
+   return miss_status_queue->front();
+}
+
+size_t
+MissStatusMap::size(IntPtr address)
+{
+   LOG_PRINT("MissStatusMap(%p): Address(0x%llx), size()", this, address);
+   MissStatusInfo::iterator it = _miss_status_info.find(address);
+   
+   if (it == _miss_status_info.end())
+      return (size_t) 0;
+   
+   MissStatusQueue* miss_status_queue = (*it).second;   
+   assert(miss_status_queue && !miss_status_queue->empty());
+   return miss_status_queue->size();
+}
+
+bool
+MissStatusMap::insert(MissStatus* miss_status)
+{
+   LOG_PRINT("MissStatusMap(%p): Address(0x%llx), insert(), size(%u)", this, miss_status->_address, _miss_status_info.size());
+
    IntPtr address = miss_status->_address;
-   MissStatus* curr_miss_status = _miss_status_map[address];
-   if (curr_miss_status)
+   
+   MissStatusInfo::iterator it = _miss_status_info.find(address);
+   if (it == _miss_status_info.end()) // First outstanding miss on this address
    {
-      LOG_PRINT_ERROR("Currently not allowed");
-      curr_miss_status->_next = miss_status;
+      MissStatusQueue* miss_status_queue = new MissStatusQueue();
+      miss_status_queue->push(miss_status);
+      _miss_status_info.insert(make_pair(address, miss_status_queue));
+      LOG_PRINT("Size(%u)", _miss_status_info.size());
       return false;
    }
    else
    {
-      _miss_status_map[address] = miss_status;
+      MissStatusQueue* miss_status_queue = (*it).second;
+      assert(miss_status_queue && !miss_status_queue->empty());
+      miss_status_queue->push(miss_status);
       return true;
    }
 }
 
-void MissStatusMap::erase(MissStatus* miss_status)
+MissStatus*
+MissStatusMap::erase(MissStatus* miss_status)
 {
+   LOG_PRINT("MissStatusMap(%p): Address(0x%llx), erase(), size(%u)", \
+         this, miss_status->_address, _miss_status_info.size());
+   
    IntPtr address = miss_status->_address;
-   if (miss_status->_next)
+
+   MissStatusInfo::iterator it = _miss_status_info.find(address);
+   assert(it != _miss_status_info.end());
+   
+   MissStatusQueue* miss_status_queue = (*it).second;
+   assert(miss_status_queue && !miss_status_queue->empty());
+   assert(miss_status_queue->front() == miss_status);
+
+   LOG_PRINT("mapsize(%u)", miss_status_queue->size());
+   miss_status_queue->pop();
+   LOG_PRINT("mapsize(%u)", miss_status_queue->size());
+   
+   if (miss_status_queue->empty())
    {
-      LOG_PRINT_ERROR("Currently not allowed");
-      _miss_status_map[address] = miss_status->_next;
+      _miss_status_info.erase(address);
+      delete miss_status_queue;
+      LOG_PRINT("Size(%u)", _miss_status_info.size());
+      return (MissStatus*) NULL;
    }
-   else
+   else // There are other outstanding misses
    {
-      _miss_status_map.erase(address);
+      return miss_status_queue->front();
+   }
+}
+
+bool
+MissStatusMap::empty()
+{
+   return _miss_status_info.empty();
+}
+
+void
+MissStatusMap::print()
+{
+   LOG_PRINT("Miss Status Map(%p): size(%u)", this, _miss_status_info.size());
+   MissStatusInfo::iterator it = _miss_status_info.begin();
+   for ( ; it != _miss_status_info.end(); it ++)
+   {
+      LOG_PRINT("Address(0x%llx), Size(%u)", (*it).first, ((*it).second)->size());
    }
 }

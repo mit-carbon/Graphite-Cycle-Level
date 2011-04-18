@@ -5,6 +5,7 @@ using namespace std;
 #include "network.h"
 #include "mem_component.h"
 #include "shmem_perf_model.h"
+#include "miss_status.h"
 
 void MemoryManagerNetworkCallback(void* obj, NetPacket packet);
 
@@ -40,14 +41,17 @@ class MemoryManager
       {}
       virtual ~MemoryManager() {}
 
-      virtual void coreInitiateCacheAccess(UInt64 time,
-            UInt32 memory_access_id,
-            MemComponent::component_t mem_component,
-            Core::lock_signal_t lock_signal,
-            Core::mem_op_t mem_op_type,
-            IntPtr address, UInt32 offset,
-            Byte* data_buf, UInt32 data_length,
-            bool modeled) = 0;
+      virtual void initiateCacheAccess(UInt64 time,
+                                       MemComponent::component_t mem_component,
+                                       UInt32 memory_access_id,
+                                       Core::lock_signal_t lock_signal,
+                                       Core::mem_op_t mem_op_type,
+                                       IntPtr address, UInt32 offset,
+                                       Byte* data_buf, UInt32 data_length,
+                                       bool modeled) = 0;
+      virtual void reInitiateCacheAccess(UInt64 time,
+                                         MemComponent::component_t mem_component,
+                                         MissStatus* miss_status) = 0;
 
       virtual void handleMsgFromNetwork(NetPacket& packet) = 0;
 

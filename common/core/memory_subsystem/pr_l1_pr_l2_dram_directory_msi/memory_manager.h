@@ -47,14 +47,17 @@ namespace PrL1PrL2DramDirectoryMSI
          DramCntlr* getDramCntlr() { return m_dram_cntlr; }
          AddressHomeLookup* getDramDirectoryHomeLookup() { return m_dram_directory_home_lookup; }
 
-         void coreInitiateCacheAccess(UInt64 time,
-               UInt32 memory_access_id,
-               MemComponent::component_t mem_component,
-               Core::lock_signal_t lock_signal,
-               Core::mem_op_t mem_op_type,
-               IntPtr address, UInt32 offset,
-               Byte* data_buf, UInt32 data_length,
-               bool modeled);
+         void initiateCacheAccess(UInt64 time,
+                                  MemComponent::component_t mem_component,
+                                  UInt32 memory_access_id,
+                                  Core::lock_signal_t lock_signal,
+                                  Core::mem_op_t mem_op_type,
+                                  IntPtr address, UInt32 offset,
+                                  Byte* data_buf, UInt32 data_length,
+                                  bool modeled);
+         void reInitiateCacheAccess(UInt64 time,
+                                    MemComponent::component_t mem_component,
+                                    MissStatus* miss_status);
 
          void handleMsgFromNetwork(NetPacket& packet);
 

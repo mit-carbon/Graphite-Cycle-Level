@@ -1,6 +1,10 @@
 #pragma once
 
 #include <map>
+#include <queue>
+using std::map;
+using std::queue;
+
 #include "fixed_types.h"
 #include "mem_component.h"
 #include "core.h"
@@ -11,13 +15,11 @@ class MissStatus
 public:
    MissStatus(IntPtr address)
       : _address(address)
-      , _next(NULL)
    {}
    ~MissStatus()
    {}
 
    IntPtr _address;
-   MissStatus* _next;
 };
 
 class MissStatusMap
@@ -26,16 +28,16 @@ public:
    MissStatusMap() {}
    ~MissStatusMap() {}
    bool insert(MissStatus* miss_status);
-   void erase(MissStatus* miss_status);
-   MissStatus* get(IntPtr address)
-   { return _miss_status_map[address]; }
-   bool empty()
-   { return _miss_status_map.empty(); }
-   size_t size()
-   { return _miss_status_map.size(); }
+   MissStatus* erase(MissStatus* miss_status);
+   MissStatus* get(IntPtr address);
+   size_t size(IntPtr address);
+   bool empty();
+   void print();
 
 private:
-   std::map<IntPtr,MissStatus*> _miss_status_map;
+   typedef queue<MissStatus*> MissStatusQueue;
+   typedef map<IntPtr,MissStatusQueue*> MissStatusInfo;
+   MissStatusInfo _miss_status_info;
 };
 
 typedef std::map<MemComponent::component_t, MissStatusMap> MissStatusMaps;
@@ -45,7 +47,8 @@ class L1MissStatus : public MissStatus
 public:
    L1MissStatus(IntPtr address,
                 SInt32 memory_access_id,
-                Core::lock_signal_t lock_signal, Core::mem_op_t mem_op_type, 
+                Core::lock_signal_t lock_signal,
+                Core::mem_op_t mem_op_type, 
                 UInt32 offset,
                 Byte* data_buf, UInt32 data_length,
                 bool modeled)
@@ -57,16 +60,18 @@ public:
       , _data_buf(data_buf)
       , _data_length(data_length)
       , _modeled(modeled)
+      , _access_num(1)
    {}
    ~L1MissStatus() {}
 
-   SInt32 _memory_access_id;
+   UInt32 _memory_access_id;
    Core::lock_signal_t _lock_signal;
    Core::mem_op_t _mem_op_type;
    UInt32 _offset;
    Byte* _data_buf;
    UInt32 _data_length;
    bool _modeled;
+   UInt32 _access_num;
 };
 
 class L2MissStatus : public MissStatus
