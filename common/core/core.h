@@ -76,7 +76,7 @@ public:
          Byte* data_buffer,
          UInt32 bytes,
          bool modeled = false);
-   void completeCacheAccess(UInt64 time, SInt32 memory_access_id);
+   void completeCacheAccess(UInt64 time, UInt32 memory_access_id);
 
    void accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type,
          IntPtr d_addr, char* data_buffer, UInt32 data_size, bool modeled = false);

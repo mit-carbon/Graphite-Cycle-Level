@@ -55,21 +55,29 @@ Core::Core(SInt32 id)
 
 Core::~Core()
 {
+   LOG_PRINT("Core dtor start");
    if (m_clock_skew_minimization_client)
       delete m_clock_skew_minimization_client;
+   LOG_PRINT("Deleted Clock Skew Minimization Client");
 
    delete m_sync_client;
+   LOG_PRINT("Deleted Sync Client");
    delete m_syscall_model;
+   LOG_PRINT("Deleted Syscall Client");
    if (Config::getSingleton()->isSimulatingSharedMemory())
    {
       delete m_pin_memory_manager;
+      LOG_PRINT("Deleted Pin Memory Manager");
       delete m_memory_manager;
+      LOG_PRINT("Deleted Memory Manager");
       delete m_shmem_perf_model;
+      LOG_PRINT("Deleted Shmem Perf Model");
    }
    delete m_performance_model;
    LOG_PRINT("Deleted performance mode");
    delete m_network;
    LOG_PRINT("Deleted network");
+   LOG_PRINT("Core dtor end");
 }
 
 void Core::outputSummary(std::ostream &os)
@@ -220,6 +228,9 @@ Core::initiateMemoryAccess(UInt64 time,
                            UInt32 bytes,
                            bool modeled)
 {
+   LOG_PRINT("Initiate Memory Access [Core Id(%i), Time(%llu), Mem Component(%u), Lock Signal(%u), Mem Op Type(%u), Address(0x%llx), Data Buffer(%p), Bytes(%u), Modeled(%s)]", \
+         m_core_id, time, mem_component, lock_signal, mem_op_type, address, data_buffer, bytes, modeled ? "TRUE" : "FALSE");
+
    assert(bytes >= 0);
   
    UInt64 curr_time;
@@ -239,8 +250,10 @@ Core::initiateMemoryAccess(UInt64 time,
 }
 
 void
-Core::completeCacheAccess(UInt64 time, SInt32 memory_access_id)
+Core::completeCacheAccess(UInt64 time, UInt32 memory_access_id)
 {
+   LOG_PRINT("Complete Cache Access [Core Id(%i), Time(%llu), Access Id(%u)]", m_core_id, time, memory_access_id);
+
    MemoryAccessStatus& memory_access_status = *m_memory_access_status_map[memory_access_id];
    memory_access_status._curr_address += memory_access_status._curr_bytes;
    memory_access_status._bytes_remaining -= memory_access_status._curr_bytes;
@@ -253,6 +266,9 @@ Core::completeCacheAccess(UInt64 time, SInt32 memory_access_id)
 void
 Core::continueMemoryAccess(MemoryAccessStatus& memory_access_status)
 {
+   LOG_PRINT("Continue Memory Access [Core Id(%i), Access Id(%u), Bytes Remaining(%u)]", \
+         m_core_id, memory_access_status._access_id, memory_access_status._bytes_remaining);
+
    if (memory_access_status._bytes_remaining == 0)
    {
       completeMemoryAccess(memory_access_status);
@@ -287,6 +303,10 @@ Core::continueMemoryAccess(MemoryAccessStatus& memory_access_status)
 void
 Core::completeMemoryAccess(MemoryAccessStatus& memory_access_status)
 {
+   LOG_PRINT("Complete Memory Access [Core(%i), Access Id(%u), Start Address(0x%llx), Total Bytes(%u), Modeled(%s)]",
+         m_core_id, memory_access_status._access_id, memory_access_status._start_address, memory_access_status._total_bytes,
+         (memory_access_status._modeled) ? "TRUE" : "FALSE");
+
    if (memory_access_status._modeled)
    {
       UInt64 memory_latency = memory_access_status._curr_time - memory_access_status._start_time;
