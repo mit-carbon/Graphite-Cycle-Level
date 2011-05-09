@@ -30,7 +30,7 @@ namespace PrL1PrL2DramDirectoryMSI
    private:
       enum ExternalEvents
       {
-         L2_CACHE_ACCESS_MSG = 100
+         L2_CACHE_ACCESS_REQ = 100
       };
 
       // Data Members
@@ -119,8 +119,12 @@ namespace PrL1PrL2DramDirectoryMSI
       
       // For setting the Event Time correctly
       ShmemPerfModel* getShmemPerfModel();
+
+      // Event Handlers
+      static void registerEventHandlers();
+      static void unregisterEventHandlers();
    };
 
-   void handleL2CacheAccessMsg(Event* event);
+   void handleL2CacheAccessReq(Event* event);
 
 }

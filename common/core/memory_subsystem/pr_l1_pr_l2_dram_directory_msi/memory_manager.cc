@@ -185,10 +185,24 @@ MemoryManager::MemoryManager(Core* core,
    // Register Call-backs
    getNetwork()->registerCallback(SHARED_MEM_1, MemoryManagerNetworkCallback, this);
    getNetwork()->registerCallback(SHARED_MEM_2, MemoryManagerNetworkCallback, this);
+
+   // Register Event Handlers
+   if (getCore()->getId() == 0)
+   {
+      DramDirectoryCntlr::registerEventHandlers();
+      L2CacheCntlr::registerEventHandlers();
+   }
 }
 
 MemoryManager::~MemoryManager()
 {
+   // Unregister Event Handlers
+   if (getCore()->getId() == 0)
+   {
+      DramDirectoryCntlr::unregisterEventHandlers();
+      L2CacheCntlr::unregisterEventHandlers();
+   }
+
    LOG_PRINT("Memory Manager dtor start");
    getNetwork()->unregisterCallback(SHARED_MEM_1);
    getNetwork()->unregisterCallback(SHARED_MEM_2);

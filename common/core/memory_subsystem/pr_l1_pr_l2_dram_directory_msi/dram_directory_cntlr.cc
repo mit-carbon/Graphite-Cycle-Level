@@ -37,30 +37,30 @@ DramDirectoryCntlr::DramDirectoryCntlr(MemoryManager* memory_manager,
 
    // Contention Model
    m_dram_directory_contention_model = new QueueModelSimple();
-   
-   // Register the Event Handler
-   if (getCoreId() == 0)
-   {
-      Event::registerHandler(DRAM_DIRECTORY_ACCESS_REQ, handleDramDirectoryAccessReq);
-      Event::registerHandler(DRAM_DIRECTORY_SCHEDULE_NEXT_REQ_FROM_L2_CACHE, scheduleNextDramDirectoryAccessReqFromL2Cache);
-      Event::registerHandler(DRAM_DIRECTORY_HANDLE_NEXT_REQ_FROM_L2_CACHE, handleNextDramDirectoryAccessReqFromL2Cache);
-   }
 }
 
 DramDirectoryCntlr::~DramDirectoryCntlr()
 {
-   // Unregister the Event Handler
-   if (getCoreId() == 0)
-   {
-      Event::unregisterHandler(DRAM_DIRECTORY_HANDLE_NEXT_REQ_FROM_L2_CACHE);
-      Event::unregisterHandler(DRAM_DIRECTORY_SCHEDULE_NEXT_REQ_FROM_L2_CACHE);
-      Event::unregisterHandler(DRAM_DIRECTORY_ACCESS_REQ);
-   }
-
    delete m_dram_directory_contention_model;
 
    delete m_dram_directory_cache;
    delete m_dram_directory_req_queue_list;
+}
+
+void
+DramDirectoryCntlr::registerEventHandlers()
+{
+   Event::registerHandler(DRAM_DIRECTORY_ACCESS_REQ, handleDramDirectoryAccessReq);
+   Event::registerHandler(DRAM_DIRECTORY_SCHEDULE_NEXT_REQ_FROM_L2_CACHE, scheduleNextDramDirectoryAccessReqFromL2Cache);
+   Event::registerHandler(DRAM_DIRECTORY_HANDLE_NEXT_REQ_FROM_L2_CACHE, handleNextDramDirectoryAccessReqFromL2Cache);
+}
+
+void
+DramDirectoryCntlr::unregisterEventHandlers()
+{
+   Event::unregisterHandler(DRAM_DIRECTORY_HANDLE_NEXT_REQ_FROM_L2_CACHE);
+   Event::unregisterHandler(DRAM_DIRECTORY_SCHEDULE_NEXT_REQ_FROM_L2_CACHE);
+   Event::unregisterHandler(DRAM_DIRECTORY_ACCESS_REQ);
 }
 
 void

@@ -24,20 +24,24 @@ L2CacheCntlr::L2CacheCntlr(MemoryManager* memory_manager,
          CacheBase::PR_L2_CACHE);
    
    m_l2_cache_contention_model = new QueueModelSimple(false);
-
-   // Register the Event Handler
-   if (getCoreId() == 0)
-      Event::registerHandler(L2_CACHE_ACCESS_MSG, handleL2CacheAccessMsg);
 }
 
 L2CacheCntlr::~L2CacheCntlr()
 {
-   // Unregister the Event Handler
-   if (getCoreId() == 0)
-      Event::unregisterHandler(L2_CACHE_ACCESS_MSG);
-
    delete m_l2_cache_contention_model;
    delete m_l2_cache;
+}
+
+void
+L2CacheCntlr::registerEventHandlers()
+{
+   Event::registerHandler(L2_CACHE_ACCESS_REQ, handleL2CacheAccessReq);
+}
+
+void
+L2CacheCntlr::unregisterEventHandlers()
+{
+   Event::unregisterHandler(L2_CACHE_ACCESS_REQ);
 }
 
 PrL2CacheBlockInfo*
@@ -179,7 +183,7 @@ L2CacheCntlr::processShmemReqFromL1Cache(MemComponent::component_t req_mem_compo
 }
 
 void
-handleL2CacheAccessMsg(Event* event)
+handleL2CacheAccessReq(Event* event)
 {
    UnstructuredBuffer* event_args = event->getArgs();
    
@@ -244,7 +248,7 @@ L2CacheCntlr::scheduleRequest(UInt64 time, core_id_t sender, ShmemMsg* shmem_msg
    // Push an event to access the L2 Cache from the Directory
    UnstructuredBuffer* event_args = new UnstructuredBuffer();
    (*event_args) << this << sender << (*shmem_msg);
-   Event* event = new Event((Event::Type) L2_CACHE_ACCESS_MSG, time, event_args);
+   Event* event = new Event((Event::Type) L2_CACHE_ACCESS_REQ, time, event_args);
    Event::processInOrder(event, getCoreId(), EventQueue::ORDERED);
 }
 

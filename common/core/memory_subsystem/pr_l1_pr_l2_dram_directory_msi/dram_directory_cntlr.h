@@ -97,6 +97,10 @@ namespace PrL1PrL2DramDirectoryMSI
          DramDirectoryCache* getDramDirectoryCache() { return m_dram_directory_cache; }
          
          ShmemPerfModel* getShmemPerfModel();
+
+         // Event Handlers
+         static void registerEventHandlers();
+         static void unregisterEventHandlers();
    };
 
    void handleDramDirectoryAccessReq(Event* event);
