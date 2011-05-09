@@ -99,6 +99,7 @@ SimplePerformanceModel::completeInstruction()
    _cycle_count = _curr_instruction_status._cycle_count;
 
    _curr_instruction_status._instruction = (Instruction*) NULL;
+   delete _curr_instruction_status._memory_access_list;
 
    // Update Performance Counters
    _total_instructions_executed ++;
@@ -125,10 +126,7 @@ SimplePerformanceModel::InstructionStatus::InstructionStatus()
 {}
 
 SimplePerformanceModel::InstructionStatus::~InstructionStatus()
-{
-   // Created at runtime
-   delete _memory_access_list;
-}
+{}
 
 void
 SimplePerformanceModel::InstructionStatus::update(UInt64 cycle_count,
