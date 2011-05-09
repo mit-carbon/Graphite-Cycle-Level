@@ -39,6 +39,8 @@ namespace PrL1PrL2DramDirectoryMSI
 
          // Outstanding DRAM requests
          set<IntPtr> m_dram_req_outstanding_set;
+         // Inactive Address set
+         set<IntPtr> m_inactive_address_set;
 
          core_id_t getCoreId();
          UInt32 getCacheBlockSize();
@@ -67,6 +69,8 @@ namespace PrL1PrL2DramDirectoryMSI
          void scheduleNextReqFromL2Cache(IntPtr address);
          // Schedule next Dram Directory Access from Dram/L2 Cache
          void scheduleRequest(core_id_t sender, ShmemMsg* shmem_msg);
+         // Is Active Address
+         bool isActive(IntPtr address);
       
       public:
          DramDirectoryCntlr(MemoryManager* memory_manager,

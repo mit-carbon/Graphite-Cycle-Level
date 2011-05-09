@@ -163,6 +163,8 @@ void
 NetworkModelEMeshHopCounter::routePacket(const NetPacket &pkt,
                                          std::vector<Hop> &next_hops)
 {
+   if (!_enabled)
+      return;
    LOG_ASSERT_ERROR(_enabled, "Enabled(FALSE)");
    
    // Acquire Lock
@@ -283,6 +285,8 @@ NetworkModelEMeshHopCounter::routePacket(const NetPacket &pkt,
 void
 NetworkModelEMeshHopCounter::processReceivedPacket(NetPacket &pkt)
 {
+   if (!_enabled)
+      return;
    assert(_enabled);
    assert(pkt.specific == RECEIVER_CORE);
 

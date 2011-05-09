@@ -58,6 +58,14 @@ ThreadInterface::sendSimReply(UInt64 time, SimReply sim_reply)
    _reply_semaphore.signal();
 }
 
+void
+ThreadInterface::sendSimInsReply(SimReply sim_reply)
+{
+   // Signal the App Thread
+   _sim_reply = sim_reply;
+   _reply_semaphore.signal();
+}
+
 SimReply
 ThreadInterface::recvSimReply()
 {

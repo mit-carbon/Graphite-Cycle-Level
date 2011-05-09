@@ -36,6 +36,10 @@ public:
    void updateTime(UInt64 time);
    void setTime(UInt64 time);
 
+   void incrTotalInstructionsIssued() { _total_instructions_issued ++; }
+   UInt64 getTotalInstructionsIssued() { return _total_instructions_issued; }
+   UInt64 getMaxOutstandingInstructions() { return _max_outstanding_instructions; }
+
    void enable() { _enabled = true; }
    void disable() { _enabled = false; }
    bool isEnabled() { return _enabled; }
@@ -45,6 +49,12 @@ protected:
    Core* getCore() { return _core; }
    
    UInt64 _cycle_count;
+   
+   UInt64 _max_outstanding_instructions;
+
+   // Performance Counters
+   UInt64 _total_instructions_executed;
+   UInt64 _total_instructions_issued;
    
 private:
    Core* _core;

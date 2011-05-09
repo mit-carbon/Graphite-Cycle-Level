@@ -22,6 +22,8 @@ public:
    SimReply recvSimReply();
    // Send reply from sim thread to app thread
    void sendSimReply(UInt64 time, SimReply sim_reply = 0);
+   // Send reply from sim thread to app thread
+   void sendSimInsReply(SimReply sim_reply);
 
 private:
    queue<AppRequest> _app_request_queue;

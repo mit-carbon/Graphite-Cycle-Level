@@ -42,7 +42,7 @@ DramDirectoryCntlr::DramDirectoryCntlr(MemoryManager* memory_manager,
    if (getCoreId() == 0)
    {
       Event::registerHandler(DRAM_DIRECTORY_ACCESS_REQ, handleDramDirectoryAccessReq);
-      Event::registerHandler(DRAM_DIRECTORY_SCHEDULE_NEXT_REQ_FROM_L2_CACHE, handleNextDramDirectoryAccessReqFromL2Cache);
+      Event::registerHandler(DRAM_DIRECTORY_SCHEDULE_NEXT_REQ_FROM_L2_CACHE, scheduleNextDramDirectoryAccessReqFromL2Cache);
       Event::registerHandler(DRAM_DIRECTORY_HANDLE_NEXT_REQ_FROM_L2_CACHE, handleNextDramDirectoryAccessReqFromL2Cache);
    }
 }
@@ -104,6 +104,10 @@ DramDirectoryCntlr::scheduleNextReqFromL2Cache(IntPtr address)
 
    if (!m_dram_directory_req_queue_list->empty(address))
    {
+      // Add this address to the inactive address set
+      assert(m_inactive_address_set.find(address) == m_inactive_address_set.end());
+      m_inactive_address_set.insert(address);
+
       LOG_PRINT("A new shmem req for address(0x%x) found", address);
       
       UInt64 time = getShmemPerfModel()->getCycleCount();
@@ -139,6 +143,10 @@ DramDirectoryCntlr::handleNextReqFromL2Cache(IntPtr address)
 {
    LOG_PRINT("Start handleNextReqFromL2Cache(0x%llx)", address);
    assert (!m_dram_directory_req_queue_list->empty(address));
+
+   // Remove this address from the inactive address set
+   assert (m_inactive_address_set.find(address) != m_inactive_address_set.end());
+   m_inactive_address_set.erase(address);
    
    ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
 
@@ -647,7 +655,7 @@ DramDirectoryCntlr::processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_m
       directory_block_info->setDState(DirectoryState::UNCACHED);
    }
 
-   if (m_dram_directory_req_queue_list->size(address) > 0)
+   if ( (m_dram_directory_req_queue_list->size(address) > 0) && (isActive(address)) )
    {
       ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
 
@@ -695,7 +703,7 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
    directory_entry->setOwner(INVALID_CORE_ID);
    directory_block_info->setDState(DirectoryState::UNCACHED);
 
-   if (m_dram_directory_req_queue_list->size(address) != 0)
+   if ( (m_dram_directory_req_queue_list->size(address) != 0) && (isActive(address)) )
    {
       ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
 
@@ -744,7 +752,7 @@ DramDirectoryCntlr::processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_ms
    directory_entry->setOwner(INVALID_CORE_ID);
    directory_block_info->setDState(DirectoryState::SHARED);
 
-   if (m_dram_directory_req_queue_list->size(address) != 0)
+   if ( (m_dram_directory_req_queue_list->size(address) != 0) && (isActive(address)) )
    {
       ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
       LOG_ASSERT_ERROR(shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::SH_REQ,
@@ -790,6 +798,12 @@ DramDirectoryCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* dat
          getMemoryManager()->getCore()->getId() /* receiver */,
          address,
          data_buf, getCacheBlockSize());
+}
+
+bool
+DramDirectoryCntlr::isActive(IntPtr address)
+{
+   return (m_inactive_address_set.find(address) == m_inactive_address_set.end());
 }
 
 core_id_t

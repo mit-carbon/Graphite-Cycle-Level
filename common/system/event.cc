@@ -15,8 +15,8 @@ Event::Event(Type type, UInt64 time, UnstructuredBuffer* event_args)
 
 Event::~Event()
 {
-   if (_event_args)
-      delete _event_args;
+   assert(_event_args);
+   delete _event_args;
 }
 
 void

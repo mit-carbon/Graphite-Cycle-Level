@@ -37,6 +37,19 @@ void handleInstruction(Instruction *instruction, bool atomic_memory_update, UInt
       // Send request to sim thread
       AppRequest app_request(AppRequest::HANDLE_INSTRUCTION, instruction_info);
       Sim()->getThreadInterface(core->getId())->sendAppRequest(app_request);
+      
+      // Increment the number of issued instructions
+      core->getPerformanceModel()->incrTotalInstructionsIssued();
+
+      UInt64 total_instructions_issued = core->getPerformanceModel()->getTotalInstructionsIssued();
+      if ( (total_instructions_issued % core->getPerformanceModel()->getMaxOutstandingInstructions()) == 0 )
+      {
+         // Receive Reply after every 'n' instructions are executed
+         SimReply sim_reply = Sim()->getThreadInterface(core->getId())->recvSimReply();
+         LOG_ASSERT_ERROR(sim_reply == core->getPerformanceModel()->getMaxOutstandingInstructions(),
+               "Sim Reply(%llu), Max Outstanding Instructions(%llu)",
+               sim_reply, core->getPerformanceModel()->getMaxOutstandingInstructions());
+      }
    }
 }
 

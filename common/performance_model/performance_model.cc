@@ -1,3 +1,4 @@
+#include "simulator.h"
 #include "core.h"
 #include "performance_model.h"
 #include "simple_performance_model.h"
@@ -26,7 +27,13 @@ PerformanceModel::PerformanceModel(Core *core, float frequency)
    , _total_time(0)
    , _checkpointed_cycle_count(0)
    , _enabled(false)
-{}
+{
+   // Initialize Performance Counters
+   _total_instructions_executed = 0;
+   _total_instructions_issued = 0;
+
+   _max_outstanding_instructions = (UInt64) Sim()->getCfg()->getInt("general/max_outstanding_instructions", 1);
+}
 
 PerformanceModel::~PerformanceModel()
 {}
@@ -38,8 +45,10 @@ PerformanceModel::outputSummary(ostream& os)
    frequencySummary(os);
 }
 
-void PerformanceModel::frequencySummary(ostream& os)
+void
+PerformanceModel::frequencySummary(ostream& os)
 {
+   os << "    Total Instructions: " << _total_instructions_executed << endl;
    os << "    Completion Time: " << (UInt64) (((float) _cycle_count) / _frequency) << endl;
    os << "    Average Frequency: " << _average_frequency << endl;
 }

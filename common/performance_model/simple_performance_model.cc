@@ -1,4 +1,6 @@
 #include <iostream>
+#include "simulator.h"
+#include "thread_interface.h"
 #include "simple_performance_model.h"
 #include "core.h"
 #include "event.h"
@@ -10,6 +12,13 @@ SimplePerformanceModel::SimplePerformanceModel(Core* core, float frequency)
 
 SimplePerformanceModel::~SimplePerformanceModel()
 {}
+
+void
+SimplePerformanceModel::outputSummary(ostream& out)
+{
+   out << "Core Performance Model Summary:" << endl;
+   PerformanceModel::outputSummary(out);
+}
 
 bool
 SimplePerformanceModel::handleInstruction(Instruction* instruction,
@@ -35,12 +44,6 @@ SimplePerformanceModel::handleCompletedMemoryAccess(UInt64 time, UInt32 memory_a
 
    // Issue memory request to next address
    issueNextMemoryRequest();
-}
-
-void
-SimplePerformanceModel::outputSummary(std::ostream& os)
-{
-   PerformanceModel::outputSummary(os);
 }
 
 bool
@@ -96,6 +99,13 @@ SimplePerformanceModel::completeInstruction()
    _cycle_count = _curr_instruction_status._cycle_count;
 
    _curr_instruction_status._instruction = (Instruction*) NULL;
+
+   // Update Performance Counters
+   _total_instructions_executed ++;
+   if ((_total_instructions_executed % _max_outstanding_instructions) == 0)
+   {
+      Sim()->getThreadInterface(getCore()->getId())->sendSimInsReply(_max_outstanding_instructions);
+   }
 
    UnstructuredBuffer* event_args = new UnstructuredBuffer();
    (*event_args) << getCore()->getId();

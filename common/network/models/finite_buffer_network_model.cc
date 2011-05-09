@@ -286,7 +286,6 @@ FiniteBufferNetworkModel::receiveModelingPacket(NetPacket* modeling_packet)
       }
    }
 
-   LOG_PRINT("receiveModelingPacket(%p) exit - No raw packet", modeling_packet);
    return (NetPacket*) NULL;
 }
 
