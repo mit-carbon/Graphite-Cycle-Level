@@ -29,34 +29,32 @@ namespace PrL1PrL2DramDirectoryMSI
          MemoryManager* m_memory_manager;
          std::map<IntPtr, Byte*> m_data_map;
          DramPerfModel* m_dram_perf_model;
-         UInt32 m_cache_block_size;
-         ShmemPerfModel* m_shmem_perf_model;
 
          typedef std::map<IntPtr,UInt64> AccessCountMap;
          AccessCountMap* m_dram_access_count;
 
-         UInt32 getCacheBlockSize() { return m_cache_block_size; }
+         // Get/Put Data From/To Dram
+         void getDataFromDram(core_id_t sender, ShmemMsg* shmem_msg);
+         void putDataToDram(core_id_t sender, ShmemMsg* shmem_msg);
+         
+         UInt32 getCacheBlockSize();
          MemoryManager* getMemoryManager() { return m_memory_manager; }
-         ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
+         ShmemPerfModel* getShmemPerfModel();
          UInt64 runDramPerfModel(core_id_t requester);
 
          void addToDramAccessCount(IntPtr address, access_t access_type);
-         void printDramAccessCount(void);
+         void printDramAccessCount();
 
       public:
          DramCntlr(MemoryManager* memory_manager,
-               volatile float dram_access_cost,
-               volatile float dram_bandwidth,
-               bool dram_queue_model_enabled,
-               std::string dram_queue_model_type,
-               UInt32 cache_block_size,
-               ShmemPerfModel* shmem_perf_model);
+               float dram_access_cost,
+               float dram_bandwidth,
+               bool dram_queue_model_enabled);
 
          ~DramCntlr();
 
          DramPerfModel* getDramPerfModel() { return m_dram_perf_model; }
 
-         void getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf);
-         void putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf);
+         void handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg);
    };
 }

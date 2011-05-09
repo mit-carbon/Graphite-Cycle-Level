@@ -2,15 +2,16 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
+#include <cmath>
 using namespace std;
 
-#include <boost/lexical_cast.hpp>
 #include "memory_manager.h"
 #include "dram_directory_cache.h"
 #include "simulator.h"
 #include "config.h"
 #include "log.h"
 #include "utils.h"
+#include "clock_converter.h"
 
 #define DETAILED_TRACKING_ENABLED    1
 
@@ -26,14 +27,11 @@ DramDirectoryCache::DramDirectoryCache(
       UInt32 max_hw_sharers,
       UInt32 max_num_sharers,
       UInt32 num_dram_cntlrs,
-      UInt64 dram_directory_cache_access_delay_in_ns,
-      ShmemPerfModel* shmem_perf_model):
+      UInt64 dram_directory_cache_access_delay_in_ns):
    m_memory_manager(memory_manager),
    m_total_entries(total_entries),
    m_associativity(associativity),
-   m_cache_block_size(cache_block_size),
-   m_dram_directory_cache_access_delay_in_ns(dram_directory_cache_access_delay_in_ns),
-   m_shmem_perf_model(shmem_perf_model)
+   m_dram_directory_cache_access_delay_in_ns(dram_directory_cache_access_delay_in_ns)
 {
    m_num_sets = m_total_entries / m_associativity;
    
@@ -43,8 +41,7 @@ DramDirectoryCache::DramDirectoryCache(
    initializeParameters(num_dram_cntlrs);
    
    volatile float core_frequency = Config::getSingleton()->getCoreFrequency(m_memory_manager->getCore()->getId());
-   m_dram_directory_cache_access_delay_in_clock_cycles = \
-      static_cast<UInt64>(ceil(static_cast<float>(m_dram_directory_cache_access_delay_in_ns) * core_frequency));
+   m_dram_directory_cache_access_delay_in_clock_cycles = convertCycleCount(m_dram_directory_cache_access_delay_in_ns, 1.0, core_frequency);
 }
 
 DramDirectoryCache::~DramDirectoryCache()
@@ -58,12 +55,12 @@ DramDirectoryCache::initializeParameters(UInt32 num_dram_cntlrs)
    UInt32 num_cores = Config::getSingleton()->getTotalCores();
 
    m_log_num_sets = floorLog2(m_num_sets);
-   m_log_cache_block_size = floorLog2(m_cache_block_size);
+   m_log_cache_block_size = floorLog2(getCacheBlockSize());
    m_log_num_cores = floorLog2(num_cores);
   
    m_log_num_dram_cntlrs = ceilLog2(num_dram_cntlrs); 
 
-   IntPtr stack_size = boost::lexical_cast<IntPtr> (Sim()->getCfg()->get("stack/stack_size_per_core"));
+   IntPtr stack_size = (IntPtr) (Sim()->getCfg()->getInt("stack/stack_size_per_core"));
    LOG_ASSERT_ERROR(isPower2(stack_size), "stack_size(%#llx) should be a power of 2", stack_size);
    m_log_stack_size = floorLog2(stack_size);
    
@@ -76,8 +73,8 @@ DramDirectoryCache::initializeParameters(UInt32 num_dram_cntlrs)
 DirectoryEntry*
 DramDirectoryCache::getDirectoryEntry(IntPtr address)
 {
-   if (m_shmem_perf_model)
-      getShmemPerfModel()->incrCycleCount(m_dram_directory_cache_access_delay_in_clock_cycles);
+   // if (getShmemPerfModel())
+   //    getShmemPerfModel()->incrCycleCount(m_dram_directory_cache_access_delay_in_clock_cycles);
 
    IntPtr tag;
    UInt32 set_index;
@@ -92,7 +89,7 @@ DramDirectoryCache::getDirectoryEntry(IntPtr address)
 
       if (directory_entry->getAddress() == address)
       {
-         if (m_shmem_perf_model)
+         if (getShmemPerfModel())
             getShmemPerfModel()->incrCycleCount(directory_entry->getLatency());
          // Simple check for now. Make sophisticated later
          return directory_entry;
@@ -142,8 +139,8 @@ DramDirectoryCache::getReplacementCandidates(IntPtr address, vector<DirectoryEnt
 DirectoryEntry*
 DramDirectoryCache::replaceDirectoryEntry(IntPtr replaced_address, IntPtr address)
 {
-   if (m_shmem_perf_model)
-      getShmemPerfModel()->incrCycleCount(m_dram_directory_cache_access_delay_in_clock_cycles);
+   // if (getShmemPerfModel())
+   //    getShmemPerfModel()->incrCycleCount(m_dram_directory_cache_access_delay_in_clock_cycles);
 
    IntPtr tag;
    UInt32 set_index;
@@ -225,7 +222,7 @@ void
 DramDirectoryCache::updateInternalVariablesOnFrequencyChange(volatile float core_frequency)
 {
    m_dram_directory_cache_access_delay_in_clock_cycles = \
-      static_cast<UInt64>(ceil(static_cast<float>(m_dram_directory_cache_access_delay_in_ns) * core_frequency));
+      (UInt64) (ceil( ((float) m_dram_directory_cache_access_delay_in_ns) * core_frequency ));
 }
 
 void
@@ -249,7 +246,7 @@ DramDirectoryCache::outputSummary(ostream& out)
       if (num_dram_cntlrs == -1)
          num_dram_cntlrs = num_cores;
 
-      UInt64 expected_entries_per_dram_cntlr = (num_cores * l2_cache_size * 1024 / m_cache_block_size) / num_dram_cntlrs;
+      UInt64 expected_entries_per_dram_cntlr = (num_cores * l2_cache_size * 1024 / getCacheBlockSize()) / num_dram_cntlrs;
       // Convert to a power of 2
       expected_entries_per_dram_cntlr = UInt64(1) << floorLog2(expected_entries_per_dram_cntlr);
 
@@ -365,6 +362,18 @@ DramDirectoryCache::dummyOutputSummary(ostream& out)
    out << "    Address with max evictions: NA" << endl;
    out << "    Max address evictions: NA" << endl;
 #endif
+}
+
+UInt32
+DramDirectoryCache::getCacheBlockSize()
+{
+   return getMemoryManager()->getCacheBlockSize();
+}
+
+ShmemPerfModel*
+DramDirectoryCache::getShmemPerfModel()
+{
+   return getMemoryManager()->getShmemPerfModel();
 }
 
 }

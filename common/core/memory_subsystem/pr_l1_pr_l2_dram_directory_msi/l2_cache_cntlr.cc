@@ -6,31 +6,37 @@
 namespace PrL1PrL2DramDirectoryMSI
 {
 
-L2CacheCntlr::L2CacheCntlr(core_id_t core_id,
-      MemoryManager* memory_manager,
-      L1CacheCntlr* l1_cache_cntlr,
-      AddressHomeLookup* dram_directory_home_lookup,
-      UInt32 cache_block_size,
-      UInt32 l2_cache_size, UInt32 l2_cache_associativity,
-      std::string l2_cache_replacement_policy,
-      ShmemPerfModel* shmem_perf_model):
+L2CacheCntlr::L2CacheCntlr(MemoryManager* memory_manager,
+                           L1CacheCntlr* l1_cache_cntlr,
+                           AddressHomeLookup* dram_directory_home_lookup,
+                           UInt32 cache_block_size,
+                           UInt32 l2_cache_size, UInt32 l2_cache_associativity,
+                           std::string l2_cache_replacement_policy):
    m_memory_manager(memory_manager),
    m_l1_cache_cntlr(l1_cache_cntlr),
-   m_dram_directory_home_lookup(dram_directory_home_lookup),
-   m_core_id(core_id),
-   m_cache_block_size(cache_block_size),
-   m_shmem_perf_model(shmem_perf_model)
+   m_dram_directory_home_lookup(dram_directory_home_lookup)
 {
    m_l2_cache = new Cache("L2",
          l2_cache_size, 
          l2_cache_associativity, 
-         m_cache_block_size, 
+         cache_block_size, 
          l2_cache_replacement_policy, 
          CacheBase::PR_L2_CACHE);
+   
+   m_l2_cache_contention_model = new QueueModelSimple(false);
+
+   // Register the Event Handler
+   if (getCoreId() == 0)
+      Event::registerHandler(L2_CACHE_ACCESS_MSG, handleL2CacheAccessMsg);
 }
 
 L2CacheCntlr::~L2CacheCntlr()
 {
+   // Unregister the Event Handler
+   if (getCoreId() == 0)
+      Event::unregisterHandler(L2_CACHE_ACCESS_MSG);
+
+   delete m_l2_cache_contention_model;
    delete m_l2_cache;
 }
 
@@ -97,7 +103,7 @@ L2CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte
          // Send back the data also
          getMemoryManager()->sendMsg(ShmemMsg::FLUSH_REP, 
                MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-               m_core_id /* requester */, 
+               getCoreId() /* requester */, 
                home_node_id /* receiver */, 
                evict_address, 
                evict_buf, getCacheBlockSize());
@@ -109,7 +115,7 @@ L2CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte
                evict_address, evict_block_info.getCState(), evict_block_info.getCachedLoc());
          getMemoryManager()->sendMsg(ShmemMsg::INV_REP, 
                MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-               m_core_id /* requester */, 
+               getCoreId() /* requester */, 
                home_node_id /* receiver */, 
                evict_address);
       }
@@ -173,13 +179,95 @@ L2CacheCntlr::processShmemReqFromL1Cache(MemComponent::component_t req_mem_compo
 }
 
 void
+handleL2CacheAccessMsg(Event* event)
+{
+   UnstructuredBuffer* event_args = event->getArgs();
+   
+   L2CacheCntlr* l2_cache_cntlr;
+   core_id_t sender;
+   ShmemMsg shmem_msg;
+   (*event_args) >> l2_cache_cntlr >> sender >> shmem_msg;
+
+   // Set the Time correctly
+   l2_cache_cntlr->getShmemPerfModel()->setCycleCount(event->getTime());
+
+   switch (shmem_msg.getSenderMemComponent())
+   {
+   case MemComponent::L1_ICACHE:
+   case MemComponent::L1_DCACHE:
+      l2_cache_cntlr->__handleMsgFromL1Cache(&shmem_msg);
+      break;
+   
+   case MemComponent::DRAM_DIR:
+      l2_cache_cntlr->__handleMsgFromDramDirectory(sender, &shmem_msg);
+      break;
+
+   default:
+      LOG_PRINT_ERROR("Unrecognized sender component(%u)", shmem_msg.getSenderMemComponent());
+      break;
+   }
+}
+
+void
+L2CacheCntlr::scheduleNextPendingRequest(UInt64 time)
+{
+   LOG_PRINT("scheduleNextPendingRequest(Time[%llu], Request Queue Size[%u])", \
+         time, m_pending_dram_directory_req_list.size());
+
+   if (!m_pending_dram_directory_req_list.empty())
+   {
+      // Get the L2 Cache Access Req at the front of the list
+      pair<core_id_t,ShmemMsg*> blocked_req = m_pending_dram_directory_req_list.front();
+      m_pending_dram_directory_req_list.pop_front();
+      
+      core_id_t sender = blocked_req.first;
+      ShmemMsg* shmem_msg = blocked_req.second;
+
+      scheduleRequest(time, sender, shmem_msg);
+      
+      delete shmem_msg;
+   }
+}
+
+void
+L2CacheCntlr::scheduleRequest(UInt64 time, core_id_t sender, ShmemMsg* shmem_msg)
+{
+   LOG_PRINT("scheduleRequest(Time[%llu], Sender[%i], Address[0x%llx], Type[%u], Requester[%i])", \
+         time, sender, shmem_msg->getAddress(), shmem_msg->getMsgType(), shmem_msg->getRequester());
+
+   // Calculate the L2 Cache Contention Delay
+   // Assume that the L2 Cache can process one request per cycle
+   UInt64 queue_delay = m_l2_cache_contention_model->computeQueueDelay(time, 1);
+   LOG_PRINT("L2 Cache Contention Delay(%llu)", queue_delay);
+   time += queue_delay;
+
+   // Push an event to access the L2 Cache from the Directory
+   UnstructuredBuffer* event_args = new UnstructuredBuffer();
+   (*event_args) << this << sender << (*shmem_msg);
+   Event* event = new Event((Event::Type) L2_CACHE_ACCESS_MSG, time, event_args);
+   Event::processInOrder(event, getCoreId(), EventQueue::ORDERED);
+}
+
+void
 L2CacheCntlr::handleMsgFromL1Cache(ShmemMsg* shmem_msg)
 {
+   assert(!isLocked());
+
+   // Schedule the request according to the processing delays within the L2 Cache
+   scheduleRequest(getShmemPerfModel()->getCycleCount(), getCoreId(), shmem_msg);
+}
+
+void
+L2CacheCntlr::__handleMsgFromL1Cache(ShmemMsg* shmem_msg)
+{
+   assert(!isLocked());
+
+   // Update to account for time
+   getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
+
    IntPtr address = shmem_msg->getAddress();
    ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
    MemComponent::component_t sender_mem_component = shmem_msg->getSenderMemComponent();
-
-   acquireLock();
 
    assert(shmem_msg->getDataBuf() == NULL);
    assert(shmem_msg->getDataLength() == 0);
@@ -202,8 +290,6 @@ L2CacheCntlr::handleMsgFromL1Cache(ShmemMsg* shmem_msg)
          LOG_PRINT_ERROR("Unrecognized shmem msg type (%u)", shmem_msg_type);
          break;
    }
-
-   releaseLock();
 }
 
 void
@@ -222,14 +308,14 @@ L2CacheCntlr::processExReqFromL1Cache(ShmemMsg* shmem_msg)
       invalidateCacheBlock(address);
       getMemoryManager()->sendMsg(ShmemMsg::INV_REP, 
             MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-            m_core_id /* requester */, 
+            getCoreId() /* requester */, 
             getHome(address) /* receiver */, 
             address);
    }
 
    getMemoryManager()->sendMsg(ShmemMsg::EX_REQ, 
          MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-         m_core_id /* requester */, 
+         getCoreId() /* requester */, 
          getHome(address) /* receiver */, 
          address);
 }
@@ -241,26 +327,49 @@ L2CacheCntlr::processShReqFromL1Cache(ShmemMsg* shmem_msg)
 
    getMemoryManager()->sendMsg(ShmemMsg::SH_REQ, 
          MemComponent::L2_CACHE, MemComponent::DRAM_DIR, 
-         m_core_id /* requester */, 
+         getCoreId() /* requester */, 
          getHome(address) /* receiver */, 
          address);
 }
 
+
 void
-L2CacheCntlr::handleMsgFromDramDirectory(
-      core_id_t sender, ShmemMsg* shmem_msg)
+L2CacheCntlr::handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg)
 {
+   LOG_PRINT("handleMsgFromDramDirectory(Sender[%i], Address[0x%llx], Type[%u], Requester[%i])", \
+         sender, shmem_msg->getAddress(), shmem_msg->getMsgType(), shmem_msg->getRequester());
+
+   if ( (isLocked()) || (!m_pending_dram_directory_req_list.empty()) )
+   {
+      LOG_PRINT("Locked. Cloning Message and pushing it to the waiting list");
+      // Clone the packet and queue it up
+      ShmemMsg* cloned_shmem_msg = new ShmemMsg(shmem_msg);
+      m_pending_dram_directory_req_list.push_back(make_pair(sender,cloned_shmem_msg));
+   }
+   else // If (NOT locked) AND (NO earlier requests pending)
+   {
+      // Schedule the request according to the processing delays within the L2 Cache
+      scheduleRequest(getShmemPerfModel()->getCycleCount(), sender, shmem_msg);
+   }
+}
+
+// Called after going through the contention model
+void
+L2CacheCntlr::__handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg)
+{
+   LOG_PRINT("__handleMsgFromDramDirectory(Sender[%i], Address[0x%llx], Type[%u], Requester[%i])", \
+         sender, shmem_msg->getAddress(), shmem_msg->getMsgType(), shmem_msg->getRequester());
+
+   assert(!isLocked());
+
+   // Schedule the next request from the dram directory (if any)
+   scheduleNextPendingRequest(getShmemPerfModel()->getCycleCount());
+
+   // Account for access time
+   getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
+   
    ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
    IntPtr address = shmem_msg->getAddress();
-
-   LOG_PRINT("Handle Msg from Dram Directory: Address(0x%llx), Msg Type(%u)", address, shmem_msg_type);
-
-   LOG_PRINT("Start acquiring all locks");
-   // Acquire Locks
-   MemComponent::component_t caching_mem_component = acquireL1CacheLock(shmem_msg_type, address);
-   acquireLock();
-
-   LOG_PRINT("Acquired all locks");
 
    switch (shmem_msg_type)
    {
@@ -280,40 +389,28 @@ L2CacheCntlr::handleMsgFromDramDirectory(
          processWbReqFromDramDirectory(sender, shmem_msg);
          break;
       default:
-         LOG_PRINT_ERROR("Unrecognized msg type: %u", shmem_msg_type);
+         LOG_PRINT_ERROR("Unrecognized msg type(%u)", shmem_msg_type);
          break;
    }
-
-   LOG_PRINT("Start releasing all locks");
-
-   // Release Locks
-   releaseLock();
-   if (caching_mem_component != MemComponent::INVALID_MEM_COMPONENT)
-      m_l1_cache_cntlr->releaseLock(caching_mem_component);
-
-   LOG_PRINT("Released all locks");
 
    if ((shmem_msg_type == ShmemMsg::EX_REP) || (shmem_msg_type == ShmemMsg::SH_REP))
    {
       // Remove the Miss Status Information
       L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
-      assert(l2_miss_status->_mem_component = caching_mem_component);
       m_miss_status_map.erase(l2_miss_status);
-      delete l2_miss_status;
-      LOG_PRINT("Erased L2MissStatus data structure from the map");
       
       // Signal the L1 Cache that data is ready
       LOG_PRINT("Signal the L1 Cache Cntlr that the data is ready");
-      m_l1_cache_cntlr->signalDataReady(caching_mem_component, address);
+      m_l1_cache_cntlr->signalDataReady(l2_miss_status->_mem_component, address);
+      
+      delete l2_miss_status;
+      LOG_PRINT("Erased L2MissStatus data structure from the map");
    }
 }
 
 void
 L2CacheCntlr::processExRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg)
 {
-   // Update Shared Mem perf counters for access to L2 Cache
-   getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
-
    IntPtr address = shmem_msg->getAddress();
    Byte* data_buf = shmem_msg->getDataBuf();
 
@@ -333,9 +430,6 @@ L2CacheCntlr::processExRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
 void
 L2CacheCntlr::processShRepFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg)
 {
-   // Update Shared Mem perf counters for access to L2 Cache
-   getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
-
    IntPtr address = shmem_msg->getAddress();
    Byte* data_buf = shmem_msg->getDataBuf();
 
@@ -363,11 +457,6 @@ L2CacheCntlr::processInvReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_m
    {
       assert(cstate == CacheState::SHARED);
   
-      // Update Shared Mem perf counters for access to L2 Cache
-      getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_TAGS);
-      // Update Shared Mem perf counters for access to L1 Cache
-      getMemoryManager()->incrCycleCount(l2_cache_block_info->getCachedLoc(), CachePerfModel::ACCESS_CACHE_TAGS);
-
       // Invalidate the line in L1 Cache
       invalidateCacheBlockInL1(l2_cache_block_info->getCachedLoc(), address);
       // Invalidate the line in the L2 cache also
@@ -378,11 +467,6 @@ L2CacheCntlr::processInvReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_m
             shmem_msg->getRequester() /* requester */, 
             sender /* receiver */, 
             address);
-   }
-   else
-   {
-      // Update Shared Mem perf counters for access to L2 Cache
-      getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_TAGS);
    }
 }
 
@@ -397,11 +481,6 @@ L2CacheCntlr::processFlushReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem
    {
       assert(cstate == CacheState::MODIFIED);
       
-      // Update Shared Mem perf counters for access to L2 Cache
-      getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
-      // Update Shared Mem perf counters for access to L1 Cache
-      getMemoryManager()->incrCycleCount(l2_cache_block_info->getCachedLoc(), CachePerfModel::ACCESS_CACHE_TAGS);
-
       // Invalidate the line in L1 Cache
       invalidateCacheBlockInL1(l2_cache_block_info->getCachedLoc(), address);
 
@@ -417,11 +496,6 @@ L2CacheCntlr::processFlushReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem
             address, 
             data_buf, getCacheBlockSize());
    }
-   else
-   {
-      // Update Shared Mem perf counters for access to L2 Cache
-      getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_TAGS);
-   }
 }
 
 void
@@ -435,11 +509,6 @@ L2CacheCntlr::processWbReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
    {
       assert(cstate == CacheState::MODIFIED);
  
-      // Update Shared Mem perf counters for access to L2 Cache
-      getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
-      // Update Shared Mem perf counters for access to L1 Cache
-      getMemoryManager()->incrCycleCount(l2_cache_block_info->getCachedLoc(), CachePerfModel::ACCESS_CACHE_TAGS);
-
       // Set the Appropriate Cache State in L1 also
       setCacheStateInL1(l2_cache_block_info->getCachedLoc(), address, CacheState::SHARED);
 
@@ -455,11 +524,6 @@ L2CacheCntlr::processWbReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
             address,
             data_buf, getCacheBlockSize());
    }
-   else
-   {
-      // Update Shared Mem perf counters for access to L2 Cache
-      getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_TAGS);
-   }
 }
 
 bool
@@ -469,17 +533,17 @@ L2CacheCntlr::shmemReqEndsInL2Cache(ShmemMsg::msg_t shmem_msg_type, CacheState::
 
    switch (shmem_msg_type)
    {
-      case ShmemMsg::EX_REQ:
-         cache_hit = CacheState(cstate).writable();
-         break;
+   case ShmemMsg::EX_REQ:
+      cache_hit = CacheState(cstate).writable();
+      break;
 
-      case ShmemMsg::SH_REQ:
-         cache_hit = CacheState(cstate).readable();
-         break;
+   case ShmemMsg::SH_REQ:
+      cache_hit = CacheState(cstate).readable();
+      break;
 
-      default:
-         LOG_PRINT_ERROR("Unsupported Shmem Msg Type: %u", shmem_msg_type);
-         break;
+   default:
+      LOG_PRINT_ERROR("Unsupported Shmem Msg Type: %u", shmem_msg_type);
+      break;
    }
 
    if (modeled)
@@ -490,60 +554,28 @@ L2CacheCntlr::shmemReqEndsInL2Cache(ShmemMsg::msg_t shmem_msg_type, CacheState::
    return cache_hit;
 }
 
-MemComponent::component_t
-L2CacheCntlr::acquireL1CacheLock(ShmemMsg::msg_t msg_type, IntPtr address)
+core_id_t
+L2CacheCntlr::getCoreId()
 {
-   switch (msg_type)
-   {
-      case ShmemMsg::EX_REP:
-      case ShmemMsg::SH_REP:
-         {
-            L2MissStatus* l2_miss_status = (L2MissStatus*) m_miss_status_map.get(address);
-            LOG_ASSERT_ERROR(l2_miss_status, "mapsize(%u)", m_miss_status_map.size(address));
-            MemComponent::component_t mem_component = l2_miss_status->_mem_component;
-            LOG_PRINT("Acquire Lock(%u)", mem_component);
-            m_l1_cache_cntlr->acquireLock(mem_component);
-            return mem_component;
-         }
-
-      case ShmemMsg::INV_REQ:
-      case ShmemMsg::FLUSH_REQ:
-      case ShmemMsg::WB_REQ:
-      
-         {
-            acquireLock();
-            
-            PrL2CacheBlockInfo* l2_cache_block_info = getCacheBlockInfo(address);
-            MemComponent::component_t caching_mem_component = (l2_cache_block_info == NULL) ?
-                  MemComponent::INVALID_MEM_COMPONENT : l2_cache_block_info->getCachedLoc();
-            
-            releaseLock();
-
-            assert(caching_mem_component != MemComponent::L1_ICACHE);
-            if (caching_mem_component != MemComponent::INVALID_MEM_COMPONENT)
-            {
-               m_l1_cache_cntlr->acquireLock(caching_mem_component);
-            }
-            return caching_mem_component;
-         }
-
-      default:
-         LOG_PRINT_ERROR("Unrecognized Msg Type (%u)", msg_type);
-         return MemComponent::INVALID_MEM_COMPONENT;
-   }
-
+   return getMemoryManager()->getCore()->getId();
 }
 
-void
-L2CacheCntlr::acquireLock()
+UInt32
+L2CacheCntlr::getCacheBlockSize()
 {
-   m_l2_cache_lock.acquire();
+   return getMemoryManager()->getCacheBlockSize();
 }
 
-void
-L2CacheCntlr::releaseLock()
+ShmemPerfModel*
+L2CacheCntlr::getShmemPerfModel()
 {
-   m_l2_cache_lock.release();
+   return getMemoryManager()->getShmemPerfModel();
+}
+
+bool
+L2CacheCntlr::isLocked()
+{
+   return m_l1_cache_cntlr->isLocked();
 }
 
 }

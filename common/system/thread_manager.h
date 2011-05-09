@@ -1,16 +1,12 @@
-#ifndef THREAD_MANAGER_H
-#define THREAD_MANAGER_H
+#pragma once
 
 #include <vector>
-#include <queue>
-#include <map>
+using std::vector;
 
-#include "semaphore.h"
 #include "core.h"
 #include "fixed_types.h"
-#include "message_types.h"
 #include "lock.h"
-
+#include "semaphore.h"
 #include "thread_support.h"
 
 class CoreManager;
@@ -22,68 +18,43 @@ public:
    ~ThreadManager();
 
    // services
-   SInt32 spawnThread(thread_func_t func, void *arg);
-   void joinThread(core_id_t core_id);
-
-   void getThreadToSpawn(ThreadSpawnRequest *req);
-   ThreadSpawnRequest* getThreadSpawnReq();
-   void dequeueThreadSpawnReq (ThreadSpawnRequest *req);
-
-   void terminateThreadSpawners ();
+   void spawnThread(UInt64 time, core_id_t req_core_id, thread_func_t func, void* arg);
+   void joinThread(UInt64 time, core_id_t req_core_id, core_id_t join_core_id);
 
    // events
-   void onThreadStart(ThreadSpawnRequest *req);
+   void onThreadStart(core_id_t core_id);
    void onThreadExit();
+   void onThreadExit(core_id_t core_id);
 
-   // misc
-   void stallThread(core_id_t core_id);
-   void resumeThread(core_id_t core_id);
-   bool isThreadRunning(core_id_t core_id);
-   bool isThreadInitializing(core_id_t core_id);
+   // Thread that is currently being spawn
+   ThreadSpawnRequest dequeueThreadSpawnReq();
    
-   bool areAllCoresRunning();
+   // Core Id -> pthread_t* mapping
+   void insertCoreIDToThreadMapping(core_id_t core_id, pthread_t* thread);
+   void eraseCoreIDToThreadMapping(core_id_t core_id, pthread_t* thread);
+   pthread_t* getThreadFromCoreID(core_id_t core_id);
+   core_id_t getCoreIDFromThread(pthread_t* thread);
 
 private:
+   core_id_t getFreeCoreID();
+   void wakeUpWaiter(UInt64 time, core_id_t core_id);
+   void checkLegalCoreId(core_id_t core_id);
 
-   friend class LCP;
-   friend class MCP;
-
-   void masterSpawnThread(ThreadSpawnRequest*);
-   void slaveSpawnThread(ThreadSpawnRequest*);
-   void masterSpawnThreadReply(ThreadSpawnRequest*);
-
-   void masterOnThreadExit(core_id_t core_id, UInt64 time);
-
-   void slaveTerminateThreadSpawnerAck (core_id_t);
-   void slaveTerminateThreadSpawner ();
-   void updateTerminateThreadSpawner ();
-
-   void masterJoinThread(ThreadJoinRequest *req, UInt64 time);
-   void wakeUpWaiter(core_id_t core_id, UInt64 time);
-
-   void insertThreadSpawnRequest (ThreadSpawnRequest *req);
-
-   struct ThreadState
+   struct CoreState
    {
-      Core::State status;
-      SInt32 waiter;
-
-      ThreadState()
-         : status(Core::IDLE)
-         , waiter(-1)
-      {} 
+      CoreState(): _status(Core::IDLE), _waiter(INVALID_CORE_ID) {}
+      Core::Status _status;
+      core_id_t _waiter;
    };
 
-   bool m_master;
-   std::vector<ThreadState> m_thread_state;
-   std::queue<ThreadSpawnRequest*> m_thread_spawn_list;
-   Semaphore m_thread_spawn_sem;
-   Lock m_thread_spawn_lock;
+   vector<CoreState> _core_state;
+   Lock _lock;
+   Semaphore _semaphore;
 
-   CoreManager *m_core_manager;
+   CoreManager* _core_manager;
 
-   Lock m_thread_spawners_terminated_lock;
-   UInt32 m_thread_spawners_terminated;
+   vector<list<pthread_t*> > _core_id__to__thread_list__mapping;
+   ThreadSpawnRequest _curr_thread_spawn_req;
+
+   void setCurrThreadSpawnRequest(core_id_t core_id, thread_func_t func, void* arg);
 };
-
-#endif // THREAD_MANAGER_H

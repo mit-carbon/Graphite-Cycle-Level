@@ -63,11 +63,7 @@ NetworkModelMagic::processReceivedPacket(NetPacket &pkt)
 {
    ScopedLock sl(_lock);
 
-   core_id_t requester = getNetwork()->getRequester(pkt);
-   LOG_ASSERT_ERROR((requester >= 0) && (requester < (core_id_t) Config::getSingleton()->getTotalCores()),
-         "requester(%i)", requester);
-
-   if ( (!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()) )
+   if (!_enabled)
       return;
 
    UInt32 pkt_length = getNetwork()->getModeledLength(pkt);

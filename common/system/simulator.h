@@ -1,20 +1,19 @@
-#ifndef SIMULATOR_H
-#define SIMULATOR_H
+#pragma once
 
+#include <vector>
+using std::vector;
 #include "config.h"
-#include "log.h"
 #include "config.hpp"
+#include "log.h"
+#include "thread_interface.h"
 
-class MCP;
-class LCP;
-class Transport;
 class EventManager;
 class CoreManager;
 class Thread;
 class ThreadManager;
-class PerfCounterManager;
 class SimThreadManager;
-class ClockSkewMinimizationManager;
+class SyncManager;
+class SyscallManager;
 
 class Simulator
 {
@@ -30,56 +29,37 @@ public:
    static void allocate();
    static void release();
 
-   MCP *getMCP() { return m_mcp; }
-   LCP *getLCP() { return m_lcp; }
    EventManager* getEventManager() { return m_event_manager; }
    CoreManager *getCoreManager() { return m_core_manager; }
-   SimThreadManager *getSimThreadManager() { return m_sim_thread_manager; }
    ThreadManager *getThreadManager() { return m_thread_manager; }
-   PerfCounterManager *getPerfCounterManager() { return m_perf_counter_manager; }
-   ClockSkewMinimizationManager *getClockSkewMinimizationManager() { return m_clock_skew_minimization_manager; }
+   SimThreadManager *getSimThreadManager() { return m_sim_thread_manager; }
+   SyncManager *getSyncManager() { return m_sync_manager; }
+   SyscallManager *getSyscallManager() { return m_syscall_manager; }
+   ThreadInterface *getThreadInterface(core_id_t core_id);
    Config *getConfig() { return &m_config; }
    config::Config *getCfg() { return m_config_file; }
 
-   static void enablePerformanceModelsInCurrentProcess();
-   static void disablePerformanceModelsInCurrentProcess();
-   static void resetPerformanceModelsInCurrentProcess();
+   static void enablePerformanceModels();
+   static void disablePerformanceModels();
+   static void __enablePerformanceModels();
+   static void __disablePerformanceModels();
 
    void startTimer();
    void stopTimer();
-   bool finished();
 
 private:
 
-   void startMCP();
-   void endMCP();
-
-   // handle synchronization of shutdown for distributed simulator objects
-   void broadcastFinish();
-   void handleFinish(); // slave processes
-   void deallocateProcess(); // master process
-   friend class LCP;
-
-   MCP *m_mcp;
-   Thread *m_mcp_thread;
-
-   LCP *m_lcp;
-   Thread *m_lcp_thread;
-
    Config m_config;
    Log m_log;
-   Transport *m_transport;
    EventManager *m_event_manager;
    CoreManager *m_core_manager;
    ThreadManager *m_thread_manager;
-   PerfCounterManager *m_perf_counter_manager;
    SimThreadManager *m_sim_thread_manager;
-   ClockSkewMinimizationManager *m_clock_skew_minimization_manager;
+   SyncManager *m_sync_manager;
+   SyscallManager *m_syscall_manager;
+   vector<ThreadInterface*> m_thread_interface_list;
 
    static Simulator *m_singleton;
-
-   bool m_finished;
-   UInt32 m_num_procs_finished;
 
    UInt64 m_boot_time;
    UInt64 m_start_time;
@@ -93,5 +73,3 @@ __attribute__((unused)) static Simulator *Sim()
 {
    return Simulator::getSingleton();
 }
-
-#endif // SIMULATOR_H

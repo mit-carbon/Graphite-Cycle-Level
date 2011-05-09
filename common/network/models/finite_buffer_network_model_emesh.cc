@@ -166,7 +166,8 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
          link_performance_model_list,
          link_power_model_list,
          input_channel_to_router_id_list__mapping,
-         output_channel_to_router_id_list__mapping);
+         output_channel_to_router_id_list__mapping,
+         _flow_control_packet_type);
 }
 
 void
@@ -363,77 +364,6 @@ FiniteBufferNetworkModelEMesh::computeMemoryControllerPositions(SInt32 num_memor
    }
 
    return (make_pair(true, core_id_list_with_memory_controllers));
-}
-
-pair<bool, vector<Config::CoreList> >
-FiniteBufferNetworkModelEMesh::computeProcessToCoreMapping()
-{
-   // Initialize emesh_width, emesh_height
-   SInt32 emesh_width, emesh_height;
-   computeEMeshTopologyParameters(emesh_width, emesh_height);
-
-   UInt32 process_count = Config::getSingleton()->getProcessCount();
-
-   vector<Config::CoreList> process_to_core_mapping(process_count);
-   // Do a greedy mapping here
-   SInt32 proc_mesh_width = (SInt32) floor(sqrt(process_count));
-   SInt32 proc_mesh_height = (SInt32) floor(1.0 * process_count / proc_mesh_width);
-
-   SInt32 emesh_height_l = (SInt32) ((1.0 * emesh_height * proc_mesh_width * proc_mesh_height) / process_count);
-   
-   for (SInt32 i = 0; i < proc_mesh_width; i++)
-   {
-      for (SInt32 j = 0; j < proc_mesh_height; j++)
-      {
-         SInt32 size_x = emesh_width / proc_mesh_width;
-         SInt32 size_y = emesh_height_l / proc_mesh_height;
-         SInt32 base_x = i * size_x;
-         SInt32 base_y = j * size_y;
-
-         if (i == (proc_mesh_width-1))
-         {
-            size_x = emesh_width - ((proc_mesh_width-1) * size_x);
-         }
-         if (j == (proc_mesh_height-1))
-         {
-            size_y = emesh_height_l - ((proc_mesh_height-1) * size_y);
-         }
-
-         for (SInt32 ii = 0; ii < size_x; ii++)
-         {
-            for (SInt32 jj = 0; jj < size_y; jj++)
-            {
-               core_id_t core_id = (base_x + ii) + ((base_y + jj) * emesh_width);
-               process_to_core_mapping[i + j*proc_mesh_width].push_back(core_id);
-            }
-         }
-      }
-   }
-
-   UInt32 procs_left = process_count - (proc_mesh_width * proc_mesh_height);
-   for (UInt32 i = proc_mesh_width * proc_mesh_height; i < process_count; i++)
-   {
-      SInt32 size_x = emesh_width / procs_left;
-      SInt32 size_y = emesh_height - emesh_height_l;
-      SInt32 base_x = (i - (proc_mesh_width * proc_mesh_height)) * size_x;
-      SInt32 base_y = emesh_height_l;
-
-      if (i == (process_count-1))
-      {
-         size_x = emesh_width - ((procs_left-1) * size_x);
-      }
-
-      for (SInt32 ii = 0; ii < size_x; ii++)
-      {
-         for (SInt32 jj = 0; jj < size_y; jj++)
-         {
-            core_id_t core_id = (base_x + ii) + ((base_y + jj) * emesh_width);
-            process_to_core_mapping[i].push_back(core_id);
-         }
-      }
-   }
-
-   return (make_pair(true, process_to_core_mapping));
 }
 
 void

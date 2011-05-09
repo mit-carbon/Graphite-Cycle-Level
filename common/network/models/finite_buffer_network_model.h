@@ -8,6 +8,7 @@ using namespace std;
 #include "network.h"
 #include "network_node.h"
 #include "lock.h"
+#include "queue_model_simple.h"
 
 class FiniteBufferNetworkModel : public NetworkModel
 {
@@ -46,6 +47,8 @@ class FiniteBufferNetworkModel : public NetworkModel
       vector<NetworkNode*> _network_node_list;
       // Flow Control Scheme
       FlowControlScheme::Type _flow_control_scheme;
+      // Flow Control Packet Type
+      PacketType _flow_control_packet_type;
       // Flit Width
       SInt32 _flit_width;
 
@@ -57,8 +60,8 @@ class FiniteBufferNetworkModel : public NetworkModel
       // Maps to store modeling and raw packets
       map<UInt64, NetPacket*> _received_raw_packet_map;
       map<UInt64, NetPacket*> _received_modeling_packet_map;
-      // Flow Control Packet Type
-      PacketType _flow_control_packet_type;
+      // Sender Contention Model
+      QueueModelSimple* _sender_contention_model;
       // Performance Counters
       UInt64 _total_packets_received;
       UInt64 _total_bytes_received;

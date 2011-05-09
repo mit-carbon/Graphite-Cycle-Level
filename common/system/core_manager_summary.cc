@@ -5,57 +5,10 @@
 #include "log.h"
 #include "simulator.h"
 #include "config.h"
-#include "transport.h"
 #include "core.h"
 #include "core_manager.h"
 
 using namespace std;
-
-// -- outputSummary
-//
-// Collect output summaries for all the cores and send them to process
-// zero. This process then formats the output to look pretty. Only
-// process zero writes to the output stream passed in.
-
-static void gatherSummaries(vector<string> &summaries)
-{
-   Config *cfg = Config::getSingleton();
-   Transport::Node *global_node = Transport::getSingleton()->getGlobalNode();
-
-   for (UInt32 p = 0; p < cfg->getProcessCount(); p++)
-   {
-      LOG_PRINT("Collect from process %d", p);
-
-      const Config::CoreList &cl = cfg->getCoreListForProcess(p);
-
-      // signal process to send
-      if (p != 0)
-         global_node->globalSend(p, &p, sizeof(p));
-
-      // receive summary
-      for (UInt32 c = 0; c < cl.size(); c++)
-      {
-         LOG_PRINT("Collect from core %d", cl[c]);
-
-         Byte *buf;
-
-         buf = (global_node->recv()).first;
-         assert(*((core_id_t*)buf) == cl[c]);
-         delete [] buf;
-
-         buf = (global_node->recv()).first;
-         summaries[cl[c]] = string((char*)buf);
-         delete [] buf;
-      }
-   }
-
-   for (UInt32 i = 0; i < summaries.size(); i++)
-   {
-      LOG_ASSERT_ERROR(!summaries[i].empty(), "Summary %d is empty!", i);
-   }
-
-   LOG_PRINT("Done collecting.");
-}
 
 class Table
 {
@@ -152,31 +105,12 @@ void addRowHeadings(Table &table, const vector<string> &summaries)
 
 void addColHeadings(Table &table)
 {
-   UInt32 num_non_system_cores;
-   if (Config::getSingleton()->getSimulationMode() == Config::FULL)
-      num_non_system_cores = Config::getSingleton()->getTotalCores() - Config::getSingleton()->getProcessCount() - 1;
-   else // mode = (lite, cycle_accurate)
-      num_non_system_cores = Config::getSingleton()->getTotalCores() - 1;
-
-   for (Table::size_type i = 0; i < num_non_system_cores; i++)
+   for (Table::size_type i = 0; i < Config::getSingleton()->getTotalCores(); i++)
    {
       stringstream heading;
       heading << "Core " << i;
       table(0, i+1) = heading.str();
    }
-
-   if (Config::getSingleton()->getSimulationMode() == Config::FULL)
-   {
-      for (unsigned int i = 0; i < Config::getSingleton()->getProcessCount(); i++)
-      {
-         unsigned int core_num = Config::getSingleton()->getThreadSpawnerCoreNum(i);
-         stringstream heading;
-         heading << "TS " << i;
-         table(0, core_num + 1) = heading.str();
-      }
-   }
-
-   table(0, Config::getSingleton()->getMCPCoreNum()+1) = "MCP";
 }
 
 void addCoreSummary(Table &table, core_id_t core, const string &summary)
@@ -220,42 +154,19 @@ void CoreManager::outputSummary(ostream &os)
 {
    LOG_PRINT("Starting CoreManager::outputSummary");
 
-   // Note: Using the global_node only works here because the lcp has
-   // finished and therefore is no longer waiting on a receive. This
-   // is not the most obvious thing, so maybe there should be a
-   // cleaner solution.
-
-   Config *cfg = Config::getSingleton();
-   Transport::Node *global_node = Transport::getSingleton()->getGlobalNode();
-
-   // wait for my turn...
-   if (cfg->getCurrentProcessNum() != 0)
-   {
-      Byte *buf = (global_node->recv()).first;
-      assert(*((UInt32*)buf) == cfg->getCurrentProcessNum());
-      delete [] buf;
-   }
-
-   // send each summary
-   const Config::CoreList &cl = cfg->getCoreListForProcess(cfg->getCurrentProcessNum());
-
-   for (UInt32 i = 0; i < cl.size(); i++)
-   {
-      LOG_PRINT("Output summary core %i", cl[i]);
-      stringstream ss;
-      m_cores[i]->outputSummary(ss);
-      global_node->globalSend(0, &cl[i], sizeof(cl[i]));
-      global_node->globalSend(0, ss.str().c_str(), ss.str().length()+1);
-   }
-
-   // format (only done on proc 0)
-   if (cfg->getCurrentProcessNum() != 0)
-      return;
+   Config* cfg = Config::getSingleton();
 
    vector<string> summaries(cfg->getTotalCores());
+   for (UInt32 i = 0; i < Config::getSingleton()->getTotalCores(); i++)
+   {
+      LOG_PRINT("Output summary core %i", i);
+      stringstream ss;
+      m_cores[i]->outputSummary(ss);
+      summaries[i] = ss.str();
+   }
+
    string formatted;
 
-   gatherSummaries(summaries);
    formatted = formatSummaries(summaries);
 
    os << formatted;                   

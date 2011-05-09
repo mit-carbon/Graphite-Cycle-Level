@@ -6,84 +6,118 @@
 #include "network.h"
 #include "memory_manager.h"
 #include "performance_model.h"
-#include "cycle_accurate/performance_model.h"
 
 std::map<UInt32,Event::Handler> Event::_handler_map;
 
+Event::Event(Type type, UInt64 time, UnstructuredBuffer* event_args)
+   : _type(type), _time(time), _event_args(event_args)
+{}
+
+Event::~Event()
+{
+   if (_event_args)
+      delete _event_args;
+}
+
 void
-EventNetwork::processPrivate()
+Event::processInOrder(Event* event, core_id_t recv_core_id, EventQueue::Type event_queue_type)
+{
+   LOG_PRINT("Queueing Event (Type[%u], Time[%llu], Processing Core Id[%i])", \
+         event->getType(), event->getTime(), recv_core_id);
+
+   Sim()->getEventManager()->processEventInOrder(event, recv_core_id, event_queue_type);
+}
+
+void
+Event::process()
+{
+   LOG_PRINT("Processing Event (Type[%u], Time[%llu]) enter", _type, _time);
+   
+   if (_handler_map[_type])
+   {
+      _handler_map[_type](this);
+   }
+   else
+   {
+      LOG_ASSERT_ERROR(_type >= 0 && _type < Event::NUM_TYPES, "type(%u)", _type);
+      __process();
+   }
+   
+   LOG_PRINT("Processing Event (Type[%u], Time[%llu]) exit", _type, _time);
+}
+
+void
+Event::registerHandler(UInt32 type, Handler handler)
+{
+   assert(!_handler_map[type]);
+   LOG_ASSERT_ERROR(type >= Event::NUM_TYPES, "Event Type(%u) < NUM_TYPES(%u)",
+         type, Event::NUM_TYPES);
+
+   LOG_PRINT("registerHandler(Type[%u], Handler[%p])", type, handler);
+   _handler_map[type] = handler;
+}
+
+void
+Event::unregisterHandler(UInt32 type)
+{
+   assert(_handler_map[type]);
+   LOG_ASSERT_ERROR(type >= Event::NUM_TYPES, "Event Type(%u) < NUM_TYPES(%u)",
+         type, Event::NUM_TYPES);
+
+   LOG_PRINT("unregisterHandler(Type[%u])", type);
+   _handler_map.erase(type);
+}
+
+void
+EventNetwork::__process()
 {
    core_id_t next_hop;
    NetPacket* net_packet;
 
-   _event_args >> next_hop >> net_packet;
+   (*_event_args) >> next_hop >> net_packet;
 
-   // The EventNetwork should have different arguments
-   if (Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE)
-   {
-      Core* core = Sim()->getCoreManager()->getCoreFromID(next_hop);
-      assert(core);
-      Network* network = core->getNetwork();
-      network->processPacket(net_packet);
-   }
-   else // (mode == FULL) || (mode == LITE)
-   {
-      Byte* buffer = net_packet->makeBuffer();
-      Transport::Node* transport_node = Transport::getSingleton()->getGlobalNode();
-      transport_node->send(next_hop, buffer, net_packet->bufferSize());
-      delete [] buffer;
-      net_packet->release();
-   }
+   Core* core = Sim()->getCoreManager()->getCoreFromID(next_hop);
+   assert(core);
+   Network* network = core->getNetwork();
+   network->processPacket(net_packet);
 }
 
 void
-EventInstruction::processPrivate()
-{
-   CycleAccurate::PerformanceModel* performance_model;
-
-   _event_args >> performance_model;
-
-   performance_model->processNextInstruction();
-}
-
-void
-EventInitiateMemoryAccess::processPrivate()
+EventInitiateMemoryAccess::__process()
 {
    Core* core;
+   UInt32 memory_access_id;
    MemComponent::component_t mem_component;
    Core::lock_signal_t lock_signal;
    Core::mem_op_t mem_op_type;
    IntPtr address;
    Byte* data_buffer;
-   size_t bytes;
+   UInt32 bytes;
    bool modeled;
 
-   _event_args >> core >> mem_component >> lock_signal >> mem_op_type >> address
-               >> data_buffer >> bytes >> modeled;
+   (*_event_args) >> core >> memory_access_id >> mem_component >> lock_signal >> mem_op_type
+                  >> address >> data_buffer >> bytes >> modeled;
    
-   core->initiateMemoryAccess(_time, mem_component, lock_signal, mem_op_type,
+   core->initiateMemoryAccess(_time, memory_access_id, mem_component, lock_signal, mem_op_type,
          address, data_buffer, bytes, modeled);
 }
 
 void
-EventCompleteMemoryAccess::processPrivate()
+EventCompleteMemoryAccess::__process()
 {
    Core* core;
-   DynamicInstructionInfo info;
+   UInt32 memory_access_id;
 
-   _event_args >> core >> info;
+   (*_event_args) >> core >> memory_access_id;
 
    PerformanceModel* performance_model = core->getPerformanceModel();
    assert(performance_model);
 
-   if (Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE)
-      ((CycleAccurate::PerformanceModel*) performance_model)->processDynamicInstructionInfo(info);
-   else // ((mode == FULL) || (mode == LITE))
-      performance_model->pushDynamicInstructionInfo(info);
+   performance_model->handleCompletedMemoryAccess(_time, memory_access_id);
 }
 
 void
-EventInitiateCacheAccess::processPrivate()
+EventInitiateCacheAccess::__process()
 {
    MemoryManager* memory_manager;
    MemComponent::component_t mem_component;
@@ -96,9 +130,9 @@ EventInitiateCacheAccess::processPrivate()
    UInt32 bytes;
    bool modeled;
 
-   _event_args >> memory_manager >> mem_component >> memory_access_id
-               >> lock_signal >> mem_op_type >> ca_address >> offset
-               >> data_buffer >> bytes >> modeled;
+   (*_event_args) >> memory_manager >> mem_component >> memory_access_id
+                  >> lock_signal >> mem_op_type >> ca_address >> offset
+                  >> data_buffer >> bytes >> modeled;
 
    memory_manager->initiateCacheAccess(_time, mem_component,
          memory_access_id, lock_signal, mem_op_type,
@@ -107,72 +141,42 @@ EventInitiateCacheAccess::processPrivate()
 }
 
 void
-EventReInitiateCacheAccess::processPrivate()
+EventReInitiateCacheAccess::__process()
 {
    MemoryManager* memory_manager;
    MemComponent::component_t mem_component;
    MissStatus* miss_status;
 
-   _event_args >> memory_manager >> mem_component >> miss_status;
+   (*_event_args) >> memory_manager >> mem_component >> miss_status;
 
    memory_manager->reInitiateCacheAccess(_time, mem_component, miss_status);
 }
 
 void
-EventCompleteCacheAccess::processPrivate()
+EventCompleteCacheAccess::__process()
 {
    Core* core;
    UInt32 memory_access_id;
 
-   _event_args >> core >> memory_access_id;
+   (*_event_args) >> core >> memory_access_id;
 
    core->completeCacheAccess(_time, memory_access_id);
 }
 
 void
-Event::processInOrder(Event* event, core_id_t recv_core_id, EventQueue::Type event_queue_type)
+EventStartThread::__process()
 {
-   LOG_PRINT("Event::processInOrder [Type(%u), Time(%llu), Recv Core Id(%i)]", \
-         event->getType(), event->getTime(), recv_core_id);
+   core_id_t core_id;
+   (*_event_args) >> core_id;
 
-   if (Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE)
-   {
-      Sim()->getEventManager()->processEventInOrder(event, recv_core_id, event_queue_type);
-   }
-   else // ((mode == FULL) || (mode == LITE))
-   {
-      event->process();
-      delete event;
-   }
+   Sim()->getThreadInterface(core_id)->iterate();
 }
 
 void
-Event::process()
+EventResumeThread::__process()
 {
-   LOG_PRINT("Processing Event: [Type(%u), Time(%llu)]", _type, _time);
+   core_id_t core_id;
+   (*_event_args) >> core_id;
 
-   if (_handler_map[_type])
-   {
-      LOG_PRINT("Application Handler");
-      _handler_map[_type](this);
-   }
-   else
-   {
-      LOG_ASSERT_ERROR(_type >= 0 && _type < Event::NUM_TYPES, "type(%u)", _type);
-      processPrivate();
-   }
-}
-
-void
-Event::registerHandler(UInt32 type, Handler handler)
-{
-   LOG_PRINT("registerHandler(%u, %p)", type, handler);
-   _handler_map[type] = handler;
-}
-
-void
-Event::unregisterHandler(UInt32 type)
-{
-   LOG_PRINT("unregisterHandler(%u)", type);
-   _handler_map.erase(type);
+   Sim()->getThreadInterface(core_id)->iterate();
 }

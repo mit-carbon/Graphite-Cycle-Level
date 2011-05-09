@@ -46,43 +46,16 @@ void SimThread::run()
                          terminateFunc,
                          &cont);
 
-   SInt32 mode = Config::getSingleton()->getSimulationMode();
-   
    // One EventQueueManager per SimThread
-   EventQueueManager* event_queue_manager = NULL;
-   if (mode == Config::CYCLE_ACCURATE)
-      event_queue_manager = Sim()->getEventManager()->getEventQueueManager(sim_thread_id);
+   EventQueueManager* event_queue_manager = Sim()->getEventManager()->getEventQueueManager(sim_thread_id);
    
-   // One Transport::Node per SimThread
-   Transport::Node* transport_node = NULL;
-   if (mode != Config::CYCLE_ACCURATE)
-      transport_node = Transport::getSingleton()->createNode(sim_thread_id);
-
    // Actual work gets done here
    while(cont)
    {
       // Wait for an event/net_packet
-      if (mode == Config::CYCLE_ACCURATE)
-      {
-         LOG_PRINT("SimThread: processEvents()");
-         event_queue_manager->processEvents();
-      }
-      else // (mode == FULL) || (mode == LITE)
-      {
-         pair<Byte*,SInt32> buffer_tag_pair = transport_node->recv();
-         Byte* buffer = buffer_tag_pair.first;
-         SInt32 tag = buffer_tag_pair.second;
-
-         NetPacket* net_packet = new NetPacket(buffer);
-         assert(0 <= tag && tag < (SInt32) Config::getSingleton()->getTotalCores());         
-         Network* net = Sim()->getCoreManager()->getCoreFromID(tag)->getNetwork();
-         net->processPacket(net_packet);
-      }
+      LOG_PRINT("SimThread: processEvents()");
+      event_queue_manager->processEvents();
    }
-
-   // Delete Transport::Node object
-   if (mode != Config::CYCLE_ACCURATE)
-      delete transport_node;
 
    Sim()->getSimThreadManager()->unregisterThread();
 

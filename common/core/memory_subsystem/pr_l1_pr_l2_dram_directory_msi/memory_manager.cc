@@ -55,6 +55,8 @@ MemoryManager::MemoryManager(Core* core,
 
    std::string directory_type;
 
+   LOG_PRINT("Starting to read parameters from cfg file");
+
    try
    {
       // L1 ICache
@@ -108,15 +110,19 @@ MemoryManager::MemoryManager(Core* core,
       LOG_PRINT_ERROR("Error reading memory system parameters from the config file");
    }
 
+   LOG_PRINT("Finished Reading Parameters from cfg file");
+
    if (getCore()->getId() == 0)
    {
       LOG_ASSERT_ERROR(directory_type != "limited_broadcast", \
             "Limited Broadcast directory scheme CANNOT be used with the MSI protocol.");
    }
 
+   LOG_PRINT("Starting to calculate memory controller positions");
    std::vector<core_id_t> core_list_with_dram_controllers = getCoreListWithMemoryControllers();
    if (getCore()->getId() == 0)
       printCoreListWithMemoryControllers(core_list_with_dram_controllers);
+   LOG_PRINT("Finished calculating memory controller positions");
 
    if (find(core_list_with_dram_controllers.begin(), core_list_with_dram_controllers.end(), getCore()->getId()) \
          != core_list_with_dram_controllers.end())
@@ -126,14 +132,11 @@ MemoryManager::MemoryManager(Core* core,
       m_dram_cntlr = new DramCntlr(this,
             dram_latency,
             per_dram_controller_bandwidth,
-            dram_queue_model_enabled,
-            dram_queue_model_type,
-            getCacheBlockSize(),
-            getShmemPerfModel());
+            dram_queue_model_enabled);
 
-      m_dram_directory_cntlr = new DramDirectoryCntlr(getCore()->getId(),
-            this,
-            m_dram_cntlr,
+      LOG_PRINT("Instantiated Dram Controller");
+
+      m_dram_directory_cntlr = new DramDirectoryCntlr(this,
             dram_directory_total_entries,
             dram_directory_associativity,
             getCacheBlockSize(),
@@ -141,30 +144,31 @@ MemoryManager::MemoryManager(Core* core,
             dram_directory_max_hw_sharers,
             dram_directory_type_str,
             dram_directory_cache_access_time,
-            core_list_with_dram_controllers.size(),
-            getShmemPerfModel());
+            core_list_with_dram_controllers.size());
+
+      LOG_PRINT("Instantiated Dram Directory Controller");
    }
 
    m_dram_directory_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_dram_controllers, getCacheBlockSize());
 
-   m_l1_cache_cntlr = new L1CacheCntlr(getCore()->getId(),
-         this,
+   m_l1_cache_cntlr = new L1CacheCntlr(this,
          getCacheBlockSize(),
          l1_icache_size, l1_icache_associativity,
          l1_icache_replacement_policy,
          l1_dcache_size, l1_dcache_associativity,
-         l1_dcache_replacement_policy,
-         getShmemPerfModel());
+         l1_dcache_replacement_policy);
+
+   LOG_PRINT("Instantiated L1 Cache Controller");
    
-   m_l2_cache_cntlr = new L2CacheCntlr(getCore()->getId(),
-         this,
+   m_l2_cache_cntlr = new L2CacheCntlr(this,
          m_l1_cache_cntlr,
          m_dram_directory_home_lookup,
          getCacheBlockSize(),
          l2_cache_size, l2_cache_associativity,
-         l2_cache_replacement_policy,
-         getShmemPerfModel());
+         l2_cache_replacement_policy);
 
+   LOG_PRINT("Instantiated L2 Cache Controller");
+   
    m_l1_cache_cntlr->setL2CacheCntlr(m_l2_cache_cntlr);
 
    // Create Cache Performance Models
@@ -175,6 +179,8 @@ MemoryManager::MemoryManager(Core* core,
          l1_dcache_data_access_time, l1_dcache_tags_access_time, core_frequency);
    m_l2_cache_perf_model = CachePerfModel::create(l2_cache_perf_model_type,
          l2_cache_data_access_time, l2_cache_tags_access_time, core_frequency);
+
+   LOG_PRINT("Instantiated Cache Performance Models");
 
    // Register Call-backs
    getNetwork()->registerCallback(SHARED_MEM_1, MemoryManagerNetworkCallback, this);
@@ -261,46 +267,63 @@ MemoryManager::handleMsgFromNetwork(NetPacket& packet)
 
    switch (receiver_mem_component)
    {
-      case MemComponent::L2_CACHE:
-         switch(sender_mem_component)
-         {
-            case MemComponent::L1_ICACHE:
-            case MemComponent::L1_DCACHE:
-               assert(sender == getCore()->getId());
-               m_l2_cache_cntlr->handleMsgFromL1Cache(shmem_msg);
-               break;
+   case MemComponent::L2_CACHE:
 
-            case MemComponent::DRAM_DIR:
-               m_l2_cache_cntlr->handleMsgFromDramDirectory(sender, shmem_msg);
-               break;
-
-            default:
-               LOG_PRINT_ERROR("Unrecognized sender component(%u)",
-                     sender_mem_component);
-               break;
-         }
+      switch(sender_mem_component)
+      {
+      case MemComponent::L1_ICACHE:
+      case MemComponent::L1_DCACHE:
+         assert(sender == getCore()->getId());
+         m_l2_cache_cntlr->handleMsgFromL1Cache(shmem_msg);
          break;
 
       case MemComponent::DRAM_DIR:
-         switch(sender_mem_component)
-         {
-            LOG_ASSERT_ERROR(m_dram_cntlr_present, "Dram Cntlr NOT present");
-
-            case MemComponent::L2_CACHE:
-               m_dram_directory_cntlr->handleMsgFromL2Cache(sender, shmem_msg);
-               break;
-
-            default:
-               LOG_PRINT_ERROR("Unrecognized sender component(%u)",
-                     sender_mem_component);
-               break;
-         }
+         m_l2_cache_cntlr->handleMsgFromDramDirectory(sender, shmem_msg);
          break;
 
       default:
-         LOG_PRINT_ERROR("Unrecognized receiver component(%u)",
-               receiver_mem_component);
+         LOG_PRINT_ERROR("Unrecognized sender component(%u)", sender_mem_component);
          break;
+      }
+      break;
+
+   case MemComponent::DRAM_DIR:
+         
+      LOG_ASSERT_ERROR(m_dram_cntlr_present, "Dram Cntlr NOT present");
+      switch(sender_mem_component)
+      {
+      case MemComponent::L2_CACHE:
+         m_dram_directory_cntlr->handleMsgFromL2Cache(sender, shmem_msg);
+         break;
+
+      case MemComponent::DRAM:
+         m_dram_directory_cntlr->handleMsgFromDram(sender, shmem_msg);
+         break;
+
+      default:
+         LOG_PRINT_ERROR("Unrecognized sender component(%u)", sender_mem_component);
+         break;
+      }
+      break;
+
+   case MemComponent::DRAM:
+         
+      LOG_ASSERT_ERROR(m_dram_cntlr_present, "Dram Cntlr NOT present");
+      switch(sender_mem_component)
+      {
+      case MemComponent::DRAM_DIR:
+         m_dram_cntlr->handleMsgFromDramDirectory(sender, shmem_msg);
+         break;
+
+      default:
+         LOG_PRINT_ERROR("Unrecognized sender component(%u)", sender_mem_component);
+         break;
+      }
+      break;
+
+   default:
+      LOG_PRINT_ERROR("Unrecognized receiver component(%u)", receiver_mem_component);
+      break;
    }
 
    // Delete the allocated Shared Memory Message
@@ -331,6 +354,9 @@ MemoryManager::sendMsg(ShmemMsg::msg_t msg_type, MemComponent::component_t sende
          shmem_msg.getMsgLen(), (const void*) msg_buf);
    getNetwork()->netSend(packet);
 
+   // Incr Cycle Count by 1 cycle
+   getShmemPerfModel()->incrCycleCount(1);
+
    // Delete the Msg Buf
    delete [] msg_buf;
 }
@@ -350,6 +376,9 @@ MemoryManager::broadcastMsg(ShmemMsg::msg_t msg_type, MemComponent::component_t 
          getCore()->getId(), NetPacket::BROADCAST,
          shmem_msg.getMsgLen(), (const void*) msg_buf);
    getNetwork()->netSend(packet);
+
+   // Incr Cycle Count by 1 cycle
+   getShmemPerfModel()->incrCycleCount(1);
 
    // Delete the Msg Buf
    delete [] msg_buf;

@@ -64,13 +64,11 @@ class NetworkModelEMeshHopByHopGeneric : public NetworkModel
       core_id_t computeCoreId(SInt32 x, SInt32 y);
       SInt32 computeDistance(core_id_t sender, core_id_t receiver);
 
-      void addHop(OutputDirection direction, core_id_t final_dest, core_id_t next_dest, \
-            const NetPacket& pkt, UInt64 pkt_time, UInt32 pkt_length, \
-            std::vector<Hop>& nextHops, \
-            core_id_t requester);
-      UInt64 computeLatency(OutputDirection direction, \
-            const NetPacket& pkt, UInt64 pkt_time, UInt32 pkt_length, \
-            core_id_t requester);
+      void addHop(OutputDirection direction, core_id_t final_dest, core_id_t next_dest,
+            const NetPacket& pkt, UInt64 pkt_time, UInt32 pkt_length,
+            std::vector<Hop>& nextHops);
+      UInt64 computeLatency(OutputDirection direction,
+            const NetPacket& pkt, UInt64 pkt_time, UInt32 pkt_length);
       UInt64 computeProcessingTime(UInt32 pkt_length);
       core_id_t getNextDest(core_id_t final_dest, OutputDirection& direction);
 
@@ -128,7 +126,6 @@ class NetworkModelEMeshHopByHopGeneric : public NetworkModel
 
       static std::pair<bool,std::vector<core_id_t> > computeMemoryControllerPositions(SInt32 num_memory_controllers);
       static std::pair<bool,SInt32> computeCoreCountConstraints(SInt32 core_count);
-      static std::pair<bool,std::vector<Config::CoreList> > computeProcessToCoreMapping();
 
       static SInt32 computeNumHops(core_id_t sender, core_id_t receiver);
 

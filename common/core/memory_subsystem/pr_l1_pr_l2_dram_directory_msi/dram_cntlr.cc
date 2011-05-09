@@ -10,19 +10,12 @@ namespace PrL1PrL2DramDirectoryMSI
 DramCntlr::DramCntlr(MemoryManager* memory_manager,
       float dram_access_cost,
       float dram_bandwidth,
-      bool dram_queue_model_enabled,
-      std::string dram_queue_model_type,
-      UInt32 cache_block_size,
-      ShmemPerfModel* shmem_perf_model):
-   m_memory_manager(memory_manager),
-   m_cache_block_size(cache_block_size),
-   m_shmem_perf_model(shmem_perf_model)
+      bool dram_queue_model_enabled):
+   m_memory_manager(memory_manager)
 {
    m_dram_perf_model = new DramPerfModel(dram_access_cost, 
          dram_bandwidth,
-         dram_queue_model_enabled,
-         dram_queue_model_type, 
-         cache_block_size);
+         dram_queue_model_enabled);
 
    m_dram_access_count = new AccessCountMap[NUM_ACCESS_TYPES];
 }
@@ -36,8 +29,37 @@ DramCntlr::~DramCntlr()
 }
 
 void
-DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf)
+DramCntlr::handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg)
 {
+   ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
+
+   switch (shmem_msg_type)
+   {
+   case ShmemMsg::GET_DATA_REQ:
+      getDataFromDram(sender, shmem_msg);
+      break;
+
+   case ShmemMsg::PUT_DATA_REQ:
+      putDataToDram(sender, shmem_msg);
+      break;
+
+   default:
+      LOG_PRINT_ERROR("Unrecognized Shmem Msg Type(%u)", shmem_msg_type);
+      break;
+   }
+}
+
+void
+DramCntlr::getDataFromDram(core_id_t sender, ShmemMsg* shmem_msg)
+{
+   IntPtr address = shmem_msg->getAddress();
+   core_id_t requester = shmem_msg->getRequester();
+
+   assert(shmem_msg->getDataBuf() == NULL);
+   assert(shmem_msg->getDataLength() == 0);
+   
+   Byte data_buf[getCacheBlockSize()];
+   
    if (m_data_map[address] == NULL)
    {
       m_data_map[address] = new Byte[getCacheBlockSize()];
@@ -49,11 +71,25 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf)
    getShmemPerfModel()->incrCycleCount(dram_access_latency);
 
    addToDramAccessCount(address, READ);
+
+   // Send Data back
+   getMemoryManager()->sendMsg(ShmemMsg::GET_DATA_REP,
+                               MemComponent::DRAM, MemComponent::DRAM_DIR,
+                               requester /* requester */,
+                               sender /* receiver */,
+                               address,
+                               data_buf, getCacheBlockSize());
 }
 
 void
-DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf)
+DramCntlr::putDataToDram(core_id_t sender, ShmemMsg* shmem_msg)
 {
+   IntPtr address = shmem_msg->getAddress();
+   core_id_t requester = shmem_msg->getRequester();
+
+   assert(shmem_msg->getDataLength() == getCacheBlockSize());
+   Byte* data_buf = shmem_msg->getDataBuf();
+   
    if (m_data_map[address] == NULL)
    {
       LOG_PRINT_ERROR("Data Buffer does not exist");
@@ -100,6 +136,18 @@ DramCntlr::printDramAccessCount()
          }
       }
    }
+}
+
+UInt32
+DramCntlr::getCacheBlockSize()
+{
+   return getMemoryManager()->getCacheBlockSize();
+}
+
+ShmemPerfModel*
+DramCntlr::getShmemPerfModel()
+{
+   return getMemoryManager()->getShmemPerfModel();
 }
 
 }

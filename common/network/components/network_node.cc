@@ -6,14 +6,15 @@ using std::ostringstream;
 #include "on_off_msg.h"
 #include "log.h"
 
-NetworkNode::NetworkNode(Router::Id router_id, \
-      UInt32 flit_width, \
-      RouterPerformanceModel* router_performance_model, \
-      RouterPowerModel* router_power_model, \
-      vector<LinkPerformanceModel*>& link_performance_model_list, \
-      vector<LinkPowerModel*>& link_power_model_list, \
-      vector<vector<Router::Id> >& input_channel_to_router_id_list__mapping, \
-      vector<vector<Router::Id> >& output_channel_to_router_id_list__mapping):
+NetworkNode::NetworkNode(Router::Id router_id,
+      UInt32 flit_width,
+      RouterPerformanceModel* router_performance_model,
+      RouterPowerModel* router_power_model,
+      vector<LinkPerformanceModel*>& link_performance_model_list,
+      vector<LinkPowerModel*>& link_power_model_list,
+      vector<vector<Router::Id> >& input_channel_to_router_id_list__mapping,
+      vector<vector<Router::Id> >& output_channel_to_router_id_list__mapping,
+      PacketType flow_control_packet_type):
    _router_id(router_id),
    _flit_width(flit_width),
    _router_performance_model(router_performance_model),
@@ -22,6 +23,7 @@ NetworkNode::NetworkNode(Router::Id router_id, \
    _link_power_model_list(link_power_model_list),
    _input_channel_to_router_id_list__mapping(input_channel_to_router_id_list__mapping),
    _output_channel_to_router_id_list__mapping(output_channel_to_router_id_list__mapping),
+   _flow_control_packet_type(flow_control_packet_type),
    _last_net_packet_time(0)
 {
    assert(_router_performance_model);
@@ -184,12 +186,9 @@ NetworkNode::constructNetPackets(NetworkMsg* network_msg, list<NetPacket*>& net_
       {
          BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
 
-         // FIXME: Make this general
-         PacketType flow_control_packet_type = USER_2;
-
          // Create new net_packet struct
          NetPacket* new_net_packet = new NetPacket(buffer_msg->_normalized_time /* time */,
-               flow_control_packet_type,
+               _flow_control_packet_type,
                buffer_msg->size(), (void*) (buffer_msg),
                false /* is_raw*/);
         
@@ -249,7 +248,7 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
          if (_link_power_model_list[output_channel])
             _link_power_model_list[output_channel]->updateDynamicEnergy(_flit_width/2, flit->_length);
 
-         // Incremenet Zero Load Delay
+         // Increment Zero Load Delay
          flit->_zero_load_delay += (_router_performance_model->getDataPipelineDelay() +
                                     _link_performance_model_list[output_channel]->getDelay());
       }

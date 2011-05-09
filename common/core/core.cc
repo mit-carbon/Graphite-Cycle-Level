@@ -1,24 +1,17 @@
 #include "core.h"
 #include "network.h"
-#include "syscall_model.h"
-#include "sync_client.h"
 #include "network_types.h"
 #include "memory_manager.h"
-#include "pin_memory_manager.h"
-#include "clock_skew_minimization_object.h"
 #include "performance_model.h"
 #include "simulator.h"
 #include "event.h"
+#include "syscall_client.h"
 #include "log.h"
 
 using namespace std;
 
-Lock Core::m_global_core_lock;
-
-Core::Core(SInt32 id)
+Core::Core(core_id_t id)
    : m_core_id(id)
-   , m_core_state(IDLE)
-   , m_last_memory_access_id(0)
 {
    LOG_PRINT("Core ctor for: %d", id);
 
@@ -28,45 +21,32 @@ Core::Core(SInt32 id)
 
    if (Config::getSingleton()->isSimulatingSharedMemory())
    {
-      LOG_PRINT("instantiated shared memory performance model");
       m_shmem_perf_model = new ShmemPerfModel();
+      LOG_PRINT("instantiated shared memory performance model");
 
-      LOG_PRINT("instantiated memory manager model");
       m_memory_manager = MemoryManager::createMMU(
             Sim()->getCfg()->getString("caching_protocol/type"),
             this, m_network, m_shmem_perf_model);
-
-      m_pin_memory_manager = new PinMemoryManager(this);
+      LOG_PRINT("instantiated memory manager model");
    }
    else
    {
       m_shmem_perf_model = (ShmemPerfModel*) NULL;
       m_memory_manager = (MemoryManager *) NULL;
-      m_pin_memory_manager = (PinMemoryManager*) NULL;
-
       LOG_PRINT("No Memory Manager being used");
    }
 
-   m_syscall_model = new SyscallMdl(m_network);
-   m_sync_client = new SyncClient(this);
-
-   m_clock_skew_minimization_client = ClockSkewMinimizationClient::create(Sim()->getCfg()->getString("clock_skew_minimization/scheme","none"), this);
+   m_syscall_client = new SyscallClient();
 }
 
 Core::~Core()
 {
    LOG_PRINT("Core dtor start");
-   if (m_clock_skew_minimization_client)
-      delete m_clock_skew_minimization_client;
-   LOG_PRINT("Deleted Clock Skew Minimization Client");
 
-   delete m_sync_client;
-   LOG_PRINT("Deleted Sync Client");
-   delete m_syscall_model;
+   delete m_syscall_client;
    LOG_PRINT("Deleted Syscall Client");
    if (Config::getSingleton()->isSimulatingSharedMemory())
    {
-      delete m_pin_memory_manager;
       LOG_PRINT("Deleted Pin Memory Manager");
       delete m_memory_manager;
       LOG_PRINT("Deleted Memory Manager");
@@ -77,6 +57,7 @@ Core::~Core()
    LOG_PRINT("Deleted performance mode");
    delete m_network;
    LOG_PRINT("Deleted network");
+
    LOG_PRINT("Core dtor end");
 }
 
@@ -98,48 +79,93 @@ void Core::outputSummary(std::ostream &os)
    LOG_PRINT("outputSummary() end");
 }
 
-int Core::coreSendW(int sender, int receiver, char* buffer, int size, carbon_network_t net_type)
+void
+Core::sendMsg(core_id_t sender, core_id_t receiver, char* buffer, SInt32 size, carbon_network_t net_type)
 {
-   PacketType pkt_type = getPktTypeFromUserNetType(net_type);
+   CAPI_return_t ret_val = 0;
 
-   SInt32 sent;
-   if (receiver == CAPI_ENDPOINT_ALL)
-      sent = m_network->netBroadcast(pkt_type, buffer, size);
+   if ((sender != INVALID_CORE_ID) && (receiver != INVALID_CORE_ID))
+   {
+      PacketType pkt_type = getPktTypeFromUserNetType(net_type);
+
+      SInt32 sent;
+      if (receiver == CAPI_ENDPOINT_ALL)
+         sent = m_network->netBroadcast(pkt_type, buffer, size);
+      else
+         sent = m_network->netSend(receiver, pkt_type, buffer, size);
+      
+      LOG_ASSERT_ERROR(sent == size, "Bytes Sent(%i), Message Size(%i)", sent, size);
+
+      // Send Reply to Sim Thread
+      ret_val = (sent == size) ? 0 : -1;
+   }
    else
-      sent = m_network->netSend(receiver, pkt_type, buffer, size);
-   
-   LOG_ASSERT_ERROR(sent == size, "Bytes Sent(%i), Message Size(%i)", sent, size);
+   {
+      if (sender == INVALID_CORE_ID)
+         ret_val = CAPI_SenderNotInitialized;
+      else if (receiver == INVALID_CORE_ID)
+         ret_val = CAPI_ReceiverNotInitialized;
+   }
 
-   return sent == size ? 0 : -1;
+   Sim()->getThreadInterface(m_core_id)->sendSimReply(getPerformanceModel()->getTime(), (IntPtr) ret_val);
 }
 
-int Core::coreRecvW(int sender, int receiver, char* buffer, int size, carbon_network_t net_type)
+void
+Core::recvMsg(core_id_t sender, core_id_t receiver, char* buffer, SInt32 size, carbon_network_t net_type)
 {
-   PacketType pkt_type = getPktTypeFromUserNetType(net_type);
+   if ((sender != INVALID_CORE_ID) && (receiver != INVALID_CORE_ID))
+   {
+      PacketType pkt_type = getPktTypeFromUserNetType(net_type);
 
-   NetPacket* packet;
-   if (sender == CAPI_ENDPOINT_ANY)
-      packet = m_network->netRecvType(pkt_type);
+      m_recv_buffer = RecvBuffer(buffer, size);
+   
+      NetMatch net_match;
+      net_match = (sender == CAPI_ENDPOINT_ANY) ? NetMatch(pkt_type) : NetMatch(sender, pkt_type);
+      m_network->netRecv(net_match, coreRecvMsg, this);
+   }
    else
-      packet = m_network->netRecv(sender, pkt_type);
+   {
+      CAPI_return_t ret_val = 0;
+      if (sender == INVALID_CORE_ID)
+         ret_val = CAPI_SenderNotInitialized;
+      else if (receiver == INVALID_CORE_ID)
+         ret_val = CAPI_ReceiverNotInitialized;
+
+      Sim()->getThreadInterface(m_core_id)->sendSimReply(getPerformanceModel()->getTime(), (IntPtr) ret_val);
+   }
+}
+
+void
+coreRecvMsg(void* obj, NetPacket packet)
+{
+   Core* core = (Core*) obj;
+
+   // Copy the Received Data
+   core->__recvMsg(packet);
+}
+
+void
+Core::__recvMsg(const NetPacket& packet)
+{  
+   char* buffer = m_recv_buffer._buffer;
+   SInt32 size = m_recv_buffer._size;  
 
    LOG_PRINT("Got packet: from %i, to %i, type %i, len %i",
-         packet->sender, packet->receiver, (SInt32)packet->type, packet->length);
+         packet.sender, packet.receiver, (SInt32)packet.type, packet.length);
 
-   LOG_ASSERT_ERROR((unsigned)size == packet->length,
-         "Core: User thread requested packet of size: %d, got a packet from %d of size: %d",
-         size, sender, packet->length);
+   LOG_ASSERT_ERROR(size == (SInt32) packet.length,
+         "Core: User thread requested packet of size: %i, got a packet from %i of size: %i",
+         size, packet.sender, (SInt32) packet.length);
 
-   memcpy(buffer, packet->data, size);
+   // Copy the data to internal buffers
+   memcpy(buffer, packet.data, size);
 
-   // De-allocate dynamic memory
-   // Is this the best place to de-allocate packet.data ??
-   packet->release();
-
-   return 0;
+   // Send Reply to Sim Thread
+   Sim()->getThreadInterface(m_core_id)->sendSimReply(packet.time, 0);
 }
 
-PacketType Core::getPktTypeFromUserNetType(carbon_network_t net_type)
+PacketType
+Core::getPktTypeFromUserNetType(carbon_network_t net_type)
 {
    switch(net_type)
    {
@@ -157,9 +183,6 @@ PacketType Core::getPktTypeFromUserNetType(carbon_network_t net_type)
 
 void Core::enablePerformanceModels()
 {
-   if (m_clock_skew_minimization_client)
-      m_clock_skew_minimization_client->enable();
-
    if (Config::getSingleton()->isSimulatingSharedMemory())
    {
       getShmemPerfModel()->enable();
@@ -174,9 +197,6 @@ void Core::enablePerformanceModels()
 
 void Core::disablePerformanceModels()
 {
-   if (m_clock_skew_minimization_client)
-      m_clock_skew_minimization_client->disable();
-
    if (Config::getSingleton()->isSimulatingSharedMemory())
    {
       getShmemPerfModel()->disable();
@@ -186,24 +206,6 @@ void Core::disablePerformanceModels()
    if (Config::getSingleton()->getEnablePerformanceModeling())
    {
       getPerformanceModel()->disable();
-   }
-}
-
-// Models must be disabled when calling this function
-void Core::resetPerformanceModels()
-{
-   if (m_clock_skew_minimization_client)
-      m_clock_skew_minimization_client->reset();
-
-   if (Config::getSingleton()->isSimulatingSharedMemory())
-   {
-      getShmemPerfModel()->reset();
-      getMemoryManager()->resetModels();
-   }
-   getNetwork()->resetModels();
-   if (Config::getSingleton()->getEnablePerformanceModeling())
-   {
-      getPerformanceModel()->reset();
    }
 }
 
@@ -220,6 +222,7 @@ Core::updateInternalVariablesOnFrequencyChange(volatile float frequency)
 
 void
 Core::initiateMemoryAccess(UInt64 time,
+                           UInt32 memory_access_id,
                            MemComponent::component_t mem_component,
                            lock_signal_t lock_signal,
                            mem_op_t mem_op_type,
@@ -233,14 +236,10 @@ Core::initiateMemoryAccess(UInt64 time,
 
    assert(bytes >= 0);
   
-   UInt64 curr_time;
-   if (Config::getSingleton()->getSimulationMode() == Config::CYCLE_ACCURATE)
-      curr_time = time;
-   else
-      curr_time = (time == 0) ? getPerformanceModel()->getCycleCount() : time;
+   UInt64 curr_time = time;
     
    MemoryAccessStatus* memory_access_status = 
-      new MemoryAccessStatus(m_last_memory_access_id ++, curr_time, address, bytes,
+      new MemoryAccessStatus(memory_access_id, curr_time, address, bytes,
                              mem_component, lock_signal, mem_op_type,
                              data_buffer, modeled);
    m_memory_access_status_map.insert(make_pair<UInt32, MemoryAccessStatus*>
@@ -287,14 +286,14 @@ Core::continueMemoryAccess(MemoryAccessStatus& memory_access_status)
    // If it is a WRITE operation,
    // 'accessL1Cache' reads the data
    // from data_buffer
-   UnstructuredBuffer event_args;
-   event_args << getMemoryManager()
-              << memory_access_status._mem_component
-              << memory_access_status._access_id
-              << memory_access_status._lock_signal << memory_access_status._mem_op_type
-              << address_aligned << offset
-              << memory_access_status._data_buffer << memory_access_status._curr_bytes
-              << memory_access_status._modeled;
+   UnstructuredBuffer* event_args = new UnstructuredBuffer();
+   (*event_args) << getMemoryManager()
+                 << memory_access_status._mem_component
+                 << memory_access_status._access_id
+                 << memory_access_status._lock_signal << memory_access_status._mem_op_type
+                 << address_aligned << offset
+                 << memory_access_status._data_buffer << memory_access_status._curr_bytes
+                 << memory_access_status._modeled;
 
    EventInitiateCacheAccess* event = new EventInitiateCacheAccess(memory_access_status._curr_time, event_args);
    Event::processInOrder(event, m_core_id, EventQueue::ORDERED);
@@ -313,12 +312,8 @@ Core::completeMemoryAccess(MemoryAccessStatus& memory_access_status)
       
       getShmemPerfModel()->incrTotalMemoryAccessLatency(memory_latency);
       
-      DynamicInstructionInfo info = DynamicInstructionInfo::createMemoryInfo(memory_latency,
-                                    memory_access_status._start_address,
-                                    (memory_access_status._mem_op_type == WRITE) ? Operand::WRITE : Operand::READ);
-       
-      UnstructuredBuffer event_args;
-      event_args << this << info; 
+      UnstructuredBuffer* event_args = new UnstructuredBuffer();
+      (*event_args) << this << memory_access_status._access_id; 
       EventCompleteMemoryAccess* event = new EventCompleteMemoryAccess(memory_access_status._curr_time,
                                                                        event_args);
       Event::processInOrder(event, m_core_id, EventQueue::ORDERED);
@@ -328,81 +323,4 @@ Core::completeMemoryAccess(MemoryAccessStatus& memory_access_status)
    m_memory_access_status_map.erase(memory_access_status._access_id);
    // De-allocate the structure
    delete &memory_access_status;
-}
-
-// FIXME: This should actually be 'accessDataMemory()'
-/*
- * accessMemory (lock_signal_t lock_signal, mem_op_t mem_op_type, IntPtr d_addr, char* data_buffer, UInt32 data_size, bool modeled)
- *
- * Arguments:
- *   lock_signal :: NONE, LOCK, or UNLOCK
- *   mem_op_type :: READ, READ_EX, or WRITE
- *   d_addr :: address of location we want to access (read or write)
- *   data_buffer :: buffer holding data for WRITE or buffer which must be written on a READ
- *   data_size :: size of data we must read/write
- *   modeled :: says whether it is modeled or not
- *
- * Return Value:
- *   number of misses :: State the number of cache misses
- */
-void
-Core::accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type,
-      IntPtr d_addr, char* data_buffer, UInt32 data_size, bool modeled)
-{
-   if (Config::getSingleton()->isSimulatingSharedMemory())
-   {
-      return initiateMemoryAccess(0, MemComponent::L1_DCACHE, lock_signal, mem_op_type,
-            d_addr, (Byte*) data_buffer, data_size, modeled);
-   }
-   
-   else
-   {   
-      return nativeMemOp(lock_signal, mem_op_type, d_addr, data_buffer, data_size);
-   }
-}
-
-
-void
-Core::nativeMemOp(lock_signal_t lock_signal, mem_op_t mem_op_type,
-      IntPtr d_addr, char* data_buffer, UInt32 data_size)
-{
-   if (data_size <= 0)
-   {
-      return;
-   }
-
-   if (lock_signal == LOCK)
-   {
-      assert(mem_op_type == READ_EX);
-      m_global_core_lock.acquire();
-   }
-
-   if ( (mem_op_type == READ) || (mem_op_type == READ_EX) )
-   {
-      memcpy ((void*) data_buffer, (void*) d_addr, (size_t) data_size);
-   }
-   else if (mem_op_type == WRITE)
-   {
-      memcpy ((void*) d_addr, (void*) data_buffer, (size_t) data_size);
-   }
-
-   if (lock_signal == UNLOCK)
-   {
-      assert(mem_op_type == WRITE);
-      m_global_core_lock.release();
-   }
-}
-
-Core::State 
-Core::getState()
-{
-   ScopedLock scoped_lock(m_core_state_lock);
-   return m_core_state;
-}
-
-void
-Core::setState(State core_state)
-{
-   ScopedLock scoped_lock(m_core_state_lock);
-   m_core_state = core_state;
 }

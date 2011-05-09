@@ -7,10 +7,19 @@
 #include "router_power_model.h"
 #include "electrical_link_performance_model.h"
 #include "electrical_link_power_model.h"
+#include "queue_model_simple.h"
 
 class NetworkModelEMeshHopCounter : public NetworkModel
 {
 public:
+   enum ModuleID
+   {
+      SENDER_CORE = 0,
+      SENDER_ROUTER,
+      RECEIVER_ROUTER,
+      RECEIVER_CORE
+   };
+
    NetworkModelEMeshHopCounter(Network *net, SInt32 network_id);
    ~NetworkModelEMeshHopCounter();
 
@@ -25,7 +34,7 @@ public:
 
    void enable() { _enabled = true; }
    void disable() { _enabled = false; }
-   void reset();
+   void reset() {}
 
 private:
 
@@ -50,6 +59,10 @@ private:
    RouterPowerModel* _electrical_router_power_model;
    ElectricalLinkPerformanceModel* _electrical_link_performance_model;
    ElectricalLinkPowerModel* _electrical_link_power_model;
+
+   // Sender & Receiver Contention Models
+   QueueModelSimple* _sender_contention_model;
+   QueueModelSimple* _receiver_contention_model;
 
    // Performance Counters
    UInt64 _num_packets;

@@ -6,30 +6,25 @@
 namespace PrL1PrL2DramDirectoryMSI
 {
 
-L1CacheCntlr::L1CacheCntlr(core_id_t core_id,
-      MemoryManager* memory_manager,
-      UInt32 cache_block_size,
-      UInt32 l1_icache_size, UInt32 l1_icache_associativity,
-      std::string l1_icache_replacement_policy,
-      UInt32 l1_dcache_size, UInt32 l1_dcache_associativity,
-      std::string l1_dcache_replacement_policy,
-      ShmemPerfModel* shmem_perf_model) :
+L1CacheCntlr::L1CacheCntlr(MemoryManager* memory_manager,
+                           UInt32 cache_block_size,
+                           UInt32 l1_icache_size, UInt32 l1_icache_associativity,
+                           std::string l1_icache_replacement_policy,
+                           UInt32 l1_dcache_size, UInt32 l1_dcache_associativity,
+                           std::string l1_dcache_replacement_policy):
    m_memory_manager(memory_manager),
-   m_l2_cache_cntlr(NULL),
-   m_core_id(core_id),
-   m_cache_block_size(cache_block_size),
-   m_shmem_perf_model(shmem_perf_model)
+   m_l2_cache_cntlr(NULL)
 {
    m_l1_icache = new Cache("L1-I",
          l1_icache_size,
          l1_icache_associativity, 
-         m_cache_block_size,
+         cache_block_size,
          l1_icache_replacement_policy,
          CacheBase::PR_L1_CACHE);
    m_l1_dcache = new Cache("L1-D",
          l1_dcache_size,
          l1_dcache_associativity, 
-         m_cache_block_size,
+         cache_block_size,
          l1_dcache_replacement_policy,
          CacheBase::PR_L1_CACHE);
 
@@ -81,7 +76,7 @@ L1CacheCntlr::initiateCacheAccess(MemComponent::component_t mem_component,
                                   bool modeled)
 {
    LOG_PRINT("initiateCacheAccess() [Core Id(%i), Memory Access Id(%u), Mem Component(%u), Lock Signal(%u), Mem Op Type(%u), CA-Address(0x%llx), Offset(%u), Data Buf(%p), Data Length(%u), Modeled(%s)]", \
-         m_core_id, memory_access_id, mem_component, lock_signal, mem_op_type, \
+         getCoreId(), memory_access_id, mem_component, lock_signal, mem_op_type, \
          ca_address, offset, data_buf, data_length, modeled ? "TRUE" : "FALSE");
   
    if (m_miss_status_maps[mem_component].get(ca_address))
@@ -123,14 +118,13 @@ L1CacheCntlr::doInitiateCacheAccess(MemComponent::component_t mem_component,
                                     bool modeled,
                                     L1MissStatus* l1_miss_status)
 {
-   LOG_PRINT("Core Id(%i): doInitiateCacheAccess() [Memory Access Id(%u), Mem Component(%u), Lock Signal(%u), Mem Op Type(%u), CA-Address(0x%llx), Offset(%u), Data Buf(%p), Data Length(%u), Modeled(%s)], L1 Miss Status(%p)", m_core_id, memory_access_id, mem_component, lock_signal, mem_op_type, address, offset, data_buf, data_length, modeled ? "TRUE" : "FALSE", l1_miss_status);
+   LOG_PRINT("Core Id(%i): doInitiateCacheAccess() [Memory Access Id(%u), Mem Component(%u), Lock Signal(%u), Mem Op Type(%u), CA-Address(0x%llx), Offset(%u), Data Buf(%p), Data Length(%u), Modeled(%s)], L1 Miss Status(%p)", \
+         getCoreId(), memory_access_id, mem_component, lock_signal, mem_op_type, \
+         address, offset, data_buf, data_length, modeled ? "TRUE" : "FALSE", l1_miss_status);
    
    assert((!l1_miss_status) || (l1_miss_status->_access_num == 1) || (l1_miss_status->_access_num == 2));
    bool update_cache_counters = ( (!l1_miss_status) || (l1_miss_status->_access_num == 1) );
    
-   if (lock_signal != Core::UNLOCK)
-      acquireLock(mem_component);
-
    if (operationPermissibleinL1Cache(mem_component, address, mem_op_type, modeled, update_cache_counters))
    {
       // Increment Shared Mem Perf model cycle counts
@@ -141,53 +135,47 @@ L1CacheCntlr::doInitiateCacheAccess(MemComponent::component_t mem_component,
 
       accessCache(mem_component, mem_op_type, address, offset, data_buf, data_length);
  
-      if (lock_signal != Core::LOCK)
-         releaseLock(mem_component);
-
       // Complete Cache Request
       completeCacheRequest(mem_component, memory_access_id, l1_miss_status);
+
+      if (lock_signal == Core::LOCK)
+         acquireLock();
+      else if (lock_signal == Core::UNLOCK)
+         releaseLock();
 
       return;
    }
 
-   getMemoryManager()->incrCycleCount(mem_component, CachePerfModel::ACCESS_CACHE_TAGS);
-  
    assert(update_cache_counters);
    LOG_ASSERT_ERROR(lock_signal != Core::UNLOCK, "Expected to find address(0x%x) in L1 Cache", address);
 
    // Invalidate the cache block before passing the request to L2 Cache
    invalidateCacheBlock(mem_component, address);
 
-   m_l2_cache_cntlr->acquireLock();
-
    ShmemMsg::msg_t shmem_msg_type = getShmemMsgType(mem_op_type);
 
    if (m_l2_cache_cntlr->processShmemReqFromL1Cache(mem_component, shmem_msg_type, address, modeled))
    {
-      m_l2_cache_cntlr->releaseLock();
-      
       // Increment Shared Mem Perf model cycle counts
-      // L2 Cache
+      // L1 Cache Tags
+      getMemoryManager()->incrCycleCount(mem_component, CachePerfModel::ACCESS_CACHE_TAGS);
+      // L2 Cache Data & Tags
       getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
-      // L1 Cache
+      // L1 Cache Data & Tags
       getMemoryManager()->incrCycleCount(mem_component, CachePerfModel::ACCESS_CACHE_DATA_AND_TAGS);
 
       accessCache(mem_component, mem_op_type, address, offset, data_buf, data_length);
 
-      if (lock_signal != Core::LOCK)
-         releaseLock(mem_component);
-      
       // Complete Cache Request
       completeCacheRequest(mem_component, memory_access_id, l1_miss_status);
       
+      if (lock_signal == Core::LOCK)
+         acquireLock();
+      else if (lock_signal == Core::UNLOCK)
+         releaseLock();
+      
       return;
    }
-
-   // Increment shared mem perf model cycle counts
-   getMemoryManager()->incrCycleCount(MemComponent::L2_CACHE, CachePerfModel::ACCESS_CACHE_TAGS);
-   
-   m_l2_cache_cntlr->releaseLock();
-   releaseLock(mem_component);
 
    if (!l1_miss_status)
    {
@@ -204,11 +192,9 @@ L1CacheCntlr::doInitiateCacheAccess(MemComponent::component_t mem_component,
    // Increment the Access Num 
    l1_miss_status->_access_num ++; 
 
-   // Send out a request to the network thread for the cache data
-   getMemoryManager()->sendMsg(shmem_msg_type, 
-         mem_component, MemComponent::L2_CACHE,
-         m_core_id /* requester */,
-         m_core_id /* receiver */, address);
+   // Send the request to the L2 Cache
+   ShmemMsg shmem_msg(shmem_msg_type, mem_component, MemComponent::L2_CACHE, getCoreId(), address, NULL, 0);
+   m_l2_cache_cntlr->handleMsgFromL1Cache(&shmem_msg);
 }
 
 void
@@ -220,11 +206,11 @@ L1CacheCntlr::completeCacheRequest(MemComponent::component_t mem_component,
          mem_component, memory_access_id, l1_miss_status);
 
    // Send Reply to Core
-   UnstructuredBuffer event_args;
-   event_args << getMemoryManager()->getCore() << memory_access_id;
+   UnstructuredBuffer* event_args = new UnstructuredBuffer();
+   (*event_args) << getMemoryManager()->getCore() << memory_access_id;
    EventCompleteCacheAccess* event = new EventCompleteCacheAccess(getShmemPerfModel()->getCycleCount(),
                                                                   event_args);
-   Event::processInOrder(event, m_core_id, EventQueue::ORDERED);
+   Event::processInOrder(event, getCoreId(), EventQueue::ORDERED);
  
    if (l1_miss_status)
    {
@@ -248,11 +234,11 @@ L1CacheCntlr::processNextCacheRequest(MemComponent::component_t mem_component, I
    {
       UInt64 time = getShmemPerfModel()->getCycleCount() + 1;
 
-      UnstructuredBuffer event_args;
-      event_args << getMemoryManager() << mem_component << l1_miss_status;
+      UnstructuredBuffer* event_args = new UnstructuredBuffer();
+      (*event_args) << getMemoryManager() << mem_component << l1_miss_status;
       
       EventReInitiateCacheAccess* event = new EventReInitiateCacheAccess(time, event_args);
-      Event::processInOrder(event, m_core_id, EventQueue::ORDERED);
+      Event::processInOrder(event, getCoreId(), EventQueue::ORDERED);
    }
 }
 
@@ -272,9 +258,7 @@ L1CacheCntlr::accessCache(MemComponent::component_t mem_component,
       case Core::WRITE:
          l1_cache->accessSingleLine(ca_address + offset, Cache::STORE, data_buf, data_length);
          // Write-through cache - Write the L2 Cache also
-         m_l2_cache_cntlr->acquireLock();
          m_l2_cache_cntlr->writeCacheBlock(ca_address, offset, data_buf, data_length);
-         m_l2_cache_cntlr->releaseLock();
          break;
 
       default:
@@ -365,16 +349,16 @@ L1CacheCntlr::getShmemMsgType(Core::mem_op_t mem_op_type)
 {
    switch(mem_op_type)
    {
-      case Core::READ:
-         return ShmemMsg::SH_REQ;
+   case Core::READ:
+      return ShmemMsg::SH_REQ;
 
-      case Core::READ_EX:
-      case Core::WRITE:
-         return ShmemMsg::EX_REQ;
+   case Core::READ_EX:
+   case Core::WRITE:
+      return ShmemMsg::EX_REQ;
 
-      default:
-         LOG_PRINT_ERROR("Unsupported Mem Op Type(%u)", mem_op_type);
-         return ShmemMsg::INVALID_MSG_TYPE;
+   default:
+      LOG_PRINT_ERROR("Unsupported Mem Op Type(%u)", mem_op_type);
+      return ShmemMsg::INVALID_MSG_TYPE;
    }
 }
 
@@ -383,51 +367,37 @@ L1CacheCntlr::getL1Cache(MemComponent::component_t mem_component)
 {
    switch(mem_component)
    {
-      case MemComponent::L1_ICACHE:
-         return m_l1_icache;
+   case MemComponent::L1_ICACHE:
+      return m_l1_icache;
 
-      case MemComponent::L1_DCACHE:
-         return m_l1_dcache;
+   case MemComponent::L1_DCACHE:
+      return m_l1_dcache;
 
-      default:
-         LOG_PRINT_ERROR("Unrecognized Memory Component(%u)", mem_component);
-         return NULL;
+   default:
+      LOG_PRINT_ERROR("Unrecognized Memory Component(%u)", mem_component);
+      return NULL;
    }
 }
 
 void
-L1CacheCntlr::acquireLock(MemComponent::component_t mem_component)
+L1CacheCntlr::acquireLock()
 {
-   switch(mem_component)
-   {
-      case MemComponent::L1_ICACHE:
-         m_l1_icache_lock.acquire();
-         break;
-      case MemComponent::L1_DCACHE:
-         m_l1_dcache_lock.acquire();
-         break;
-      default:
-         LOG_PRINT_ERROR("Unrecognized mem_component(%u)", mem_component);
-         break;
-   }
-
+   LOG_PRINT("acquireLock()");
+   m_locked = true;
 }
 
 void
-L1CacheCntlr::releaseLock(MemComponent::component_t mem_component)
+L1CacheCntlr::releaseLock()
 {
-   switch(mem_component)
-   {
-      case MemComponent::L1_ICACHE:
-         m_l1_icache_lock.release();
-         break;
-      case MemComponent::L1_DCACHE:
-         m_l1_dcache_lock.release();
-         break;
-      default:
-         LOG_PRINT_ERROR("Unrecognized mem_component(%u)", mem_component);
-         break;
-   }
+   LOG_PRINT("releaseLock()");
+   m_locked = false;
+   m_l2_cache_cntlr->scheduleNextPendingRequest(getShmemPerfModel()->getCycleCount());
+}
+
+bool
+L1CacheCntlr::isLocked()
+{
+   return m_locked;
 }
 
 void
@@ -436,6 +406,24 @@ L1CacheCntlr::signalDataReady(MemComponent::component_t mem_component, IntPtr ad
    L1MissStatus* l1_miss_status = (L1MissStatus*) m_miss_status_maps[mem_component].get(address);
    assert(l1_miss_status);
    reInitiateCacheAccess(mem_component, l1_miss_status);
+}
+
+core_id_t
+L1CacheCntlr::getCoreId()
+{
+   return getMemoryManager()->getCore()->getId();
+}
+
+UInt32
+L1CacheCntlr::getCacheBlockSize()
+{
+   return getMemoryManager()->getCacheBlockSize();
+}
+
+ShmemPerfModel*
+L1CacheCntlr::getShmemPerfModel()
+{
+   return getMemoryManager()->getShmemPerfModel();
 }
 
 }

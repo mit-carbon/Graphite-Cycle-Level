@@ -86,7 +86,6 @@ class NetworkModel
 
       static std::pair<bool,SInt32> computeCoreCountConstraints(UInt32 network_type, SInt32 core_count);
       static std::pair<bool, std::vector<core_id_t> > computeMemoryControllerPositions(UInt32 network_type, SInt32 num_memory_controllers);
-      static std::pair<bool, std::vector<Config::CoreList> > computeProcessToCoreMapping(UInt32 network_type);
 
    protected:
       Network *getNetwork() { return _network; }

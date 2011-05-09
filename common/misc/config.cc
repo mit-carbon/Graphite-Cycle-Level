@@ -12,13 +12,10 @@
 #define DEBUG
 
 UInt32 Config::m_knob_total_cores;
-UInt32 Config::m_knob_num_process;
-UInt32 Config::m_knob_num_sim_threads_per_process;
+UInt32 Config::m_knob_total_sim_threads;
 bool Config::m_knob_simarch_has_shared_mem;
 std::string Config::m_knob_output_file;
 bool Config::m_knob_enable_performance_modeling;
-bool Config::m_knob_enable_dcache_modeling;
-bool Config::m_knob_enable_icache_modeling;
 bool Config::m_knob_enable_power_modeling;
 
 using namespace std;
@@ -32,23 +29,16 @@ Config *Config::getSingleton()
 }
 
 Config::Config()
-      : m_current_process_num((UInt32)-1)
 {
-   // TODO: Currently assumes a constant number of sim threads per process
-   // Fix this assumption later
    // NOTE: We can NOT use logging in the config constructor! The log
    // has not been instantiated at this point!
    try
    {
       m_knob_total_cores = Sim()->getCfg()->getInt("general/total_cores");
-      m_knob_num_process = Sim()->getCfg()->getInt("general/num_processes");
-      m_knob_num_sim_threads_per_process = Sim()->getCfg()->getInt("general/num_sim_threads_per_process");
+      m_knob_total_sim_threads = Sim()->getCfg()->getInt("general/num_sim_threads");
       m_knob_simarch_has_shared_mem = Sim()->getCfg()->getBool("general/enable_shared_mem");
       m_knob_output_file = Sim()->getCfg()->getString("general/output_file");
       m_knob_enable_performance_modeling = Sim()->getCfg()->getBool("general/enable_performance_modeling");
-      // TODO: these should be removed and queried directly from the cache
-      m_knob_enable_dcache_modeling = Sim()->getCfg()->getBool("general/enable_dcache_modeling");
-      m_knob_enable_icache_modeling = Sim()->getCfg()->getBool("general/enable_icache_modeling");
       m_knob_enable_power_modeling = Sim()->getCfg()->getBool("general/enable_power_modeling");
 
       // Simulation Mode
@@ -60,22 +50,12 @@ Config::Config()
       exit(EXIT_FAILURE);
    }
 
-   m_num_processes = m_knob_num_process;
    m_total_cores = m_knob_total_cores;
-   m_application_cores = m_total_cores;
-   m_num_sim_threads_per_process = m_knob_num_sim_threads_per_process;
+   m_total_sim_threads = m_knob_total_sim_threads;
 
    m_singleton = this;
 
-   assert(m_num_processes > 0);
    assert(m_total_cores > 0);
-
-   // Add one for the MCP
-   m_total_cores += 1;
-
-   // Add the thread-spawners (one for each process)
-   if (m_simulation_mode == FULL)
-      m_total_cores += m_num_processes;
 
    // Parse Network Models - Need to be done here to initialize the network models 
    parseNetworkParameters();
@@ -89,47 +69,21 @@ Config::Config()
    // Length of a core identifier
    m_core_id_length = computeCoreIDLength(m_total_cores);
 
-   GenerateCoreMap();
-
    // Assert Conditions
-   if (((m_simulation_mode == LITE) || (m_simulation_mode == CYCLE_ACCURATE)) && (m_num_processes > 1))
+   if (m_simulation_mode != CYCLE_ACCURATE)
    {
-      fprintf(stderr, "ERROR: Use only 1 process in lite or cycle_accurate mode\n");
+      fprintf(stderr, "ERROR: Only cycle_accurate mode allowed\n");
       exit(EXIT_FAILURE);
    }
-   for (UInt32 i = 0; i < m_num_processes; i++)
+   if (m_total_sim_threads > m_total_cores)
    {
-      if (getSimThreadCount(i) > getCoreListForProcess(i).size())
-      {
-         fprintf(stderr, "ERROR: Process(%i) has more sim threads(%u) than cores(%u)\n",
-               i, getSimThreadCount(i), (UInt32) getCoreListForProcess(i).size());
-         exit(EXIT_FAILURE);
-      }
+      fprintf(stderr, "Num Sim Threads (%u) > Num Cores (%u)\n", m_total_sim_threads, m_total_cores); 
+      exit(EXIT_FAILURE);
    }
 }
 
 Config::~Config()
-{
-   // Clean up the dynamic memory we allocated
-   delete [] m_proc_to_core_list_map;
-}
-
-// Thread Spawner Core
-core_id_t Config::getThreadSpawnerCoreNum(UInt32 proc_num)
-{
-   if (m_simulation_mode == FULL)
-      return (getTotalCores() - (1 + getProcessCount() - proc_num));
-   else // mode = (lite, cycle_accurate)
-      return INVALID_CORE_ID;
-}
-
-core_id_t Config::getCurrentThreadSpawnerCoreNum()
-{
-   if (m_simulation_mode == FULL)
-      return (getTotalCores() - (1 + getProcessCount() - getCurrentProcessNum()));
-   else // mode = (lite, cycle_accurate)
-      return INVALID_CORE_ID;
-}
+{}
 
 UInt32 Config::computeCoreIDLength(UInt32 core_count)
 {
@@ -138,141 +92,6 @@ UInt32 Config::computeCoreIDLength(UInt32 core_count)
       return (num_bits / 8);
    else
       return (num_bits / 8) + 1;
-}
-
-void Config::GenerateCoreMap()
-{
-   vector<CoreList> process_to_core_mapping = computeProcessToCoreMapping();
-   
-   m_proc_to_core_list_map = new CoreList[m_num_processes];
-   m_core_to_proc_map.resize(m_total_cores);
-
-   // Populate the data structures for non-thread-spawner and non-MCP cores
-   assert(process_to_core_mapping.size() == m_num_processes);
-   for (UInt32 i = 0; i < m_num_processes; i++)
-   {
-      CoreList::iterator core_it;
-      for (core_it = process_to_core_mapping[i].begin(); core_it != process_to_core_mapping[i].end(); core_it++)
-      {
-         if ((*core_it) < (SInt32) (m_total_cores - m_num_processes - 1))
-         {
-            m_core_to_proc_map[*core_it] = i;
-            m_proc_to_core_list_map[i].push_back(*core_it);
-         }
-      }
-   }
-    
-   // Assign the thread-spawners to cores
-   // Thread-spawners occupy core-id's (m_total_cores - m_num_processes - 1) to (m_total_cores - 2)
-   UInt32 current_proc = 0;
-   for (UInt32 i = (m_total_cores - m_num_processes - 1); i < (m_total_cores - 1); i++)
-   {
-      assert((current_proc >= 0) && (current_proc < m_num_processes));
-      m_core_to_proc_map[i] = current_proc;
-      m_proc_to_core_list_map[current_proc].push_back(i);
-      current_proc++;
-   }
-   
-   // Add one for the MCP
-   m_core_to_proc_map[m_total_cores - 1] = 0;
-   m_proc_to_core_list_map[0].push_back(m_total_cores - 1);
-
-   // printProcessToCoreMapping();
-}
-
-vector<Config::CoreList>
-Config::computeProcessToCoreMapping()
-{
-   for (UInt32 i = 0; i < NUM_STATIC_NETWORKS; i++)
-   {
-      UInt32 network_model = NetworkModel::parseNetworkType(Config::getSingleton()->getNetworkType(i));
-      pair<bool,vector<CoreList> > process_to_core_mapping_struct = NetworkModel::computeProcessToCoreMapping(network_model);
-      if (process_to_core_mapping_struct.first)
-      {
-         switch(network_model)
-         {
-            case NETWORK_EMESH_HOP_BY_HOP_BASIC:
-            case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
-            case FINITE_BUFFER_NETWORK_EMESH_BASIC:
-            case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
-            case FINITE_BUFFER_NETWORK_ATAC:
-               return process_to_core_mapping_struct.second;
-
-            default:
-               fprintf(stderr, "Unrecognized Network Type(%u)\n", network_model);
-               exit(EXIT_FAILURE);
-         }
-      }
-   }
-   
-   vector<CoreList> process_to_core_mapping(m_num_processes);
-   UInt32 current_proc = 0;
-   for (UInt32 i = 0; i < m_total_cores; i++)
-   {
-      process_to_core_mapping[current_proc].push_back(i);
-      current_proc = (current_proc + 1) % m_num_processes;
-   }
-   return process_to_core_mapping;
-}
-
-void Config::printProcessToCoreMapping()
-{
-   UInt32 curr_process_num = atoi(getenv("CARBON_PROCESS_INDEX"));
-   if (curr_process_num == 0)
-   {
-      for (UInt32 i = 0; i < m_num_processes; i++)
-      {
-         fprintf(stderr, "\nProcess(%u): %u\n", i, (UInt32) m_proc_to_core_list_map[i].size());
-         for (CoreList::iterator core_it = m_proc_to_core_list_map[i].begin(); \
-               core_it != m_proc_to_core_list_map[i].end(); core_it++)
-         {
-            fprintf(stderr, "%i, ", *core_it);
-         }
-         fprintf(stderr, "\n\n");
-      }
-   }
-   exit(-1);
-}
-
-void Config::logCoreMap()
-{
-   // Log the map we just created
-   LOG_PRINT("Process num: %d\n", m_num_processes);
-   for (UInt32 i=0; i < m_num_processes; i++)
-   {
-      LOG_ASSERT_ERROR(!m_proc_to_core_list_map[i].empty(),
-                       "Process %u assigned zero cores.", i);
-
-      stringstream ss;
-      ss << "Process " << i << ": (" << m_proc_to_core_list_map[i].size() << ") ";
-      for (CLCI m = m_proc_to_core_list_map[i].begin(); m != m_proc_to_core_list_map[i].end(); m++)
-         ss << "[" << *m << "]";
-      LOG_PRINT(ss.str().c_str());
-   }
-}
-
-SInt32 Config::getIndexFromCoreID(UInt32 proc_num, core_id_t core_id)
-{ 
-   CoreList core_list = getCoreListForProcess(proc_num);
-   for (UInt32 i = 0; i < core_list.size(); i++)
-   {
-      if (core_list[i] == core_id)
-         return (SInt32) i;
-   }
-   return -1;
-}
-
-core_id_t Config::getCoreIDFromIndex(UInt32 proc_num, SInt32 index)
-{
-   CoreList core_list = getCoreListForProcess(proc_num);
-   if (index < ((SInt32) core_list.size()))
-   {
-      return core_list[index];
-   }
-   else
-   {
-      return -1;
-   }
 }
 
 // Parse XML config file and use it to fill in config state.  Only modifies
@@ -299,16 +118,6 @@ bool Config::isSimulatingSharedMemory() const
 bool Config::getEnablePerformanceModeling() const
 {
    return (bool)m_knob_enable_performance_modeling;
-}
-
-bool Config::getEnableDCacheModeling() const
-{
-   return (bool)m_knob_enable_dcache_modeling;
-}
-
-bool Config::getEnableICacheModeling() const
-{
-   return (bool)m_knob_enable_icache_modeling;
 }
 
 bool Config::getEnablePowerModeling() const
@@ -361,7 +170,7 @@ void Config::parseCoreParameters()
    // 2) Frequency -> 1 GHz
    // 3) Core Type -> simple
 
-   const UInt32 DEFAULT_NUM_CORES = getApplicationCores();
+   const UInt32 DEFAULT_NUM_CORES = getTotalCores();
    const float DEFAULT_FREQUENCY = 1;
    const string DEFAULT_CORE_TYPE = "magic";
    const string DEFAULT_CACHE_TYPE = "T1";
@@ -445,26 +254,19 @@ void Config::parseCoreParameters()
       }
       num_initialized_cores += num_cores;
 
-      if (num_initialized_cores > getApplicationCores())
+      if (num_initialized_cores > getTotalCores())
       {
-         fprintf(stderr, "num initialized cores(%u), num application cores(%u)\n",
-            num_initialized_cores, getApplicationCores());
+         fprintf(stderr, "num initialized cores(%u), num cores(%u)\n",
+            num_initialized_cores, getTotalCores());
          exit(EXIT_FAILURE);
       }
    }
    
-   if (num_initialized_cores != getApplicationCores())
+   if (num_initialized_cores != getTotalCores())
    {
-      fprintf(stderr, "num initialized cores(%u), num application cores(%u)\n",
-         num_initialized_cores, getApplicationCores());
+      fprintf(stderr, "num initialized cores(%u), num total cores(%u)\n",
+         num_initialized_cores, getTotalCores());
       exit(EXIT_FAILURE);
-   }
-
-   // MCP, thread spawner and misc cores
-   for (UInt32 i = getApplicationCores(); i < getTotalCores(); i++)
-   {
-      m_core_parameters_vec.push_back(CoreParameters(DEFAULT_CORE_TYPE, DEFAULT_FREQUENCY, \
-               DEFAULT_CACHE_TYPE, DEFAULT_CACHE_TYPE, DEFAULT_CACHE_TYPE));
    }
 }
 

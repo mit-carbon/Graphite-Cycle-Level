@@ -201,8 +201,6 @@ NetworkModelEMeshHopByHopGeneric::routePacket(const NetPacket &pkt, vector<Hop> 
 {
    ScopedLock sl(m_lock);
 
-   core_id_t requester = getNetwork()->getRequester(pkt);
-
    UInt32 pkt_length = getNetwork()->getModeledLength(pkt);
 
    LOG_PRINT("pkt length(%u)", pkt_length);
@@ -225,17 +223,17 @@ NetworkModelEMeshHopByHopGeneric::routePacket(const NetPacket &pkt, vector<Hop> 
          computePosition(m_core_id, cx, cy);
 
          if (cy >= sy)
-            addHop(UP, NetPacket::BROADCAST, computeCoreId(cx,cy+1), pkt, curr_time, pkt_length, nextHops, requester);
+            addHop(UP, NetPacket::BROADCAST, computeCoreId(cx,cy+1), pkt, curr_time, pkt_length, nextHops);
          if (cy <= sy)
-            addHop(DOWN, NetPacket::BROADCAST, computeCoreId(cx,cy-1), pkt, curr_time, pkt_length, nextHops, requester);
+            addHop(DOWN, NetPacket::BROADCAST, computeCoreId(cx,cy-1), pkt, curr_time, pkt_length, nextHops);
          if (cy == sy)
          {
             if (cx >= sx)
-               addHop(RIGHT, NetPacket::BROADCAST, computeCoreId(cx+1,cy), pkt, curr_time, pkt_length, nextHops, requester);
+               addHop(RIGHT, NetPacket::BROADCAST, computeCoreId(cx+1,cy), pkt, curr_time, pkt_length, nextHops);
             if (cx <= sx)
-               addHop(LEFT, NetPacket::BROADCAST, computeCoreId(cx-1,cy), pkt, curr_time, pkt_length, nextHops, requester);
+               addHop(LEFT, NetPacket::BROADCAST, computeCoreId(cx-1,cy), pkt, curr_time, pkt_length, nextHops);
             if (cx == sx)
-               addHop(SELF, NetPacket::BROADCAST, m_core_id, pkt, curr_time, pkt_length, nextHops, requester); 
+               addHop(SELF, NetPacket::BROADCAST, m_core_id, pkt, curr_time, pkt_length, nextHops); 
          }
       }
       else
@@ -256,7 +254,7 @@ NetworkModelEMeshHopByHopGeneric::routePacket(const NetPacket &pkt, vector<Hop> 
             OutputDirection direction;
             core_id_t next_dest = getNextDest(i, direction);
 
-            addHop(direction, i, next_dest, pkt, curr_time, pkt_length, nextHops, requester);
+            addHop(direction, i, next_dest, pkt, curr_time, pkt_length, nextHops);
          }
       }
    }
@@ -272,7 +270,7 @@ NetworkModelEMeshHopByHopGeneric::routePacket(const NetPacket &pkt, vector<Hop> 
       OutputDirection direction;
       core_id_t next_dest = getNextDest(pkt.receiver, direction);
 
-      addHop(direction, pkt.receiver, next_dest, pkt, curr_time, pkt_length, nextHops, requester);
+      addHop(direction, pkt.receiver, next_dest, pkt, curr_time, pkt_length, nextHops);
    }
 }
 
@@ -281,8 +279,7 @@ NetworkModelEMeshHopByHopGeneric::processReceivedPacket(NetPacket& pkt)
 {
    ScopedLock sl(m_lock);
    
-   core_id_t requester = getNetwork()->getRequester(pkt);
-   if ((!m_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()))
+   if (!m_enabled)
       return;
 
    UInt32 pkt_length = getNetwork()->getModeledLength(pkt);
@@ -311,7 +308,7 @@ NetworkModelEMeshHopByHopGeneric::addHop(OutputDirection direction,
       core_id_t final_dest, core_id_t next_dest,
       const NetPacket& pkt,
       UInt64 pkt_time, UInt32 pkt_length,
-      vector<Hop>& nextHops, core_id_t requester)
+      vector<Hop>& nextHops)
 {
    LOG_ASSERT_ERROR((direction == SELF) || ((direction >= 0) && (direction < NUM_OUTPUT_DIRECTIONS)),
          "Invalid Direction(%u)", direction);
@@ -325,7 +322,7 @@ NetworkModelEMeshHopByHopGeneric::addHop(OutputDirection direction,
       if (direction == SELF)
          h.time = pkt_time;
       else
-         h.time = pkt_time + computeLatency(direction, pkt, pkt_time, pkt_length, requester);
+         h.time = pkt_time + computeLatency(direction, pkt, pkt_time, pkt_length);
 
       nextHops.push_back(h);
    }
@@ -356,12 +353,12 @@ NetworkModelEMeshHopByHopGeneric::computeCoreId(SInt32 x, SInt32 y)
 }
 
 UInt64
-NetworkModelEMeshHopByHopGeneric::computeLatency(OutputDirection direction, const NetPacket& pkt, UInt64 pkt_time, UInt32 pkt_length, core_id_t requester)
+NetworkModelEMeshHopByHopGeneric::computeLatency(OutputDirection direction, const NetPacket& pkt, UInt64 pkt_time, UInt32 pkt_length)
 {
    LOG_ASSERT_ERROR((direction >= 0) && (direction < NUM_OUTPUT_DIRECTIONS),
          "Invalid Direction(%u)", direction);
 
-   if ( (!m_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()) )
+   if (!m_enabled)
       return 0;
 
    UInt64 processing_time = computeProcessingTime(pkt_length);
@@ -644,76 +641,6 @@ NetworkModelEMeshHopByHopGeneric::computeMemoryControllerPositions(SInt32 num_me
    return (make_pair(true, core_id_list_with_memory_controllers));
 }
 
-pair<bool, vector<Config::CoreList> >
-NetworkModelEMeshHopByHopGeneric::computeProcessToCoreMapping()
-{
-   // Initialize mesh_width, mesh_height
-   initializeEMeshTopologyParams();
-
-   UInt32 process_count = Config::getSingleton()->getProcessCount();
-
-   vector<Config::CoreList> process_to_core_mapping(process_count);
-   // Do a greedy mapping here
-   SInt32 proc_mesh_width = (SInt32) floor(sqrt(process_count));
-   SInt32 proc_mesh_height = (SInt32) floor(1.0 * process_count / proc_mesh_width);
-
-   SInt32 mesh_height_l = (SInt32) ((1.0 *  m_mesh_height * proc_mesh_width * proc_mesh_height) / process_count);
-   
-   for (SInt32 i = 0; i < proc_mesh_width; i++)
-   {
-      for (SInt32 j = 0; j < proc_mesh_height; j++)
-      {
-         SInt32 size_x = m_mesh_width / proc_mesh_width;
-         SInt32 size_y = mesh_height_l / proc_mesh_height;
-         SInt32 base_x = i * size_x;
-         SInt32 base_y = j * size_y;
-
-         if (i == (proc_mesh_width-1))
-         {
-            size_x = m_mesh_width - ((proc_mesh_width-1) * size_x);
-         }
-         if (j == (proc_mesh_height-1))
-         {
-            size_y = mesh_height_l - ((proc_mesh_height-1) * size_y);
-         }
-
-         for (SInt32 ii = 0; ii < size_x; ii++)
-         {
-            for (SInt32 jj = 0; jj < size_y; jj++)
-            {
-               core_id_t core_id = (base_x + ii) + ((base_y + jj) * m_mesh_width);
-               process_to_core_mapping[i + j*proc_mesh_width].push_back(core_id);
-            }
-         }
-      }
-   }
-
-   UInt32 procs_left = process_count - (proc_mesh_width * proc_mesh_height);
-   for (UInt32 i = proc_mesh_width * proc_mesh_height; i < process_count; i++)
-   {
-      SInt32 size_x = m_mesh_width / procs_left;
-      SInt32 size_y = m_mesh_height - mesh_height_l;
-      SInt32 base_x = (i - (proc_mesh_width * proc_mesh_height)) * size_x;
-      SInt32 base_y = mesh_height_l;
-
-      if (i == (process_count-1))
-      {
-         size_x = m_mesh_width - ((procs_left-1) * size_x);
-      }
-
-      for (SInt32 ii = 0; ii < size_x; ii++)
-      {
-         for (SInt32 jj = 0; jj < size_y; jj++)
-         {
-            core_id_t core_id = (base_x + ii) + ((base_y + jj) * m_mesh_width);
-            process_to_core_mapping[i].push_back(core_id);
-         }
-      }
-   }
-
-   return (make_pair(true, process_to_core_mapping));
-}
-
 SInt32
 NetworkModelEMeshHopByHopGeneric::computeNumHops(core_id_t sender, core_id_t receiver)
 {
@@ -736,8 +663,7 @@ void
 NetworkModelEMeshHopByHopGeneric::updateDynamicEnergy(const NetPacket& pkt,
       bool is_buffered, UInt32 contention)
 {
-   core_id_t requester = getNetwork()->getRequester(pkt);
-   if ((!m_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()))
+   if (!m_enabled)
       return;
 
    // TODO: Make these models detailed later - Compute exact number of bit flips

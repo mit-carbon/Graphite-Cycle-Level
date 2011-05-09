@@ -18,7 +18,11 @@ class MetaEventHeap
 
       // Update the time associated with an event. The event is addressed using its index
       // in the event queue
-      void updateTime(SInt32 event_index, UInt64 time);
+      void updateTime(SInt32 event_index, UInt64 time, bool is_locked = false);
+
+      // Acquire/Release Locks
+      void acquireLock() { _lock.acquire(); }
+      void releaseLock() { _lock.release(); }
 
    private:
       // Timestamp of the most recent event

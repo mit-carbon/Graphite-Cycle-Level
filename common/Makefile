@@ -4,7 +4,6 @@ CLEAN=$(findstring clean,$(MAKECMDGOALS))
 include $(SIM_ROOT)/common/Makefile.common
 
 SRC_DIRECTORIES = $(DIRECTORIES) \
-			 $(SIM_ROOT)/common/performance_model/cycle_accurate/ \
 			 $(SIM_ROOT)/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_msi/	\
 			 $(SIM_ROOT)/common/core/memory_subsystem/pr_l1_pr_l2_dram_directory_mosi/
 

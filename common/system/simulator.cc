@@ -1,17 +1,16 @@
-#include <sstream>
+#include <fstream>
 
 #include "simulator.h"
 #include "log.h"
-#include "lcp.h"
-#include "mcp.h"
 #include "core.h"
 #include "event_manager.h"
 #include "core_manager.h"
 #include "thread_manager.h"
-#include "perf_counter_manager.h"
 #include "sim_thread_manager.h"
-#include "clock_skew_minimization_object.h"
-#include "fxsupport.h"
+#include "sync_manager.h"
+#include "syscall_manager.h"
+#include "routine_manager.h"
+#include "thread_interface.h"
 #include "contrib/orion/orion.h"
 
 Simulator *Simulator::m_singleton;
@@ -25,7 +24,8 @@ static UInt64 getTime()
    return time;
 }
 
-void Simulator::allocate()
+void
+Simulator::allocate()
 {
    assert(m_singleton == NULL);
    m_singleton = new Simulator();
@@ -36,38 +36,34 @@ config::Config* Simulator::getConfigFile()
    return m_config_file;
 }
 
-void Simulator::setConfigFile(config::Config *cfg)
+void
+Simulator::setConfigFile(config::Config *cfg)
 {
    m_config_file = cfg;
 }
 
-void Simulator::release()
+void
+Simulator::release()
 {
-   // Fxsupport::fini();
    delete m_singleton;
    m_singleton = NULL;
 }
 
-Simulator* Simulator::getSingleton()
+Simulator*
+Simulator::getSingleton()
 {
    return m_singleton;
 }
 
 Simulator::Simulator()
-   : m_mcp(NULL)
-   , m_mcp_thread(NULL)
-   , m_lcp(NULL)
-   , m_lcp_thread(NULL)
-   , m_config()
+   : m_config()
    , m_log(m_config)
-   , m_transport(NULL)
    , m_event_manager(NULL)
    , m_core_manager(NULL)
    , m_thread_manager(NULL)
-   , m_perf_counter_manager(NULL)
    , m_sim_thread_manager(NULL)
-   , m_clock_skew_minimization_manager(NULL)
-   , m_finished(false)
+   , m_sync_manager(NULL)
+   , m_syscall_manager(NULL)
    , m_boot_time(getTime())
    , m_start_time(0)
    , m_stop_time(0)
@@ -75,11 +71,10 @@ Simulator::Simulator()
 {
 }
 
-void Simulator::start()
+void
+Simulator::start()
 {
    LOG_PRINT("In Simulator ctor.");
-
-   m_config.logCoreMap();
 
    // Create Orion Config Object
    string orion_cfg_file = "./contrib/orion/orion.cfg";
@@ -87,41 +82,36 @@ void Simulator::start()
    LOG_PRINT("Allocated OrionConfig");
    // OrionConfig::getSingleton()->print_config(cout);
  
-   m_transport = Transport::create();
-   LOG_PRINT("Created m_transport");
    m_event_manager = new EventManager();
    LOG_PRINT("Created m_event_manager");
    m_core_manager = new CoreManager();
    LOG_PRINT("Created m_core_manager");
    m_thread_manager = new ThreadManager(m_core_manager);
    LOG_PRINT("Created m_thread_manager");
-   m_perf_counter_manager = new PerfCounterManager(m_thread_manager);
-   LOG_PRINT("Created m_perf_counter_manager");
    m_sim_thread_manager = new SimThreadManager();
    LOG_PRINT("Created m_sim_thread_manager");
-   m_clock_skew_minimization_manager = ClockSkewMinimizationManager::create(getCfg()->getString("clock_skew_minimization/scheme","none"));
-   LOG_PRINT("Created m_clock_skew_minimization_manager");
+   m_sync_manager = new SyncManager();
+   LOG_PRINT("Created m_sync_manager");
+   m_syscall_manager = new SyscallManager();
+   LOG_PRINT("Created m_syscall_manager");
 
-   // FIXME: Only in (FULL,LITE) modes. Floating Point Support
-   Fxsupport::allocate();
-   LOG_PRINT("Allocated Space for FxSupport");
+   // App-Sim Thread Interfaces
+   m_thread_interface_list.resize(Config::getSingleton()->getTotalCores());
+   for (UInt32 i = 0; i < Config::getSingleton()->getTotalCores(); i++)
+   {
+      assert(m_core_manager);
+      Core* core = m_core_manager->getCoreFromID(i);
+      m_thread_interface_list[i] = new ThreadInterface(core);
+   }
+   LOG_PRINT("Created m_thread_interface_list");
 
-   startMCP();
-   LOG_PRINT("Started MCP");
-
+   // Spawn Sim Threads
    m_sim_thread_manager->spawnSimThreads();
    LOG_PRINT("Spawned Sim Threads");
-
-   m_lcp = new LCP();
-   LOG_PRINT("Created LCP");
-   m_lcp_thread = Thread::create(m_lcp);
-   LOG_PRINT("Created m_lcp_thread");
-   m_lcp_thread->run();
 
    Instruction::initializeStaticInstructionModel();
    LOG_PRINT("Initialized Static Instruction Model");
 
-   m_transport->barrier();
    LOG_PRINT("Simulator ctor exit");
 }
 
@@ -131,171 +121,92 @@ Simulator::~Simulator()
 
    LOG_PRINT("Simulator dtor starting...");
 
-   if ((m_config.getCurrentProcessNum() == 0) && (m_config.getSimulationMode() == Config::FULL))
-      m_thread_manager->terminateThreadSpawners();
-
-   broadcastFinish();
-
-   endMCP();
-
-   if (m_clock_skew_minimization_manager)
-      delete m_clock_skew_minimization_manager;
-
    m_sim_thread_manager->quitSimThreads();
    LOG_PRINT("Quit Sim Threads");
 
-   m_transport->barrier();
+   // Core Summary
+   ofstream os(Config::getSingleton()->getOutputFileName().c_str());
 
-   m_lcp->finish();
-   LOG_PRINT("Finished LCP");
+   os << "Simulation timers: " << endl
+      << "start time\t" << (m_start_time - m_boot_time) << endl
+      << "stop time\t" << (m_stop_time - m_boot_time) << endl
+      << "shutdown time\t" << (m_shutdown_time - m_boot_time) << endl;
 
-   if (Config::getSingleton()->getCurrentProcessNum() == 0)
-   {
-      ofstream os(Config::getSingleton()->getOutputFileName().c_str());
+   m_core_manager->outputSummary(os);
+   os.close();
 
-      os << "Simulation timers: " << endl
-         << "start time\t" << (m_start_time - m_boot_time) << endl
-         << "stop time\t" << (m_stop_time - m_boot_time) << endl
-         << "shutdown time\t" << (m_shutdown_time - m_boot_time) << endl;
+   for (UInt32 i = 0; i < Config::getSingleton()->getTotalCores(); i++)
+      delete m_thread_interface_list[i];
+   m_thread_interface_list.clear();
+   LOG_PRINT("Deleted Thread Interfaces");
 
-      m_core_manager->outputSummary(os);
-      os.close();
-   }
-   else
-   {
-      stringstream temp;
-      m_core_manager->outputSummary(temp);
-      assert(temp.str().length() == 0);
-   }
-
-   delete m_lcp_thread;
-   LOG_PRINT("Deleted lcp_thread");
-   delete m_mcp_thread;
-   LOG_PRINT("Deleted mcp_thread");
-   delete m_lcp;
-   LOG_PRINT("Deleted lcp");
-   delete m_mcp;
-   LOG_PRINT("Deleted mcp");
+   delete m_syscall_manager;
+   LOG_PRINT("Deleted syscall_manager");
+   delete m_sync_manager;
+   LOG_PRINT("Deleted sync_manager");
    delete m_sim_thread_manager;
    LOG_PRINT("Deleted sim_thread_manager");
-   delete m_perf_counter_manager;
-   LOG_PRINT("Deleted perf_counter_manager");
    delete m_thread_manager;
    LOG_PRINT("Deleted thread_manager");
    delete m_core_manager;
    LOG_PRINT("Deleted core_manager");
    delete m_event_manager;
    LOG_PRINT("Deleted event_manager");
-   delete m_transport;
-   LOG_PRINT("Deleted transport");
 
    // Delete Orion Config Object
    OrionConfig::release();
    LOG_PRINT("Released OrionConfig");
 }
 
-void Simulator::startTimer()
+ThreadInterface*
+Simulator::getThreadInterface(core_id_t core_id)
+{ 
+   assert(core_id >= 0 && core_id < (core_id_t) Config::getSingleton()->getTotalCores()); 
+   return m_thread_interface_list[core_id];
+}
+
+void
+Simulator::startTimer()
 {
    m_start_time = getTime();
 }
 
-void Simulator::stopTimer()
+void
+Simulator::stopTimer()
 {
    m_stop_time = getTime();
 }
 
-void Simulator::broadcastFinish()
+void
+Simulator::enablePerformanceModels()
 {
-   if (Config::getSingleton()->getCurrentProcessNum() != 0)
-      return;
-
-   m_num_procs_finished = 1;
-
-   // let the rest of the simulator know its time to exit
-   Transport::Node *globalNode = Transport::getSingleton()->getGlobalNode();
-
-   SInt32 msg = LCP_MESSAGE_SIMULATOR_FINISHED;
-   for (UInt32 i = 1; i < Config::getSingleton()->getProcessCount(); i++)
-   {
-      globalNode->globalSend(i, &msg, sizeof(msg));
-   }
-
-   while (m_num_procs_finished < Config::getSingleton()->getProcessCount())
-   {
-      sched_yield();
-   }
+   LOG_PRINT("Simulator::enablePerformanceModels()");
+   emulateRoutine(Routine::ENABLE_PERFORMANCE_MODELS);
 }
 
-void Simulator::handleFinish()
+void
+Simulator::disablePerformanceModels()
 {
-   LOG_ASSERT_ERROR(Config::getSingleton()->getCurrentProcessNum() != 0,
-                    "LCP_MESSAGE_SIMULATOR_FINISHED received on master process.");
-
-   Transport::Node *globalNode = Transport::getSingleton()->getGlobalNode();
-   SInt32 msg = LCP_MESSAGE_SIMULATOR_FINISHED_ACK;
-   globalNode->globalSend(0, &msg, sizeof(msg));
-
-   m_finished = true;
+   LOG_PRINT("Simulator::disablePerformanceModels()");
+   emulateRoutine(Routine::DISABLE_PERFORMANCE_MODELS);
 }
 
-void Simulator::deallocateProcess()
-{
-   LOG_ASSERT_ERROR(Config::getSingleton()->getCurrentProcessNum() == 0,
-                    "LCP_MESSAGE_SIMULATOR_FINISHED_ACK received on slave process.");
-
-   ++m_num_procs_finished;
-}
-
-void Simulator::startMCP()
-{
-   if (m_config.getCurrentProcessNum() != m_config.getProcessNumForCore(Config::getSingleton()->getMCPCoreNum()))
-      return;
-
-   LOG_PRINT("Creating new MCP object in process %i", m_config.getCurrentProcessNum());
-
-   // FIXME: Can't the MCP look up its network itself in the
-   // constructor?
-   Core* mcp_core = m_core_manager->getCoreFromID(m_config.getMCPCoreNum());
-   LOG_ASSERT_ERROR(mcp_core, "Could not find the MCP's core!");
-
-   Network & mcp_network = *(mcp_core->getNetwork());
-   m_mcp = new MCP(mcp_network);
-
-   m_mcp_thread = Thread::create(m_mcp);
-   m_mcp_thread->run();
-}
-
-void Simulator::endMCP()
-{
-   if (m_config.getCurrentProcessNum() == m_config.getProcessNumForCore(m_config.getMCPCoreNum()))
-      m_mcp->finish();
-}
-
-bool Simulator::finished()
-{
-   return m_finished;
-}
-
-void Simulator::enablePerformanceModelsInCurrentProcess()
+void
+Simulator::__enablePerformanceModels()
 {
    LOG_PRINT("Simulator::enablePerformanceModels start");
    Sim()->startTimer();
-   for (UInt32 i = 0; i < Sim()->getConfig()->getNumLocalCores(); i++)
-      Sim()->getCoreManager()->getCoreFromIndex(i)->enablePerformanceModels();
+   for (UInt32 i = 0; i < Config::getSingleton()->getTotalCores(); i++)
+      Sim()->getCoreManager()->getCoreFromID(i)->enablePerformanceModels();
    LOG_PRINT("Simulator::enablePerformanceModels end");
 }
 
-void Simulator::disablePerformanceModelsInCurrentProcess()
+void
+Simulator::__disablePerformanceModels()
 {
    LOG_PRINT("Simulator::disablePerformanceModels start");
    Sim()->stopTimer();
-   for (UInt32 i = 0; i < Sim()->getConfig()->getNumLocalCores(); i++)
-      Sim()->getCoreManager()->getCoreFromIndex(i)->disablePerformanceModels();
+   for (UInt32 i = 0; i < Config::getSingleton()->getTotalCores(); i++)
+      Sim()->getCoreManager()->getCoreFromID(i)->disablePerformanceModels();
    LOG_PRINT("Simulator::disablePerformanceModels end");
-}
-
-void Simulator::resetPerformanceModelsInCurrentProcess()
-{
-   for (UInt32 i = 0; i < Sim()->getConfig()->getNumLocalCores(); i++)
-      Sim()->getCoreManager()->getCoreFromIndex(i)->resetPerformanceModels();
 }

@@ -28,7 +28,6 @@ class MemoryManager
 
    protected:
       Network* getNetwork() { return m_network; }
-      ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
 
       vector<core_id_t> getCoreListWithMemoryControllers(void);
       void printCoreListWithMemoryControllers(vector<core_id_t>& core_list_with_memory_controllers);
@@ -79,4 +78,6 @@ class MemoryManager
             ShmemPerfModel* shmem_perf_model);
       
       virtual void outputSummary(std::ostream& os) = 0;
+      
+      ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
 };

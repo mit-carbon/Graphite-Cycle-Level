@@ -5,31 +5,24 @@
 
 typedef SInt32 carbon_thread_t;
 
-typedef void *(*thread_func_t)(void *);
-
-typedef struct
-{
-   SInt32 msg_type;
-   thread_func_t func;
-   void *arg;
-   SInt32 requester;
-   core_id_t core_id;
-   UInt64 time;
-} ThreadSpawnRequest;
-
-typedef struct 
-{
-   SInt32 msg_type;
-   SInt32 sender;
-   core_id_t core_id;
-} ThreadJoinRequest;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-carbon_thread_t CarbonSpawnThread(thread_func_t func, void *arg);
-void CarbonJoinThread(carbon_thread_t tid);
+typedef void *(*thread_func_t)(void *);
+
+typedef struct
+{
+   core_id_t core_id;
+   thread_func_t func;
+   void* arg;
+} ThreadSpawnRequest;
+
+core_id_t CarbonSpawnThread(thread_func_t func, void *arg);
+void CarbonJoinThread(core_id_t tid);
+
+void __CarbonSpawnThread(UInt64 time, core_id_t req_core_id, thread_func_t func, void* arg);
+void __CarbonJoinThread(UInt64 time, core_id_t req_core_id, core_id_t join_core_id);
 
 #ifdef __cplusplus
 }

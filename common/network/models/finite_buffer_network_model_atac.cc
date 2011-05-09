@@ -481,14 +481,15 @@ FiniteBufferNetworkModelAtac::createNetworkNode(NodeType node_type)
       link_power_model_list.push_back(link_power_model);
    }
          
-   return new NetworkNode(Router::Id(_core_id, node_type), \
-         _flit_width, \
-         router_performance_model, \
-         router_power_model, \
-         link_performance_model_list, \
-         link_power_model_list, \
-         input_channel_to_router_id_list__mapping, \
-         output_channel_to_router_id_list__mapping);
+   return new NetworkNode(Router::Id(_core_id, node_type),
+         _flit_width,
+         router_performance_model,
+         router_power_model,
+         link_performance_model_list,
+         link_power_model_list,
+         input_channel_to_router_id_list__mapping,
+         output_channel_to_router_id_list__mapping,
+         _flow_control_packet_type);
 }
 
 void

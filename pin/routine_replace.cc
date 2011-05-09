@@ -1,130 +1,71 @@
+#include <string>
+#include <map>
+using namespace std;
+
 #include "routine_replace.h"
 #include "simulator.h"
+#include "core_manager.h"
+#include "core.h"
+#include "routine_manager.h"
 #include "thread_manager.h"
 #include "log.h"
-#include "carbon_user.h"
-#include "thread_support_private.h"
 
-// -------------------------------------
-// Begin Memory redirection stuff
-#include "config.h"
-#include "simulator.h"
-#include "core.h"
-#include "core_manager.h"
-#include "redirect_memory.h"
-#include "thread_start.h"
-#include "network.h"
-#include "packet_type.h"
-// End Memory redirection stuff
-// --------------------------------------
-
-// ---------------------------------------------------------
-// Memory Redirection
-//
-// Routine replacement needs to work a little differently
-// We can't use RTN_Replace or RTN_ReplaceSignature because
-// the application executes out of a different memory space
-// (and hence also uses a different stack) that Pin isn't aware of
-// Our solution is to insert a call before the routine executes 
-// to a wrapper function that extracts the correct arguments from 
-// the user stack (including populating memory pointers with data
-// from simulated memory) and then calls the "replacement functions"
-// within the pintool. This wrapper also writes back results to user
-// memory before returning control to the correct return address
-// in user space
-//
-// --------------------------------------------------------------
-
-bool replaceUserAPIFunction(RTN& rtn, string& name)
+// The Pintool can easily read from application memory, so
+// we dont need to explicitly initialize stuff and do a special ret
+void routineCallback(RTN rtn, void* v)
 {
-   LOG_ASSERT_WARNING(Config::getSingleton()->getSimulationMode() == Config::FULL,
-         "Only Allowed in FULL mode");
+   string rtn_name = RTN_Name(rtn);
 
-   AFUNPTR msg_ptr = NULL;
-
-   // TODO: Check that the starting stack is located below the text segment
-   // thread management
-   if (name == "main") msg_ptr = AFUNPTR (replacementMain);
-   else if (name == "CarbonGetThreadToSpawn") msg_ptr = AFUNPTR(replacementGetThreadToSpawn);
-   else if (name == "CarbonThreadStart") msg_ptr = AFUNPTR (replacementThreadStartNull);
-   else if (name == "CarbonThreadExit") msg_ptr = AFUNPTR (replacementThreadExitNull);
-   else if (name == "CarbonGetCoreId") msg_ptr = AFUNPTR(replacementGetCoreId);
-   else if (name == "CarbonDequeueThreadSpawnReq") msg_ptr = AFUNPTR (replacementDequeueThreadSpawnRequest);
-
-   // PIN specific stack management
-   else if (name == "CarbonPthreadAttrInitOtherAttr") msg_ptr = AFUNPTR(replacementPthreadAttrInitOtherAttr);
-
-   // Carbon API
-
-   else if (name == "CarbonStartSim") msg_ptr = AFUNPTR(replacementStartSimNull); 
-   else if (name == "CarbonStopSim") msg_ptr = AFUNPTR(replacementStopSim);
-   else if (name == "CarbonSpawnThread") msg_ptr = AFUNPTR(replacementSpawnThread);
-   else if (name == "CarbonJoinThread") msg_ptr = AFUNPTR(replacementJoinThread);
-
-   // CAPI
-   else if (name == "CAPI_Initialize") msg_ptr = AFUNPTR(replacement_CAPI_Initialize);
-   else if (name == "CAPI_rank") msg_ptr = AFUNPTR(replacement_CAPI_rank);
-   else if (name == "CAPI_message_send_w") msg_ptr = AFUNPTR(replacement_CAPI_message_send_w);
-   else if (name == "CAPI_message_receive_w") msg_ptr = AFUNPTR(replacement_CAPI_message_receive_w);
-   else if (name == "CAPI_message_send_w_ex") msg_ptr = AFUNPTR(replacement_CAPI_message_send_w_ex);
-   else if (name == "CAPI_message_receive_w_ex") msg_ptr = AFUNPTR(replacement_CAPI_message_receive_w_ex);
-
-   // synchronization
-   else if (name == "CarbonMutexInit") msg_ptr = AFUNPTR(replacementMutexInit);
-   else if (name == "CarbonMutexLock") msg_ptr = AFUNPTR(replacementMutexLock);
-   else if (name == "CarbonMutexUnlock") msg_ptr = AFUNPTR(replacementMutexUnlock);
-   else if (name == "CarbonCondInit") msg_ptr = AFUNPTR(replacementCondInit);
-   else if (name == "CarbonCondWait") msg_ptr = AFUNPTR(replacementCondWait);
-   else if (name == "CarbonCondSignal") msg_ptr = AFUNPTR(replacementCondSignal);
-   else if (name == "CarbonCondBroadcast") msg_ptr = AFUNPTR(replacementCondBroadcast);
-   else if (name == "CarbonBarrierInit") msg_ptr = AFUNPTR(replacementBarrierInit);
-   else if (name == "CarbonBarrierWait") msg_ptr = AFUNPTR(replacementBarrierWait);
-
-   // Enable/Disable/Reset Models
-   else if (name == "CarbonEnableModels") msg_ptr = AFUNPTR(replacementEnableModels);
-   else if (name == "CarbonDisableModels") msg_ptr = AFUNPTR(replacementDisableModels);
-   else if (name == "CarbonResetModels") msg_ptr = AFUNPTR(replacementResetModels);
-
-   // Resetting Cache Counters
-   else if (name == "CarbonResetCacheCounters") msg_ptr = AFUNPTR(replacementResetCacheCounters);
-   else if (name == "CarbonDisableCacheCounters") msg_ptr = AFUNPTR(replacementDisableCacheCounters);
-
-   // pthread wrappers
-   else if (name.find("pthread_create") != std::string::npos) msg_ptr = AFUNPTR(replacementPthreadCreate);
-   else if (name.find("pthread_join") != std::string::npos) msg_ptr = AFUNPTR(replacementPthreadJoin);
-   else if (name.find("pthread_barrier_init") != std::string::npos) msg_ptr = AFUNPTR(replacementPthreadBarrierInit);
-   else if (name.find("pthread_barrier_wait") != std::string::npos) msg_ptr = AFUNPTR(replacementPthreadBarrierWait);
-   else if (name.find("pthread_exit") != std::string::npos) msg_ptr = AFUNPTR(replacementPthreadExitNull);
-
-   // For Getting the Simulated Time
-   else if (name == "CarbonGetTime") msg_ptr = AFUNPTR(replacementCarbonGetTime);
-
-   // For Dynamic Frequency Scaling
-   else if (name == "CarbonGetCoreFrequency") msg_ptr = AFUNPTR(replacementCarbonGetCoreFrequency);
-   else if (name == "CarbonSetCoreFrequency") msg_ptr = AFUNPTR(replacementCarbonSetCoreFrequency);
-
-   // Turn off performance modeling at _start()
-   if (name == "_start")
+   // Enable Models
+   if (rtn_name == "CarbonEnableModels")
    {
-      RTN_Open (rtn);
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonEnableModels",
+            PIN_PARG_END());
 
-      RTN_InsertCall (rtn, IPOINT_BEFORE,
-                      AFUNPTR(Simulator::disablePerformanceModelsInCurrentProcess),
-                      IARG_END);
-
-      RTN_Close (rtn);
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonEnableModels),
+            IARG_PROTOTYPE, proto,
+            IARG_END);
    }
-   
-   // Turn off performance modeling after main()
-   if (name == "main")
+ 
+   // Disable Models
+   if (rtn_name == "CarbonDisableModels")
    {
-      RTN_Open (rtn);
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonDisableModels",
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonDisableModels),
+            IARG_PROTOTYPE, proto,
+            IARG_END);
+   }
+
+   // _start
+   if (rtn_name == "_start")
+   {
+      RTN_Open(rtn);
+
+      RTN_InsertCall(rtn, IPOINT_BEFORE,
+            AFUNPTR(Simulator::disablePerformanceModels),
+            IARG_END);
+
+      RTN_Close(rtn);
+   }
+
+   // main
+   if (rtn_name == "main")
+   {
+      RTN_Open(rtn);
 
       // Before main()
       if (Sim()->getCfg()->getBool("general/enable_models_at_startup",true))
       {
          RTN_InsertCall(rtn, IPOINT_BEFORE,
-               AFUNPTR(Simulator::enablePerformanceModelsInCurrentProcess),
+               AFUNPTR(Simulator::enablePerformanceModels),
                IARG_END);
       }
 
@@ -134,918 +75,556 @@ bool replaceUserAPIFunction(RTN& rtn, string& name)
 
       // After main()
       RTN_InsertCall(rtn, IPOINT_AFTER,
-            AFUNPTR(Simulator::disablePerformanceModelsInCurrentProcess),
-            IARG_END);
-      
-      RTN_Close (rtn);
-   }
-
-   // do replacement
-   if (msg_ptr != NULL)
-   {
-      RTN_Open (rtn);
-
-      RTN_InsertCall (rtn, IPOINT_BEFORE,
-            msg_ptr,
-            IARG_CONTEXT,
+            AFUNPTR(Simulator::disablePerformanceModels),
             IARG_END);
 
-      RTN_Close (rtn);
-
-      return true;
+      RTN_Close(rtn);
    }
-   else
+
+   // CarbonStartSim() and CarbonStopSim()
+   if (rtn_name == "CarbonStartSim")
    {
-      return false;
-   }
-}
-
-void replacementMain (CONTEXT *ctxt)
-{
-   LOG_PRINT_WARNING("In replacementMain");
-   
-   if (Sim()->getConfig()->getCurrentProcessNum() == 0)
-   {
-      LOG_PRINT("ReplaceMain start");
-      
-      Core *core = Sim()->getCoreManager()->getCurrentCore();
-      UInt32 num_processes = Sim()->getConfig()->getProcessCount();
-      for (UInt32 i = 1; i < num_processes; i++)
-      {
-         // FIXME: 
-         // This whole process should probably happen through the MCP
-         core->getNetwork()->netSend(Sim()->getConfig()->getThreadSpawnerCoreNum (i), SYSTEM_INITIALIZATION_NOTIFY, NULL, 0);
-
-         // main thread clock is not affected by start-up time of other processes
-         NetPacket* pkt = core->getNetwork()->netRecv(Sim()->getConfig()->getThreadSpawnerCoreNum (i), SYSTEM_INITIALIZATION_ACK);
-         pkt->release();
-      }
-      
-      for (UInt32 i = 1; i < num_processes; i++)
-      {
-         core->getNetwork()->netSend(Sim()->getConfig()->getThreadSpawnerCoreNum (i), SYSTEM_INITIALIZATION_FINI, NULL, 0);
-      }
-
-      spawnThreadSpawner(ctxt);
-
-      LOG_PRINT("ReplaceMain end");
-
-      return;
-   }
-   else
-   {
-      // This whole process should probably happen through the MCP
-      Core *core = Sim()->getCoreManager()->getCurrentCore();
-      core->getNetwork()->netSend(Sim()->getConfig()->getMainThreadCoreNum(), SYSTEM_INITIALIZATION_ACK, NULL, 0);
-      NetPacket* pkt = core->getNetwork()->netRecv(Sim()->getConfig()->getMainThreadCoreNum(), SYSTEM_INITIALIZATION_FINI);
-      pkt->release();
-
-      int res;
-      ADDRINT reg_eip = PIN_GetContextReg (ctxt, REG_INST_PTR);
-
-      PIN_LockClient();
-
-      AFUNPTR thread_spawner;
-      IMG img = IMG_FindByAddress(reg_eip);
-      RTN rtn = RTN_FindByName(img, "CarbonThreadSpawner");
-      thread_spawner = RTN_Funptr(rtn);
-
-      PIN_UnlockClient();
-      
-      PIN_CallApplicationFunction (ctxt,
-            PIN_ThreadId(),
+      PROTO proto = PROTO_Allocate(PIN_PARG(SInt32),
             CALLINGSTD_DEFAULT,
-            thread_spawner,
-            PIN_PARG(int), &res,
-            PIN_PARG(void*), NULL,
+            "CarbonStartSim",
+            PIN_PARG(int),
+            PIN_PARG(char**),
             PIN_PARG_END());
 
-      Sim()->getThreadManager()->onThreadExit();
-
-      while (!Sim()->finished())
-         sched_yield();
-
-      Simulator::release();
-
-      exit (0);
-   }
-}
-
-void replacementGetThreadToSpawn (CONTEXT *ctxt)
-{
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core != NULL);
-   
-   ThreadSpawnRequest *req;
-   ThreadSpawnRequest req_buf;
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &req,
-         IARG_END);
-   
-   // Preserve REG_GAX across function call with
-   // void return type
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-
-   CarbonGetThreadToSpawn (&req_buf);
-
-   core->accessMemory(Core::NONE, Core::WRITE, (IntPtr) req, (char*) &req_buf, sizeof (ThreadSpawnRequest));
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementThreadStartNull (CONTEXT *ctxt)
-{
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementThreadExitNull (CONTEXT *ctxt)
-{
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementGetCoreId (CONTEXT *ctxt)
-{
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   CarbonGetCoreId ();
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-
-void replacementDequeueThreadSpawnRequest (CONTEXT *ctxt)
-{
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-
-   ThreadSpawnRequest *thread_req;
-   ThreadSpawnRequest thread_req_buf;
-   
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &thread_req,
-         IARG_END);
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   CarbonDequeueThreadSpawnReq (&thread_req_buf);
-
-   core->accessMemory (Core::NONE, Core::WRITE, (IntPtr) thread_req, (char*) &thread_req_buf, sizeof (ThreadSpawnRequest));
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-// PIN specific stack management
-void replacementPthreadAttrInitOtherAttr(CONTEXT *ctxt)
-{
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert(core != NULL);
-
-   pthread_attr_t *attr;
-   pthread_attr_t attr_buf;
-
-   initialize_replacement_args(ctxt,
-         IARG_PTR, &attr,
-         IARG_END);
-
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) attr, (char*) &attr_buf, sizeof (pthread_attr_t));
-
-   ADDRINT ret_val = PIN_GetContextReg(ctxt, REG_GAX);
-
-   SimPthreadAttrInitOtherAttr(&attr_buf);
-
-   core->accessMemory (Core::NONE, Core::WRITE, (ADDRINT) attr, (char*) &attr_buf, sizeof (pthread_attr_t));
-
-   retFromReplacedRtn(ctxt, ret_val);
-}
-
-
-void replacementStartSimNull (CONTEXT *ctxt)
-{
-   ADDRINT ret_val = 0; 
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementStopSim (CONTEXT *ctxt)
-{
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementSpawnThread (CONTEXT *ctxt)
-{
-   thread_func_t func;
-   void *arg;
-
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &func,
-         IARG_PTR, &arg,
-         IARG_END);
-
-   LOG_PRINT("Calling SimSpawnThread");
-   ADDRINT ret_val = (ADDRINT) CarbonSpawnThread (func, arg);
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementJoinThread (CONTEXT *ctxt)
-{
-   ADDRINT tid;
-
-   initialize_replacement_args (ctxt,
-         IARG_ADDRINT, &tid,
-         IARG_END);
-
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-
-   CarbonJoinThread ((int) tid);
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacement_CAPI_Initialize (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the CAPI communication API functions
-   __attribute(__unused__) Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   int comm_id;
-   initialize_replacement_args (ctxt,
-         IARG_UINT32, &comm_id,
-         IARG_END);
-
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-
-   CAPI_Initialize (comm_id);
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacement_CAPI_rank (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the CAPI communication API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   int *core_id;
-   int core_id_buf;
-   CAPI_return_t ret_val;
-
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &core_id,
-         IARG_END);
-
-   ret_val = CAPI_rank (&core_id_buf);
-   
-   core->accessMemory (Core::NONE, Core::WRITE, (ADDRINT) core_id, (char*) &core_id_buf, sizeof (int));
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacement_CAPI_message_send_w (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the CAPI communication API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   CAPI_endpoint_t sender;
-   CAPI_endpoint_t receiver;
-   char *buffer;
-   int size;
-   CAPI_return_t ret_val = 0;
-
-   initialize_replacement_args (ctxt,
-         IARG_UINT32, &sender,
-         IARG_UINT32, &receiver,
-         IARG_PTR, &buffer,
-         IARG_UINT32, &size,
-         IARG_END);
-
-   char *buf = new char [size];
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) buffer, buf, size);
-   ret_val = CAPI_message_send_w (sender, receiver, buf, size);
-
-   delete [] buf;
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacement_CAPI_message_send_w_ex (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the CAPI communication API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   CAPI_endpoint_t sender;
-   CAPI_endpoint_t receiver;
-   char *buffer;
-   int size;
-   carbon_network_t net_type;
-   CAPI_return_t ret_val = 0;
-
-   initialize_replacement_args (ctxt,
-         IARG_UINT32, &sender,
-         IARG_UINT32, &receiver,
-         IARG_PTR, &buffer,
-         IARG_UINT32, &size,
-         IARG_UINT32, &net_type,
-         IARG_END);
-
-   char *buf = new char [size];
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) buffer, buf, size);
-   ret_val = CAPI_message_send_w_ex (sender, receiver, buf, size, net_type);
-
-   delete [] buf;
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacement_CAPI_message_receive_w (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the CAPI communication API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   CAPI_endpoint_t sender;
-   CAPI_endpoint_t receiver;
-   char *buffer;
-   int size;
-   CAPI_return_t ret_val = 0;
-
-   initialize_replacement_args (ctxt,
-         IARG_UINT32, &sender,
-         IARG_UINT32, &receiver,
-         IARG_PTR, &buffer,
-         IARG_UINT32, &size,
-         IARG_END);
-
-   char *buf = new char [size];
-   ret_val = CAPI_message_receive_w (sender, receiver, buf, size);
-   core->accessMemory (Core::NONE, Core::WRITE, (ADDRINT) buffer, buf, size);
-
-   delete [] buf;
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacement_CAPI_message_receive_w_ex (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the CAPI communication API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   CAPI_endpoint_t sender;
-   CAPI_endpoint_t receiver;
-   char *buffer;
-   int size;
-   carbon_network_t net_type;
-   CAPI_return_t ret_val = 0;
-
-   initialize_replacement_args (ctxt,
-         IARG_UINT32, &sender,
-         IARG_UINT32, &receiver,
-         IARG_PTR, &buffer,
-         IARG_UINT32, &size,
-         IARG_UINT32, &net_type,
-         IARG_END);
-
-   char *buf = new char [size];
-   ret_val = CAPI_message_receive_w_ex (sender, receiver, buf, size, net_type);
-   core->accessMemory (Core::NONE, Core::WRITE, (ADDRINT) buffer, buf, size);
-
-   delete [] buf;
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-
-void replacementMutexInit (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the Carbon synch API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   carbon_mutex_t *mux;
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &mux,
-         IARG_END);
-   
-   carbon_mutex_t mux_buf;
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) mux, (char*) &mux_buf, sizeof (mux_buf));
-   CarbonMutexInit (&mux_buf);
-   core->accessMemory (Core::NONE, Core::WRITE, (ADDRINT) mux, (char*) &mux_buf, sizeof (mux_buf));
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementMutexLock (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the Carbon synch API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   carbon_mutex_t *mux;
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &mux,
-         IARG_END);
-   
-   carbon_mutex_t mux_buf;
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) mux, (char*) &mux_buf, sizeof (mux_buf));
-   CarbonMutexLock (&mux_buf);
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementMutexUnlock (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the Carbon synch API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   carbon_mutex_t *mux;
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &mux,
-         IARG_END);
-   
-   carbon_mutex_t mux_buf;
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) mux, (char*) &mux_buf, sizeof (mux_buf));
-   CarbonMutexUnlock (&mux_buf);
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementCondInit (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the Carbon synch API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   carbon_cond_t *cond;
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &cond,
-         IARG_END);
-   
-   carbon_cond_t cond_buf;
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) cond, (char*) &cond_buf, sizeof (cond_buf));
-   CarbonCondInit (&cond_buf);
-   core->accessMemory (Core::NONE, Core::WRITE, (ADDRINT) cond, (char*) &cond_buf, sizeof (cond_buf));
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementCondWait (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the Carbon synch API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   carbon_cond_t *cond;
-   carbon_mutex_t *mux;
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &cond,
-         IARG_PTR, &mux,
-         IARG_END);
-   
-   carbon_cond_t cond_buf;
-   carbon_mutex_t mux_buf;
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) cond, (char*) &cond_buf, sizeof (cond_buf));
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) mux, (char*) &mux_buf, sizeof (mux_buf));
-   CarbonCondWait (&cond_buf, &mux_buf);
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementCondSignal (CONTEXT *ctxt)
-{
-   // Only the user-threads (all of which are cores) call
-   // the Carbon synch API functions
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   
-   carbon_cond_t *cond;
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &cond,
-         IARG_END);
-   
-   carbon_cond_t cond_buf;
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) cond, (char*) &cond_buf, sizeof (cond_buf));
-   CarbonCondSignal (&cond_buf);
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementCondBroadcast (CONTEXT *ctxt)
-{
-   carbon_cond_t *cond;
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &cond,
-         IARG_END);
-   
-   carbon_cond_t cond_buf;
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) cond, (char*) &cond_buf, sizeof (cond_buf));
-   CarbonCondBroadcast (&cond_buf);
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementBarrierInit (CONTEXT *ctxt)
-{
-   carbon_barrier_t *barrier;
-   UInt32 count;
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &barrier,
-         IARG_UINT32, &count,
-         IARG_END);
-   
-   carbon_barrier_t barrier_buf;
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) barrier, (char*) &barrier_buf, sizeof (barrier_buf));
-   CarbonBarrierInit (&barrier_buf, count);
-   core->accessMemory (Core::NONE, Core::WRITE, (ADDRINT) barrier, (char*) &barrier_buf, sizeof (barrier_buf));
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementBarrierWait (CONTEXT *ctxt)
-{
-   carbon_barrier_t *barrier;
-   initialize_replacement_args (ctxt,
-         IARG_ADDRINT, &barrier,
-         IARG_END);
-   
-   carbon_barrier_t barrier_buf;
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-   core->accessMemory (Core::NONE, Core::READ, (ADDRINT) barrier, (char*) &barrier_buf, sizeof (barrier_buf));
-   CarbonBarrierWait (&barrier_buf);
-
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-//assumption: the pthread_create from the ThreadSpawner is the first pthread_create() we encounter, and we need to let it fall through
-bool pthread_create_first_time = true; 
-
-void replacementPthreadCreate (CONTEXT *ctxt)
-{
-   core_id_t current_core_id =  
-                        Sim()->getCoreManager()->getCurrentCoreID();
-   core_id_t current_thread_spawner_id =  
-                        Sim()->getConfig()->getCurrentThreadSpawnerCoreNum();
-   
-   if ( pthread_create_first_time || current_core_id == current_thread_spawner_id )
-   {
-      //let the pthread_create call fall through 
-      pthread_create_first_time = false;
-   }
-   else
-   {
-      pthread_t *thread_id;
-      pthread_attr_t *attributes;
-      thread_func_t func;
-      void *func_arg;
-
-      initialize_replacement_args (ctxt,
-            IARG_PTR, &thread_id,
-            IARG_PTR, &attributes,
-            IARG_PTR, &func,
-            IARG_PTR, &func_arg,
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(nullFunction),
+            IARG_PROTOTYPE, proto,
             IARG_END);
+   }
+   else if (rtn_name == "CarbonStopSim")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonStopSim",
+            PIN_PARG_END());
 
-      //TODO: add support for different attributes and throw warnings for unsupported attrs
-      
-      if (attributes != NULL)
-      {
-         fprintf(stdout, "Warning: pthread_create() is using unsupported attributes.\n");
-      }
-      
-      carbon_thread_t new_thread_id = CarbonSpawnThread(func, func_arg);
-      
-      Core *core = Sim()->getCoreManager()->getCurrentCore();
-      assert (core);
-      
-      core->accessMemory(Core::NONE, Core::WRITE, (IntPtr) thread_id, (char*) &new_thread_id, sizeof (pthread_t));
-      
-      //pthread_create() expects a return value of 0 on success
-      ADDRINT ret_val = 0;
-      retFromReplacedRtn (ctxt, ret_val);
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(nullFunction),
+            IARG_PROTOTYPE, proto,
+            IARG_END);
+   }
+
+   // Thread Creation
+   else if (rtn_name == "CarbonSpawnThread")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(core_id_t),
+            CALLINGSTD_DEFAULT,
+            "CarbonSpawnThread",
+            PIN_PARG(thread_func_t),
+            PIN_PARG(void*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(emulateCarbonSpawnThread),
+            IARG_PROTOTYPE, proto,
+            IARG_CONTEXT,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+            IARG_END);
+   }
+   else if (rtn_name.find("pthread_create") != string::npos)
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(int),
+            CALLINGSTD_DEFAULT,
+            "pthread_create",
+            PIN_PARG(pthread_t*),
+            PIN_PARG(pthread_attr_t*),
+            PIN_PARG(void* (*)(void*)),
+            PIN_PARG(void*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(emulatePthreadCreate),
+            IARG_PROTOTYPE, proto,
+            IARG_CONTEXT,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 2,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 3,
+            IARG_END);
+   }
+   // Thread Joining
+   else if (rtn_name == "CarbonJoinThread")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonJoinThread",
+            PIN_PARG(core_id_t),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(emulateCarbonJoinThread),
+            IARG_PROTOTYPE, proto,
+            IARG_CONTEXT,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name.find("pthread_join") != string::npos)
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(int),
+            CALLINGSTD_DEFAULT,
+            "pthread_join",
+            PIN_PARG(pthread_t),
+            PIN_PARG(void**),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(emulatePthreadJoin),
+            IARG_PROTOTYPE, proto,
+            IARG_CONTEXT,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+            IARG_END);
+   }
+   // Synchronization
+   else if (rtn_name == "CarbonMutexInit")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonMutexInit",
+            PIN_PARG(carbon_mutex_t*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonMutexInit),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name == "CarbonMutexLock")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonMutexLock",
+            PIN_PARG(carbon_mutex_t*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonMutexLock),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name == "CarbonMutexUnlock")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonMutexUnlock",
+            PIN_PARG(carbon_mutex_t*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonMutexUnlock),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name == "CarbonCondInit")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonCondInit",
+            PIN_PARG(carbon_cond_t*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonCondInit),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name == "CarbonCondWait")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonCondWait",
+            PIN_PARG(carbon_cond_t*),
+            PIN_PARG(carbon_mutex_t*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonCondWait),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+            IARG_END);
+   }
+   else if (rtn_name == "CarbonCondSignal")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonCondSignal",
+            PIN_PARG(carbon_cond_t*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonCondSignal),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name == "CarbonCondBroadcast")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonCondBroadcast",
+            PIN_PARG(carbon_cond_t*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonCondBroadcast),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name == "CarbonBarrierInit")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonBarrierInit",
+            PIN_PARG(carbon_barrier_t*),
+            PIN_PARG(unsigned int),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonBarrierInit),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+            IARG_END);
+   }
+   else if (rtn_name == "CarbonBarrierWait")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonBarrierWait",
+            PIN_PARG(carbon_barrier_t*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonBarrierWait),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   
+   // CAPI Functions
+   else if (rtn_name == "CAPI_Initialize")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(CAPI_return_t),
+            CALLINGSTD_DEFAULT,
+            "CAPI_Initialize",
+            PIN_PARG(int),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CAPI_Initialize),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name == "CAPI_rank")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(CAPI_return_t),
+            CALLINGSTD_DEFAULT,
+            "CAPI_rank",
+            PIN_PARG(int*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CAPI_rank),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name == "CAPI_message_send_w")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(CAPI_return_t),
+            CALLINGSTD_DEFAULT,
+            "CAPI_message_send_w",
+            PIN_PARG(CAPI_endpoint_t),
+            PIN_PARG(CAPI_endpoint_t),
+            PIN_PARG(char*),
+            PIN_PARG(int),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CAPI_message_send_w),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 2,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 3,
+            IARG_END);
+   }
+   else if (rtn_name == "CAPI_message_receive_w")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(CAPI_return_t),
+            CALLINGSTD_DEFAULT,
+            "CAPI_message_receive_w",
+            PIN_PARG(CAPI_endpoint_t),
+            PIN_PARG(CAPI_endpoint_t),
+            PIN_PARG(char*),
+            PIN_PARG(int),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CAPI_message_receive_w),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 2,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 3,
+            IARG_END);
+   }
+   else if (rtn_name == "CAPI_message_send_w_ex")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(CAPI_return_t),
+            CALLINGSTD_DEFAULT,
+            "CAPI_message_send_w_ex",
+            PIN_PARG(CAPI_endpoint_t),
+            PIN_PARG(CAPI_endpoint_t),
+            PIN_PARG(char*),
+            PIN_PARG(int),
+            PIN_PARG(UInt32),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CAPI_message_send_w_ex),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 2,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 3,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 4,
+            IARG_END);
+   }
+   else if (rtn_name == "CAPI_message_receive_w_ex")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(CAPI_return_t),
+            CALLINGSTD_DEFAULT,
+            "CAPI_message_receive_w_ex",
+            PIN_PARG(CAPI_endpoint_t),
+            PIN_PARG(CAPI_endpoint_t),
+            PIN_PARG(char*),
+            PIN_PARG(int),
+            PIN_PARG(UInt32),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CAPI_message_receive_w_ex),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 2,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 3,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 4,
+            IARG_END);
+   }
+
+   // Getting Simulated Time
+   else if (rtn_name == "CarbonGetTime")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(UInt64),
+            CALLINGSTD_DEFAULT,
+            "CarbonGetTime",
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonGetTime),
+            IARG_PROTOTYPE, proto,
+            IARG_END);
+   }
+
+   // Frequency Scaling Functions
+   else if (rtn_name == "CarbonGetCoreFrequency")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonGetCoreFrequency",
+            PIN_PARG(float*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonGetCoreFrequency),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
+   }
+   else if (rtn_name == "CarbonSetCoreFrequency")
+   {
+      PROTO proto = PROTO_Allocate(PIN_PARG(void),
+            CALLINGSTD_DEFAULT,
+            "CarbonSetCoreFrequency",
+            PIN_PARG(float*),
+            PIN_PARG_END());
+
+      RTN_ReplaceSignature(rtn,
+            AFUNPTR(CarbonSetCoreFrequency),
+            IARG_PROTOTYPE, proto,
+            IARG_FUNCARG_ENTRYPOINT_VALUE, 0,
+            IARG_END);
    }
 }
 
-void replacementPthreadJoin (CONTEXT *ctxt)
+AFUNPTR getFunptr(CONTEXT* context, string func_name)
 {
-   pthread_t thread_id;
-   void** return_value;
+   IntPtr reg_inst_ptr = PIN_GetContextReg(context, REG_INST_PTR);
 
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &thread_id,
-         IARG_PTR, &return_value,
-         IARG_END);
-
-   //TODO: the return_value needs to be set, but CarbonJoinThread() provides no return value.
-   LOG_ASSERT_WARNING (return_value == NULL, "pthread_join() is expecting a return value \
-         to be passed through value_ptr input, which is unsupported");
+   PIN_LockClient();
+   IMG img = IMG_FindByAddress(reg_inst_ptr);
+   RTN rtn = RTN_FindByName(img, func_name.c_str());
+   PIN_UnlockClient();
    
-   CarbonJoinThread ((carbon_thread_t) thread_id);
-
-   //pthread_join() expects a return value of 0 on success
-   ADDRINT ret_val = 0;
-   retFromReplacedRtn (ctxt, ret_val);
+   return RTN_Funptr(rtn);
 }
 
-void replacementPthreadExitNull (CONTEXT *ctxt)
+core_id_t emulateCarbonSpawnThread(CONTEXT* context,
+                                   thread_func_t thread_func,
+                                   void* arg)
 {
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   retFromReplacedRtn (ctxt, ret_val);
-}
+   LOG_PRINT("Entering emulateCarbonSpawnThread(%p, %p)", thread_func, arg);
+ 
+   // Call CARBON_SPAWN_THREAD to get a Core
+   UnstructuredBuffer* routine_info = new UnstructuredBuffer();
+   (*routine_info) << Routine::CARBON_SPAWN_THREAD << thread_func << arg;
+   core_id_t spawned_core_id = (core_id_t) emulateRoutine(routine_info);
 
-void replacementPthreadBarrierInit (CONTEXT *ctxt)
-{
-   pthread_barrier_t *barrier;
-   pthread_barrierattr_t *attributes;
-   UInt32 count;
+   // Find and call the pthread_create function 
+   AFUNPTR pthread_create_func = getFunptr(context, "pthread_create");
+   LOG_ASSERT_ERROR(pthread_create_func != NULL, "Could not find pthread_create");
 
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &barrier,
-         IARG_PTR, &attributes,
-         IARG_UINT32, &count,
-         IARG_END);
+   int ret;
+   pthread_t* thread_ptr = new pthread_t;
+   PIN_CallApplicationFunction(context, PIN_ThreadId(),
+         CALLINGSTD_DEFAULT,
+         pthread_create_func,
+         PIN_PARG(int), &ret,
+         PIN_PARG(pthread_t*), thread_ptr,
+         PIN_PARG(pthread_attr_t*), NULL,
+         PIN_PARG(void* (*)(void*)), thread_func,
+         PIN_PARG(void*), arg,
+         PIN_PARG_END());
 
-   //TODO: add support for different attributes and throw warnings for unsupported attrs
-   if (attributes != NULL)
-   {
-      fprintf(stdout, "Warning: pthread_barrier_init() is using unsupported attributes.\n");
-   }
+   LOG_ASSERT_ERROR(ret == 0, "pthread_create() returned(%i)", ret);
    
-   CarbonBarrierInit((carbon_barrier_t*) barrier, count);
+   // Insert the Core ID -> pthread_t* Mapping
+   Sim()->getThreadManager()->insertCoreIDToThreadMapping(spawned_core_id, thread_ptr);
    
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   retFromReplacedRtn (ctxt, ret_val);
+   return spawned_core_id;
 }
 
-void replacementPthreadBarrierWait (CONTEXT *ctxt)
+int emulatePthreadCreate(CONTEXT* context,
+                         pthread_t* thread_ptr,
+                         pthread_attr_t* attr,
+                         thread_func_t thread_func,
+                         void* arg)
 {
-   pthread_barrier_t *barrier;
+   // Call CARBON_SPAWN_THREAD to get a Core
+   UnstructuredBuffer* routine_info = new UnstructuredBuffer();
+   (*routine_info) << Routine::CARBON_SPAWN_THREAD << thread_func << arg;
+   core_id_t spawned_core_id = (core_id_t) emulateRoutine(routine_info);
+  
+   // Find and call the pthread_create function 
+   AFUNPTR pthread_create_func = getFunptr(context, "pthread_create");
+   LOG_ASSERT_ERROR(pthread_create_func != NULL, "Could not find pthread_create");
 
-   initialize_replacement_args (ctxt,
-         IARG_PTR, &barrier,
-         IARG_END);
+   int ret;
+   PIN_CallApplicationFunction(context, PIN_ThreadId(),
+         CALLINGSTD_DEFAULT,
+         pthread_create_func,
+         PIN_PARG(int), &ret,
+         PIN_PARG(pthread_t*), thread_ptr,
+         PIN_PARG(pthread_attr_t*), attr,
+         PIN_PARG(void* (*)(void*)), thread_func,
+         PIN_PARG(void*), arg,
+         PIN_PARG_END());
 
-   CarbonBarrierWait((carbon_barrier_t*) barrier);
+   LOG_ASSERT_ERROR(ret == 0, "pthread_create() returned(%i)", ret);
+
+   // Insert the Core ID -> pthread_t* Mapping
+   Sim()->getThreadManager()->insertCoreIDToThreadMapping(spawned_core_id, thread_ptr);
+
+   return ret;
+}
+
+void emulateCarbonJoinThread(CONTEXT* context,
+                             core_id_t join_core_id)
+{
+   // Get pthread_t* from join_core_id
+   pthread_t* thread_ptr = Sim()->getThreadManager()->getThreadFromCoreID(join_core_id);
+   assert(thread_ptr);
+   // Erase the Core Id to pthread_t* mapping
+   Sim()->getThreadManager()->eraseCoreIDToThreadMapping(join_core_id, thread_ptr);
+
+   // Call CARBON_JOIN_THREAD to join the core
+   LOG_PRINT("Starting emulateCarbonJoinThread: Thread_ptr(%p), join_core_id(%i)", thread_ptr, join_core_id);
+   UnstructuredBuffer* routine_info = new UnstructuredBuffer();
+   (*routine_info) << Routine::CARBON_JOIN_THREAD << join_core_id;
+   emulateRoutine(routine_info);
+
+   // Call the pthread_join function
+   AFUNPTR pthread_join_func = getFunptr(context, "pthread_join");
+   LOG_ASSERT_ERROR(pthread_join_func != NULL, "Could not find pthread_join");
+
+   int ret;
+   PIN_CallApplicationFunction(context, PIN_ThreadId(),
+         CALLINGSTD_DEFAULT,
+         pthread_join_func,
+         PIN_PARG(int), &ret,
+         PIN_PARG(pthread_t), *thread_ptr,
+         PIN_PARG(void**), NULL,
+         PIN_PARG_END());
+   LOG_ASSERT_ERROR(ret == 0, "pthread_join() returned(%i)", ret);
    
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   retFromReplacedRtn (ctxt, ret_val);
-}
-
-void replacementEnableModels(CONTEXT* ctxt)
-{
-   CarbonEnableModels();
-
-   ADDRINT ret_val = PIN_GetContextReg(ctxt, REG_GAX);
-   retFromReplacedRtn(ctxt, ret_val);
-}
-
-void replacementDisableModels(CONTEXT* ctxt)
-{
-   CarbonDisableModels();
-
-   ADDRINT ret_val = PIN_GetContextReg(ctxt, REG_GAX);
-   retFromReplacedRtn(ctxt, ret_val);
-}
-
-void replacementResetModels(CONTEXT* ctxt)
-{
-   CarbonResetModels();
-
-   ADDRINT ret_val = PIN_GetContextReg(ctxt, REG_GAX);
-   retFromReplacedRtn(ctxt, ret_val);
-}
-
-void replacementResetCacheCounters (CONTEXT *ctxt)
-{
-   CarbonResetCacheCounters();
+   LOG_PRINT("Finished emulateCarbonJoinThread: Thread_ptr(%p), join_core_id(%i)", thread_ptr, join_core_id);
    
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   retFromReplacedRtn (ctxt, ret_val);
+   // Delete the thread descriptor
+   delete thread_ptr;
 }
 
-void replacementDisableCacheCounters (CONTEXT *ctxt)
+int emulatePthreadJoin(CONTEXT* context,
+                       pthread_t thread,
+                       void** thead_return)
 {
-   CarbonDisableCacheCounters();
-   
-   ADDRINT ret_val = PIN_GetContextReg (ctxt, REG_GAX);
-   retFromReplacedRtn (ctxt, ret_val);
+   // Get the Join Core Id
+   core_id_t join_core_id = Sim()->getThreadManager()->getCoreIDFromThread(&thread);
+   assert(join_core_id != INVALID_CORE_ID);
+   // Erase the Core Id -> pthread_t* mapping
+   Sim()->getThreadManager()->eraseCoreIDToThreadMapping(join_core_id, &thread);
+  
+   LOG_PRINT("Joining Thread_ptr(%p), join_core_id(%i)", &thread, join_core_id);
+
+   // Call the CARBON_JOIN_THREAD function
+   UnstructuredBuffer* routine_info = new UnstructuredBuffer();
+   (*routine_info) << Routine::CARBON_JOIN_THREAD << join_core_id;
+   emulateRoutine(routine_info);
+
+   // Call the pthread_join function
+   AFUNPTR pthread_join_func = getFunptr(context, "pthread_join");
+   LOG_ASSERT_ERROR(pthread_join_func != NULL, "Could not find pthread_join");
+
+   int ret;
+   PIN_CallApplicationFunction(context, PIN_ThreadId(),
+         CALLINGSTD_DEFAULT,
+         pthread_join_func,
+         PIN_PARG(int), &ret,
+         PIN_PARG(pthread_t), thread,
+         PIN_PARG(void**), thead_return,
+         PIN_PARG_END());
+   LOG_ASSERT_ERROR(ret == 0, "pthread_join() returned(%i)", ret);
+
+   // We dont need to delete the thread descriptor
+   return ret;
 }
 
-void replacementCarbonGetTime(CONTEXT *ctxt)
+IntPtr nullFunction()
 {
-   UInt64 ret_val = CarbonGetTime();
-
-   retFromReplacedRtn(ctxt, ret_val);
+   LOG_PRINT("In nullFunction()");
+   return IntPtr(0);
 }
-
-void replacementCarbonGetCoreFrequency(CONTEXT *ctxt)
-{
-   float* core_frequency;
-
-   initialize_replacement_args(ctxt,
-         IARG_PTR, &core_frequency,
-         IARG_END);
-
-   volatile float core_frequency_buf;
-   CarbonGetCoreFrequency(&core_frequency_buf);
-
-   Core* core = Sim()->getCoreManager()->getCurrentCore();
-   core->accessMemory(Core::NONE, Core::WRITE, (IntPtr) core_frequency, (char*) &core_frequency_buf, sizeof(core_frequency_buf));
-
-   ADDRINT ret_val = PIN_GetContextReg(ctxt, REG_GAX);
-   retFromReplacedRtn(ctxt, ret_val);
-}
-
-void replacementCarbonSetCoreFrequency(CONTEXT *ctxt)
-{
-   float* core_frequency;
-
-   initialize_replacement_args(ctxt,
-         IARG_PTR, &core_frequency,
-         IARG_END);
-
-   volatile float core_frequency_buf;
-   Core* core = Sim()->getCoreManager()->getCurrentCore();
-   core->accessMemory(Core::NONE, Core::READ, (IntPtr) core_frequency, (char*) &core_frequency_buf, sizeof(core_frequency_buf));
-
-   CarbonSetCoreFrequency(&core_frequency_buf);
-
-   ADDRINT ret_val = PIN_GetContextReg(ctxt, REG_GAX);
-   retFromReplacedRtn(ctxt, ret_val);
-}
-
-void initialize_replacement_args (CONTEXT *ctxt, ...)
-{
-#ifdef TARGET_IA32
-   va_list vl;
-   va_start (vl, ctxt);
-   int type;
-   ADDRINT addr;
-   ADDRINT ptr;
-   ADDRINT buffer;
-   unsigned int count = 0;
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-
-   do
-   {
-      type = va_arg (vl, int);
-      addr = PIN_GetContextReg (ctxt, REG_STACK_PTR) + ((count + 1) * sizeof (ADDRINT));
-     
-      core->accessMemory (Core::NONE, Core::READ, addr, (char*) &buffer, sizeof (ADDRINT));
-      switch (type)
-      {
-         case IARG_ADDRINT:
-            ptr = va_arg (vl, ADDRINT);
-            * ((ADDRINT*) ptr) = buffer;
-            count++;
-            break;
-
-         case IARG_PTR:
-            ptr = va_arg (vl, ADDRINT);
-            * ((ADDRINT*) ptr) = buffer;
-            count++;
-            break;
-
-         case IARG_UINT32:
-            ptr = va_arg (vl, ADDRINT);
-            * ((UInt32*) ptr) = (UInt32) buffer;
-            count++;
-            break;
-
-         case IARG_END:
-            break;
-
-         default:
-            assert (false);
-            break;
-      }
-   } while (type != IARG_END);
-#endif
-
-#ifdef TARGET_X86_64
-   va_list vl;
-   va_start (vl, ctxt);
-   int type;
-   ADDRINT ptr;
-   ADDRINT val;
-   unsigned int count = 0;
-   REG reg_sequence[] = {REG_GDI, REG_GSI, REG_GDX, REG_GCX, REG_R8, REG_R9};
-
-   do
-   {
-      LOG_ASSERT_ERROR (count < 6, "Don't support more than 6 function call arguments for replaced functions");
-
-      type = va_arg (vl, int);
-      val = PIN_GetContextReg (ctxt, reg_sequence[count]);
-      LOG_PRINT("function args(%i) -> 0x%x", count, (IntPtr) val);
-     
-      switch (type)
-      {
-         case IARG_ADDRINT:
-            ptr = va_arg (vl, ADDRINT);
-            * ((ADDRINT*) ptr) = val;
-            count++;
-            break;
-
-         case IARG_PTR:
-            ptr = va_arg (vl, ADDRINT);
-            * ((ADDRINT*) ptr) = val;
-            count++;
-            break;
-
-         case IARG_UINT32:
-            ptr = va_arg (vl, ADDRINT);
-            * ((UInt32*) ptr) = (UInt32) val;
-            count++;
-            break;
-
-         case IARG_END:
-            break;
-
-         default:
-            assert (false);
-            break;
-      }
-   } while (type != IARG_END);
-#endif
-}
-
-void retFromReplacedRtn (CONTEXT *ctxt, ADDRINT ret_val)
-{
-   ADDRINT esp = PIN_GetContextReg (ctxt, REG_STACK_PTR);
-   ADDRINT next_ip = emuRet (&esp, 0, sizeof (ADDRINT), false);
-
-   PIN_SetContextReg (ctxt, REG_GAX, ret_val);
-   PIN_SetContextReg (ctxt, REG_STACK_PTR, esp);
-   PIN_SetContextReg (ctxt, REG_INST_PTR, next_ip);
-
-   PIN_ExecuteAt (ctxt);
-}
-
-void setupCarbonSpawnThreadSpawnerStack (CONTEXT *ctx)
-{
-   // FIXME: 
-   // This will clearly need to change somewhat in the multi-process case
-   // We can go back to our original scheme of having the "main" thread 
-   // on processes other than 0 execute the thread spawner, in which case
-   // this will probably just work as is
-
-   ADDRINT esp = PIN_GetContextReg (ctx, REG_STACK_PTR);
-   ADDRINT ret_ip = * (ADDRINT*) esp;
-
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-
-   core->accessMemory(Core::NONE, Core::WRITE, (IntPtr) esp, (char*) &ret_ip, sizeof (ADDRINT));
-}
-
-void setupCarbonThreadSpawnerStack (CONTEXT *ctx)
-{
-   if (Sim()->getConfig()->getCurrentProcessNum() == 0)
-      return;
-
-   ADDRINT esp = PIN_GetContextReg (ctx, REG_STACK_PTR);
-   ADDRINT ret_ip = * (ADDRINT*) esp;
-   ADDRINT p = * (ADDRINT*) (esp + sizeof (ADDRINT));
-
-   Core *core = Sim()->getCoreManager()->getCurrentCore();
-   assert (core);
-
-   core->accessMemory (Core::NONE, Core::WRITE, (IntPtr) esp, (char*) &ret_ip, sizeof (ADDRINT));
-   core->accessMemory (Core::NONE, Core::WRITE, (IntPtr) (esp + sizeof (ADDRINT)), (char*) &p, sizeof (ADDRINT));
-}
-
-

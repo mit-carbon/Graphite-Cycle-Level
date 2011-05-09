@@ -14,18 +14,20 @@ using namespace std;
 #include "channel.h"
 #include "router.h"
 #include "time_normalizer.h"
+#include "packet_type.h"
 
 class NetworkNode
 {
 public:
-   NetworkNode(Router::Id router_id, \
-         UInt32 flit_width, \
-         RouterPerformanceModel* router_performance_model, \
-         RouterPowerModel* router_power_model, \
-         vector<LinkPerformanceModel*>& link_performance_model_list, \
-         vector<LinkPowerModel*>& link_power_model_list, \
-         vector<vector<Router::Id> >& input_channel_to_router_id_list__mapping, \
-         vector<vector<Router::Id> >& output_channel_to_router_id_list__mapping);
+   NetworkNode(Router::Id router_id,
+         UInt32 flit_width,
+         RouterPerformanceModel* router_performance_model,
+         RouterPowerModel* router_power_model,
+         vector<LinkPerformanceModel*>& link_performance_model_list,
+         vector<LinkPowerModel*>& link_power_model_list,
+         vector<vector<Router::Id> >& input_channel_to_router_id_list__mapping,
+         vector<vector<Router::Id> >& output_channel_to_router_id_list__mapping,
+         PacketType flow_control_packet_type);
    ~NetworkNode();
 
    Router::Id getRouterId() { return _router_id; }
@@ -73,6 +75,9 @@ private:
    vector<vector<Router::Id> > _output_channel_to_router_id_list__mapping;
    map<Router::Id, Channel::Endpoint> _router_id_to_input_endpoint_mapping;
    map<Router::Id, Channel::Endpoint> _router_id_to_output_endpoint_mapping;
+
+   // Flow Control Packet Type
+   PacketType _flow_control_packet_type;
 
    // Error Checking
    UInt64 _last_net_packet_time;

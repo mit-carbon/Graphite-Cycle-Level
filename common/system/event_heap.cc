@@ -10,7 +10,7 @@
 
 using std::make_pair;
 
-EventHeap::EventHeap(EventQueueManager* event_queue_manager, \
+EventHeap::EventHeap(EventQueueManager* event_queue_manager,
       MetaEventHeap* parent_event_heap, SInt32 event_heap_index_in_parent):
    EventQueue(event_queue_manager),
    _first_event_time(UINT64_MAX),
@@ -28,10 +28,13 @@ EventHeap::~EventHeap()
 }
 
 void
-EventHeap::push(Event* event)
+EventHeap::push(Event* event, bool is_locked)
 {
-   _lock.acquire();
-   LOG_PRINT("EventHeap(%i): push(%llu)", getEventQueueManager()->getId(), event->getTime());
+   LOG_PRINT("EventHeap(%i): push(Event[%p],Type[%u],Time[%llu]), is_locked(%s) enter", \
+         getEventQueueManager()->getId(), event, event->getType(), event->getTime(), is_locked ? "YES" : "NO");
+
+   if (!is_locked)
+      _lock.acquire();
 
    // Insert new packet into event queue
    // If new event = most recent event, update the sim_thread_time_heap also
@@ -42,7 +45,7 @@ EventHeap::push(Event* event)
       assert(next_event_time == event->getTime());
 
       // Update parent meta_event_heap
-      _parent_event_heap->updateTime(_event_heap_index_in_parent, next_event_time);
+      _parent_event_heap->updateTime(_event_heap_index_in_parent, next_event_time, is_locked);
      
       // Update _first_event_time 
       _first_event_time = next_event_time;
@@ -51,7 +54,11 @@ EventHeap::push(Event* event)
       getEventQueueManager()->signalEvent();
    }
 
-   _lock.release();
+   if (!is_locked)
+      _lock.release();
+   
+   LOG_PRINT("EventHeap(%i): push(Event[%p],Type[%u],Time[%llu]), is_locked(%s) exit", \
+         getEventQueueManager()->getId(), event, event->getType(), event->getTime(), is_locked ? "YES" : "NO");
 }
 
 void
@@ -59,8 +66,9 @@ EventHeap::processEvents()
 {
    _lock.acquire();
    
-   LOG_PRINT("EventHeap::processEvents() enter");
-   LOG_PRINT("First Event Time on Entry(%llu) - (%p)", _first_event_time, &_first_event_time);
+   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]) enter", \
+         getEventQueueManager()->getId(), _first_event_time);
+   
    while (Sim()->getEventManager()->isReady(_first_event_time))
    {
       // Process the event at the top of the heap
@@ -70,7 +78,6 @@ EventHeap::processEvents()
 
       _lock.release();
 
-      LOG_PRINT("Event(%p): Type(%i), Time(%llu) to be processed", event, event->getType(), event->getTime());
       // Network, Instruction, Memory Modeling 
       event->process();
       delete event;
@@ -86,8 +93,10 @@ EventHeap::processEvents()
       // Get next event in order of time
       Event* next_event = (Event*) ((_heap.min()).second);
       UInt64 next_event_time = (next_event) ? next_event->getTime() : UINT64_MAX;
-      LOG_PRINT("EventHeap(%i): After extractMin(), Next Event Time(%llu)", \
-            getEventQueueManager()->getId(), next_event_time);
+      Event::Type next_event_type = (next_event) ? next_event->getType() : Event::INVALID;
+
+      LOG_PRINT("EventHeap(%i): After extractMin(), Next Event (Type[%u],Time[%llu])", \
+            getEventQueueManager()->getId(), next_event_type, next_event_time);
 
       // Update Local Time - Global Time is always updated since top of heap changes
       _parent_event_heap->updateTime(_event_heap_index_in_parent, next_event_time);
@@ -99,8 +108,8 @@ EventHeap::processEvents()
       Sim()->getEventManager()->wakeUpWaiters();
    }
       
-   LOG_PRINT("First Event Time on Exit(%llu) - (%p)", _first_event_time, &_first_event_time);
-   LOG_PRINT("EventHeap::processEvents() exit");
+   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]) exit", \
+         getEventQueueManager()->getId(), _first_event_time);
    
    _lock.release(); 
 }

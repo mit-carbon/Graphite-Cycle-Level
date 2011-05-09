@@ -14,14 +14,18 @@ FiniteBufferNetworkModel::FiniteBufferNetworkModel(Network* net, SInt32 network_
    _sequence_num(0)
 {
    _core_id = getNetwork()->getCore()->getId();
-   // FIXME: Temporary Hack - Make this more general
-   _flow_control_packet_type = USER_2;
+   _flow_control_packet_type = getNetwork()->getPacketTypeFromNetworkId(network_id);
+
+   // Account for Sender Contention Delay
+   _sender_contention_model = new QueueModelSimple();
 
    initializePerformanceCounters();
 }
 
 FiniteBufferNetworkModel::~FiniteBufferNetworkModel()
-{}
+{
+   delete _sender_contention_model;
+}
 
 void
 FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list_to_send)
@@ -35,16 +39,25 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
    assert(net_packet->is_raw);
 
    core_id_t requester = getNetwork()->getRequester(*net_packet);
-   if ( (!getNetwork()->isModeled(*net_packet)) || (net_packet->sender == net_packet->receiver) )
+   assert(getNetwork()->isModeled(*net_packet));
+
+   if (net_packet->sender == net_packet->receiver)
       return;
 
    // Increment Sequence Number
    net_packet->sequence_num = _sequence_num ++;
  
-   assert(net_packet->sender == _core_id); 
+   assert(net_packet->sender == _core_id);
+
    // Split the packet into multiple flits 
    SInt32 packet_length = getNetwork()->getModeledLength(*net_packet);
    SInt32 num_flits = computeNumFlits(packet_length);
+   
+   // Account for the Sender Contention Delay
+   UInt64 contention_delay = _sender_contention_model->computeQueueDelay(net_packet->time, num_flits);
+   net_packet->time += contention_delay;
+   
+   // Divide Packet into Constituent Flits
    FlowControlScheme::dividePacket(_flow_control_scheme,
          net_packet, net_packet_list_to_send,
          num_flits, requester);
@@ -147,13 +160,9 @@ FiniteBufferNetworkModel::receiveRawPacket(NetPacket* raw_packet)
 {
    LOG_PRINT("receiveRawPacket(%p) enter", raw_packet);
    assert(raw_packet->is_raw);
-
-   if (!getNetwork()->isModeled(*raw_packet))
-   {
-      LOG_PRINT("receiveRawPacket(%p) exit - Unmodeled packet", raw_packet);
-      return true;
-   }
-   else if (raw_packet->sender == raw_packet->receiver)
+   assert(getNetwork()->isModeled(*raw_packet));
+   
+   if (raw_packet->sender == raw_packet->receiver)
    {
       LOG_PRINT("receiveRawPacket(%p) exit - Local Msg", raw_packet);
       // Update Packet Statistics

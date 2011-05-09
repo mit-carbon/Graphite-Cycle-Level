@@ -20,9 +20,15 @@ CAPI_return_t CAPI_Initialize(int rank);
 CAPI_return_t CAPI_rank(int *rank);
 CAPI_return_t CAPI_message_send_w(CAPI_endpoint_t send_endpoint, CAPI_endpoint_t receive_endpoint, char * buffer, int size);
 CAPI_return_t CAPI_message_receive_w(CAPI_endpoint_t send_endpoint, CAPI_endpoint_t receive_endpoint, char * buffer, int size);
-
 CAPI_return_t CAPI_message_send_w_ex(CAPI_endpoint_t send_endpoint, CAPI_endpoint_t receive_endpoint, char * buffer, int size, carbon_network_t net_type);
 CAPI_return_t CAPI_message_receive_w_ex(CAPI_endpoint_t send_endpoint, CAPI_endpoint_t receive_endpoint, char * buffer, int size, carbon_network_t net_type);
+
+CAPI_return_t __CAPI_Initialize(core_id_t core_id, int rank);
+CAPI_return_t __CAPI_rank(core_id_t core_id, int *rank);
+void __CAPI_message_send_w(core_id_t core_id, CAPI_endpoint_t send_endpoint, CAPI_endpoint_t receive_endpoint, char * buffer, int size);
+void __CAPI_message_receive_w(core_id_t core_id, CAPI_endpoint_t send_endpoint, CAPI_endpoint_t receive_endpoint, char * buffer, int size);
+void __CAPI_message_send_w_ex(core_id_t core_id, CAPI_endpoint_t send_endpoint, CAPI_endpoint_t receive_endpoint, char * buffer, int size, carbon_network_t net_type);
+void __CAPI_message_receive_w_ex(core_id_t core_id, CAPI_endpoint_t send_endpoint, CAPI_endpoint_t receive_endpoint, char * buffer, int size, carbon_network_t net_type);
 
 enum {
    CAPI_StatusOk,

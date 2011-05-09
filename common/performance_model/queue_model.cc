@@ -1,6 +1,7 @@
 #include "queue_model.h"
 #include "simulator.h"
 #include "config.h"
+#include "queue_model_simple.h"
 #include "queue_model_basic.h"
 #include "queue_model_history_list.h"
 #include "queue_model_history_tree.h"
@@ -9,6 +10,10 @@
 QueueModel*
 QueueModel::create(std::string model_type, UInt64 min_processing_time)
 {
+   if (model_type == "simple")
+   {
+      return new QueueModelSimple();
+   }
    if (model_type == "basic")
    {
       return new QueueModelBasic();

@@ -4,7 +4,6 @@ using namespace std;
 #include "network_types.h"
 #include "network_model_magic.h"
 #include "network_model_emesh_hop_counter.h"
-#include "network_model_analytical.h"
 #include "network_model_emesh_hop_by_hop_basic.h"
 #include "network_model_emesh_hop_by_hop_broadcast_tree.h"
 #include "finite_buffer_network_model_emesh_basic.h"
@@ -44,9 +43,6 @@ NetworkModel::createModel(Network *net, SInt32 network_id, UInt32 model_type)
    case NETWORK_EMESH_HOP_COUNTER:
       return new NetworkModelEMeshHopCounter(net, network_id);
 
-   case NETWORK_ANALYTICAL_MESH:
-      return new NetworkModelAnalytical(net, network_id);
-
    case NETWORK_EMESH_HOP_BY_HOP_BASIC:
       return new NetworkModelEMeshHopByHopBasic(net, network_id);
 
@@ -75,8 +71,6 @@ NetworkModel::parseNetworkType(string str)
       return NETWORK_MAGIC;
    else if (str == "emesh_hop_counter")
       return NETWORK_EMESH_HOP_COUNTER;
-   else if (str == "analytical")
-      return NETWORK_ANALYTICAL_MESH;
    else if (str == "emesh_hop_by_hop_basic")
       return NETWORK_EMESH_HOP_BY_HOP_BASIC;
    else if (str == "emesh_hop_by_hop_broadcast_tree")
@@ -101,7 +95,6 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
    {
       case NETWORK_MAGIC:
       case NETWORK_EMESH_HOP_COUNTER:
-      case NETWORK_ANALYTICAL_MESH:
          return make_pair(false,core_count);
 
       case NETWORK_EMESH_HOP_BY_HOP_BASIC:
@@ -129,7 +122,6 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
    {
       case NETWORK_MAGIC:
       case NETWORK_EMESH_HOP_COUNTER:
-      case NETWORK_ANALYTICAL_MESH:
          {
             SInt32 core_count = (SInt32) Config::getSingleton()->getTotalCores();
             SInt32 spacing_between_memory_controllers = core_count / num_memory_controllers;
@@ -157,31 +149,5 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
       default:
          LOG_PRINT_ERROR("Unrecognized network type(%u)", network_type);
          return make_pair(false, vector<core_id_t>());
-   }
-}
-
-pair<bool, vector<Config::CoreList> >
-NetworkModel::computeProcessToCoreMapping(UInt32 network_type)
-{
-   switch(network_type)
-   {
-      case NETWORK_MAGIC:
-      case NETWORK_ANALYTICAL_MESH:
-      case NETWORK_EMESH_HOP_COUNTER:
-      case FINITE_BUFFER_NETWORK_ATAC:
-         return make_pair(false, vector<vector<core_id_t> >());
-
-      case NETWORK_EMESH_HOP_BY_HOP_BASIC:
-      case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
-         return NetworkModelEMeshHopByHopGeneric::computeProcessToCoreMapping();
-
-      case FINITE_BUFFER_NETWORK_EMESH_BASIC:
-      case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
-         return FiniteBufferNetworkModelEMesh::computeProcessToCoreMapping();
-
-      default:
-         fprintf(stderr, "Unrecognized network type(%u)\n", network_type);
-         assert(false);
-         return make_pair(false, vector<vector<core_id_t> >());
    }
 }

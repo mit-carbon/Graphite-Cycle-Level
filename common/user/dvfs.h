@@ -6,8 +6,13 @@ extern "C"
 {
 #endif
 
-void CarbonGetCoreFrequency(volatile float* frequency);
-void CarbonSetCoreFrequency(volatile float* frequency);
+#include "fixed_types.h"
+
+void CarbonGetCoreFrequency(float* frequency);
+void CarbonSetCoreFrequency(float* frequency);
+
+void __CarbonGetCoreFrequency(core_id_t core_id, float* frequency);
+void __CarbonSetCoreFrequency(core_id_t core_id, float* frequency);
 
 #ifdef __cplusplus
 }

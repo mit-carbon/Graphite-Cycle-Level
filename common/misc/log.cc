@@ -23,8 +23,6 @@ Log::Log(Config &config)
    : _coreCount(config.getTotalCores())
    , _startTime(0)
 {
-   assert(Config::getSingleton()->getProcessCount() != 0);
-
    initFileDescriptors();
    getEnabledModules();
    getDisabledModules();
@@ -211,13 +209,12 @@ void Log::getFile(core_id_t core_id, bool sim_thread, FILE **file, Lock **lock)
    if (core_id == INVALID_CORE_ID)
    {
       // System file -- use process num if available
-      UInt32 procNum = Config::getSingleton()->getCurrentProcessNum();
+      UInt32 procNum = 0;
       
       if (procNum != (UInt32)-1)
       {
          if (_systemFile == NULL)
          {
-            assert(procNum < Config::getSingleton()->getProcessCount());
             char filename[256];
             sprintf(filename, "system_%u.log", procNum);
             _systemFile = fopen(formatFileName(filename).c_str(), "w");
@@ -318,11 +315,9 @@ void Log::log(ErrorState err, const char* source_file, SInt32 source_line, const
 
    // This is ugly, but it just prints the time stamp, process number, core number, source file/line
    if (core_id != INVALID_CORE_ID) // valid core id
-      p += sprintf(p, "%-10llu [%5d]  (%2i) [%2i]%s[%s:%4d]  ", (long long unsigned int) getTimestamp(), tid, Config::getSingleton()->getCurrentProcessNum(), core_id, (sim_thread ? "* " : "  "), source_file, source_line);
-   else if (Config::getSingleton()->getCurrentProcessNum() != (UInt32)-1) // valid proc id
-      p += sprintf(p, "%-10llu [%5d]  (%2i) [  ]  [%s:%4d]  ", (long long unsigned int) getTimestamp(), tid, Config::getSingleton()->getCurrentProcessNum(), source_file, source_line);
-   else // who knows
-      p += sprintf(p, "%-10llu [%5d]  (  ) [  ]  [%s:%4d]  ", (long long unsigned int) getTimestamp(), tid, source_file, source_line);
+      p += sprintf(p, "%-10llu [%5d]  [%2i]%s[%s:%4d]  ", (long long unsigned int) getTimestamp(), tid, core_id, (sim_thread ? "* " : "  "), source_file, source_line);
+   else
+      p += sprintf(p, "%-10llu [%5d]  [  ]  [%s:%4d]  ", (long long unsigned int) getTimestamp(), tid, source_file, source_line);
 
    switch (err)
    {

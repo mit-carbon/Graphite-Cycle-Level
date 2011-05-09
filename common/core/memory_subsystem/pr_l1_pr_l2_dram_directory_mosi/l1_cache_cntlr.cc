@@ -197,8 +197,8 @@ L1CacheCntlr::reprocessMemOpFromCore(
 void
 L1CacheCntlr::completeMemOpFromCore(UInt32 memory_access_id)
 {
-   UnstructuredBuffer event_args;
-   event_args << getMemoryManager()->getCore() << memory_access_id; 
+   UnstructuredBuffer* event_args = new UnstructuredBuffer();
+   (*event_args) << getMemoryManager()->getCore() << memory_access_id; 
    EventCompleteCacheAccess* event = new EventCompleteCacheAccess(getShmemPerfModel()->getCycleCount(),
                                                                   event_args);
    Event::processInOrder(event, getMemoryManager()->getCore()->getId(), EventQueue::ORDERED);

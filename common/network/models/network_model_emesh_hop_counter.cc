@@ -35,12 +35,20 @@ NetworkModelEMeshHopCounter::NetworkModelEMeshHopCounter(Network *net, SInt32 ne
    // Create Rounter & Link Models
    createRouterAndLinkModels();
 
+   // Create Sender and Receiver Contention Models
+   _sender_contention_model = new QueueModelSimple();
+   _receiver_contention_model = new QueueModelSimple();
+
    // Initialize Performance Counters
    initializePerformanceCounters();
 }
 
 NetworkModelEMeshHopCounter::~NetworkModelEMeshHopCounter()
 {
+   // Destroy Sender & Receiver Contention Models
+   delete _sender_contention_model;
+   delete _receiver_contention_model;
+
    // Destroy the Router & Link Models
    destroyRouterAndLinkModels();
 }
@@ -140,97 +148,148 @@ NetworkModelEMeshHopCounter::computeDistance(SInt32 x1, SInt32 y1, SInt32 x2, SI
 UInt32
 NetworkModelEMeshHopCounter::computeAction(const NetPacket& pkt)
 {
-   core_id_t core_id = getNetwork()->getCore()->getId();
-   LOG_ASSERT_ERROR((pkt.receiver == NetPacket::BROADCAST) || (pkt.receiver == core_id), \
-         "pkt.receiver(%i), core_id(%i)", pkt.receiver, core_id);
-
-   return RoutingAction::RECEIVE;
+   if (pkt.specific == RECEIVER_CORE)
+      return RoutingAction::RECEIVE;
+   else if ((pkt.specific == SENDER_ROUTER) || (pkt.specific == RECEIVER_ROUTER))
+      return RoutingAction::FORWARD;
+   else
+   {
+      LOG_PRINT_ERROR("pkt.specific(%u)", pkt.specific);
+      return RoutingAction::DROP;
+   }
 }
 
 void
 NetworkModelEMeshHopCounter::routePacket(const NetPacket &pkt,
                                          std::vector<Hop> &next_hops)
 {
-   UInt32 pkt_length = getNetwork()->getModeledLength(pkt);
+   LOG_ASSERT_ERROR(_enabled, "Enabled(FALSE)");
+   
+   // Acquire Lock
+   ScopedLock sl(_lock);
 
+   UInt32 pkt_length = getNetwork()->getModeledLength(pkt);
    UInt64 serialization_latency = computeProcessingTime(pkt_length);
 
-   SInt32 sx, sy, dx, dy;
-
-   computePosition(pkt.sender, sx, sy);
-
-   if (pkt.receiver == NetPacket::BROADCAST)
+   if (pkt.specific == SENDER_CORE)
    {
-      UInt32 total_cores = Config::getSingleton()->getTotalCores();
-   
-      UInt64 curr_time = pkt.time;
-      // There's no broadcast tree here, but I guess that won't be a
-      // bottleneck at all since there's no contention
-      for (SInt32 i = 0; i < (SInt32) total_cores; i++)
+      assert(pkt.sender == getNetwork()->getCore()->getId());
+
+      Hop h;
+      h.final_dest = pkt.receiver;
+      h.next_dest = getNetwork()->getCore()->getId();
+      h.time = pkt.time;
+      h.specific = SENDER_ROUTER;
+
+      next_hops.push_back(h);
+
+   } // (pkt.specific == SENDER_CORE)
+
+   else if (pkt.specific == SENDER_ROUTER)
+   {
+      assert(pkt.sender == getNetwork()->getCore()->getId());
+
+      SInt32 sx, sy;
+      computePosition(pkt.sender, sx, sy);
+
+      if (pkt.receiver == NetPacket::BROADCAST)
       {
-         computePosition(i, dx, dy);
+         // Contention Delay at the sender - Assume some sort of broadcast delay here
+         UInt64 sender_contention_delay = _sender_contention_model->computeQueueDelay(pkt.time, serialization_latency);
+         
+         for (SInt32 i = 0; i < (SInt32) Config::getSingleton()->getTotalCores(); i++)
+         {
+            SInt32 dx, dy;
+            computePosition(i, dx, dy);
+
+            UInt32 num_hops = computeDistance(sx, sy, dx, dy);
+            UInt64 latency = (num_hops * _hop_latency);
+            UInt32 next_module = RECEIVER_CORE;
+
+            if (i != pkt.sender)
+            {
+               // Update the Dynamic Energy - Need to update the dynamic energy for all routers to the destination
+               // We dont keep track of contention here. So, assume contention = 0
+               updateDynamicEnergy(pkt, _num_router_ports/2, num_hops);
+    
+               latency += sender_contention_delay;
+               next_module = RECEIVER_ROUTER;
+            }
+
+            Hop h;
+            h.final_dest = NetPacket::BROADCAST;
+            h.next_dest = i;
+            h.time = pkt.time + latency;
+            h.specific = next_module;
+
+            next_hops.push_back(h);
+         }
+      }
+      else
+      {
+         SInt32 dx, dy;      
+         computePosition(pkt.receiver, dx, dy);
 
          UInt32 num_hops = computeDistance(sx, sy, dx, dy);
          UInt64 latency = num_hops * _hop_latency;
+         UInt32 next_module = RECEIVER_CORE;
 
-         if (i != pkt.sender)
+         if (pkt.receiver != pkt.sender)
          {
             // Update the Dynamic Energy - Need to update the dynamic energy for all routers to the destination
             // We dont keep track of contention here. So, assume contention = 0
             updateDynamicEnergy(pkt, _num_router_ports/2, num_hops);
- 
-            latency += serialization_latency;
+            
+            // Contention Delay at the sender
+            UInt64 sender_contention_delay = _sender_contention_model->computeQueueDelay(pkt.time, serialization_latency);
+
+            latency += sender_contention_delay;
+            next_module = RECEIVER_ROUTER;
          }
 
          Hop h;
-         h.final_dest = NetPacket::BROADCAST;
-         h.next_dest = i;
-         h.time = curr_time + latency;
-
-         // Update curr_time
-         curr_time += serialization_latency;
+         h.final_dest = pkt.receiver;
+         h.next_dest = pkt.receiver;
+         h.time = pkt.time + latency;
+         h.specific = next_module;
 
          next_hops.push_back(h);
       }
-   }
-   else
+   } // (pkt.specific == SENDER_ROUTER)
+
+   else if (pkt.specific == RECEIVER_ROUTER)
    {
-      computePosition(pkt.receiver, dx, dy);
-
-      UInt32 num_hops = computeDistance(sx, sy, dx, dy);
-      UInt64 latency = num_hops * _hop_latency;
-
-      if (pkt.receiver != pkt.sender)
-      {
-         // Update the Dynamic Energy - Need to update the dynamic energy for all routers to the destination
-         // We dont keep track of contention here. So, assume contention = 0
-         updateDynamicEnergy(pkt, _num_router_ports/2, num_hops);
-         
-         latency += serialization_latency;
-      }
+      assert(pkt.sender != getNetwork()->getCore()->getId());
+      
+      // Receiver Contention Models
+      UInt64 receiver_contention_delay = _receiver_contention_model->computeQueueDelay(pkt.time, serialization_latency);
 
       Hop h;
       h.final_dest = pkt.receiver;
-      h.next_dest = pkt.receiver;
-      h.time = pkt.time + latency;
+      h.next_dest = getNetwork()->getCore()->getId();
+      // Add receiver_contention_delay and serialization_latency
+      h.time = pkt.time + receiver_contention_delay + serialization_latency;
+      h.specific = RECEIVER_CORE;
 
       next_hops.push_back(h);
+   } // (pkt.specific == RECEIVER_ROUTER)
+
+   else
+   {
+      LOG_PRINT_ERROR("Cannot Reach Here, pkt.specific(%u)", pkt.specific);
    }
 }
 
 void
 NetworkModelEMeshHopCounter::processReceivedPacket(NetPacket &pkt)
 {
+   assert(_enabled);
+   assert(pkt.specific == RECEIVER_CORE);
+
+   // Acquire Lock
    ScopedLock sl(_lock);
 
-   core_id_t requester = getNetwork()->getRequester(pkt);
-   if ((!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()))
-      return;
-
    UInt32 pkt_length = getNetwork()->getModeledLength(pkt);
-
-   // LOG_ASSERT_ERROR(pkt.start_time > 0, "start_time(%llu)", pkt.start_time);
-
    UInt64 latency = pkt.time - pkt.start_time;
 
    _num_packets ++;
@@ -251,20 +310,6 @@ NetworkModelEMeshHopCounter::computeProcessingTime(UInt32 pkt_length)
 }
 
 void
-NetworkModelEMeshHopCounter::reset()
-{
-   // Performance Counters
-   initializePerformanceCounters();
-   
-   // Activity Counters
-   initializeActivityCounters();
-   
-   // Router & Link Models
-   _electrical_router_power_model->resetCounters();
-   _electrical_link_power_model->resetCounters();
-}
-
-void
 NetworkModelEMeshHopCounter::outputSummary(std::ostream &out)
 {
    out << "    num packets received: " << _num_packets << std::endl;
@@ -281,10 +326,6 @@ void
 NetworkModelEMeshHopCounter::updateDynamicEnergy(const NetPacket& pkt,
       UInt32 contention, UInt32 num_hops)
 {
-   core_id_t requester = getNetwork()->getRequester(pkt);
-   if ((!_enabled) || (requester >= (core_id_t) Config::getSingleton()->getApplicationCores()))
-      return;
-
    // TODO: Make these models detailed later - Compute exact number of bit flips
    UInt32 pkt_length = getNetwork()->getModeledLength(pkt);
    // For now, assume that half of the bits in the packet flip
@@ -331,9 +372,9 @@ NetworkModelEMeshHopCounter::outputPowerSummary(ostream& out)
             _electrical_link_power_model->getStaticPower() * _NUM_OUTPUT_DIRECTIONS);
 
       // We need to get the power of the router + all the outgoing links (a total of 4 outputs)
-      volatile double static_power = _electrical_router_power_model->getTotalStaticPower() + \
+      volatile double static_power = _electrical_router_power_model->getTotalStaticPower() +
                                      (_electrical_link_power_model->getStaticPower() * _NUM_OUTPUT_DIRECTIONS);
-      volatile double dynamic_energy = _electrical_router_power_model->getTotalDynamicEnergy() + \
+      volatile double dynamic_energy = _electrical_router_power_model->getTotalDynamicEnergy() +
                                        _electrical_link_power_model->getDynamicEnergy();
 
       out << "    Static Power: " << static_power << endl;

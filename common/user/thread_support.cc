@@ -1,79 +1,76 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
-#include <sched.h>
 #include <pthread.h>
-#include <map>
-using std::multimap;
 
 #include "simulator.h"
 #include "thread_manager.h"
 #include "core_manager.h"
 #include "core.h"
 #include "config_file.hpp"
+#include "routine_manager.h"
 #include "carbon_user.h"
 #include "thread_support_private.h"
 
-// FIXME: Pthread wrappers are untested.
-int CarbonPthreadCreate(pthread_t *tid, int *attr, thread_func_t func, void *arg)
+core_id_t CarbonSpawnThread(thread_func_t func, void *arg)
 {
-   LOG_ASSERT_WARNING(attr == NULL, "Attributes ignored in pthread_create.");
-   LOG_ASSERT_ERROR(tid != NULL, "Null pointer passed to pthread_create.");
+   LOG_PRINT("CarbonSpawnThread(func[%p],arg[%p]) enter", func, arg);
+   // Emulate CARBON_SPAWN_THREAD Routine
+   UnstructuredBuffer* routine_info = new UnstructuredBuffer();
+   (*routine_info) << Routine::CARBON_SPAWN_THREAD << func << arg;
+   core_id_t spawned_core_id = (core_id_t) emulateRoutine(routine_info);
 
-   *tid = CarbonSpawnThread(func, arg);
-   return *tid >= 0 ? 0 : 1;
-}
-
-int CarbonPthreadJoin(pthread_t tid, void **pparg)
-{
-   LOG_ASSERT_WARNING(pparg == NULL, "Did not expect pparg non-NULL. It is ignored.");
-   CarbonJoinThread(tid);
-   return 0;
-}
-
-// Global Map
-multimap<core_id_t, pthread_t*> _tid_to_thread_ptr_map;
-
-carbon_thread_t CarbonSpawnThread(thread_func_t func, void *arg)
-{
-   // FIXME: Put a lock here since multiple threads can call CarbonSpawnThread simultaneously  
-   LOG_PRINT("Sim()->getThreadManager()->spawnThread(%p, %p) start", func, arg);
-   core_id_t tid = Sim()->getThreadManager()->spawnThread(func, arg);
-   LOG_PRINT("Sim()->getThreadManager()->spawnThread(%p, %p) end", func, arg);
-   
-   LOG_PRINT("CarbonEmulatePthreadCreate() start");
+   // pthread_create
    pthread_t* thread_ptr = new pthread_t;
-   bool spawned = CarbonEmulatePthreadCreate(thread_ptr);
-   assert(spawned);
-   LOG_PRINT("CarbonEmulatePthreadCreate() end");
- 
-   _tid_to_thread_ptr_map.insert(make_pair<core_id_t, pthread_t*>(tid, thread_ptr));
-   return tid;
+   CarbonPthreadCreate(thread_ptr);
+
+   // Insert <core_id, thread_t*> mapping 
+   Sim()->getThreadManager()->insertCoreIDToThreadMapping(spawned_core_id, thread_ptr);
+   LOG_PRINT("Inserted Mapping(CoreID[%i], ThreadPtr[%p])", spawned_core_id, thread_ptr);
+   
+   LOG_PRINT("CarbonSpawnThread(func[%p],arg[%p]) exit", func, arg);
+   return spawned_core_id;
 }
 
-void CarbonJoinThread(carbon_thread_t tid)
+void CarbonJoinThread(core_id_t join_core_id)
 {
-   // FIXME: Put a lock here since multiple threads can call CarbonJoinThread simultaneously  
-   multimap<core_id_t,pthread_t*>::iterator it = _tid_to_thread_ptr_map.find(tid);
-   LOG_ASSERT_ERROR(it != _tid_to_thread_ptr_map.end(), "Cant find thread_ptr for tid(%i)", tid);
-   pthread_t* thread_ptr = it->second;
-   _tid_to_thread_ptr_map.erase(it);
-   
-   LOG_PRINT("Sim()->getThreadManager()->joinThread(%i) start", tid);
-   Sim()->getThreadManager()->joinThread(tid);
-   LOG_PRINT("Sim()->getThreadManager()->joinThread(%i) end", tid);
-   
-   LOG_PRINT("pthread_join start");
+   LOG_PRINT("CarbonJoinThread(CoreID[%i]) enter", join_core_id);
+
+   // Look up thread_t* from core_id
+   pthread_t* thread_ptr = Sim()->getThreadManager()->getThreadFromCoreID(join_core_id);
+   assert(thread_ptr);
+   // Erase the Core Id to pthread_t* mapping
+   LOG_PRINT("Erasing Mapping(CoreID(%i), ThreadPtr[%p])", join_core_id, thread_ptr);
+   Sim()->getThreadManager()->eraseCoreIDToThreadMapping(join_core_id, thread_ptr);
+   LOG_PRINT("Erased Mapping(CoreID(%i), ThreadPtr[%p])", join_core_id, thread_ptr);
+
+   // Emulate CARBON_JOIN_THREAD Routine
+   UnstructuredBuffer* routine_info = new UnstructuredBuffer();
+   (*routine_info) << Routine::CARBON_JOIN_THREAD << join_core_id;
+   emulateRoutine(routine_info); 
+  
+   // pthread_join 
    int ret = pthread_join(*thread_ptr, NULL);
-   delete thread_ptr;
    assert(ret == 0);
-   LOG_PRINT("pthread_join end");
+   delete thread_ptr;
+   
+   LOG_PRINT("CarbonJoinThread(CoreID[%i]) exit", join_core_id);
+}
+
+void __CarbonSpawnThread(UInt64 time, core_id_t req_core_id, thread_func_t func, void* arg)
+{
+   Sim()->getThreadManager()->spawnThread(time, req_core_id, func, arg);
+}
+
+void __CarbonJoinThread(UInt64 time, core_id_t req_core_id, core_id_t join_core_id)
+{
+   Sim()->getThreadManager()->joinThread(time, req_core_id, join_core_id);
 }
 
 // Support functions provided by the simulator
-void CarbonThreadStart(ThreadSpawnRequest *req)
+void CarbonThreadStart(core_id_t core_id)
 {
-   Sim()->getThreadManager()->onThreadStart(req);
+   Sim()->getThreadManager()->onThreadStart(core_id);
 }
 
 void CarbonThreadExit()
@@ -81,88 +78,37 @@ void CarbonThreadExit()
    Sim()->getThreadManager()->onThreadExit();
 }
 
-void CarbonGetThreadToSpawn(ThreadSpawnRequest *req)
+ThreadSpawnRequest CarbonDequeueThreadSpawnReq()
 {
-   Sim()->getThreadManager()->getThreadToSpawn(req);
+   return Sim()->getThreadManager()->dequeueThreadSpawnReq();
 }
 
-void CarbonDequeueThreadSpawnReq (ThreadSpawnRequest *req)
+void* CarbonManagedThread(void*)
 {
-   Sim()->getThreadManager()->dequeueThreadSpawnReq (req);
-}
+   LOG_PRINT("In Spawned Thread");
 
+   ThreadSpawnRequest req = CarbonDequeueThreadSpawnReq();
 
-void *CarbonSpawnManagedThread(void *)
-{
-   ThreadSpawnRequest thread_req;
+   CarbonThreadStart(req.core_id);
 
-   CarbonDequeueThreadSpawnReq (&thread_req);
-
-   CarbonThreadStart(&thread_req);
-
-   thread_req.func(thread_req.arg);
+   req.func(req.arg);
 
    CarbonThreadExit();
    
    return NULL;
 }
 
-// This function spawns the thread spawner
-int CarbonSpawnThreadSpawner()
+void CarbonPthreadCreate(pthread_t* thread)
 {
-   setvbuf(stdout, NULL, _IONBF, 0 );
+   // Set other attributes   
+   // pthread_attr_t attr;
+   // pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+   // CarbonPthreadAttrInitOtherAttr(&attr);
 
-   pthread_t thread;
-   pthread_attr_t attr;
-   pthread_attr_init(&attr);
-   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-   CarbonPthreadAttrInitOtherAttr(&attr);
-       
-   pthread_create(&thread, &attr, CarbonThreadSpawner, NULL);
-
-   return 0;
-}
-
-// This function will spawn threads provided by the sim
-void *CarbonThreadSpawner(void *)
-{
-   ThreadSpawnRequest req = {-1, NULL, NULL, -1, Sim()->getConfig()->getCurrentThreadSpawnerCoreNum() };
-
-   CarbonThreadStart (&req);
-
-   while(1)
-   {
-      pthread_t thread;
-      bool spawned = CarbonEmulatePthreadCreate(&thread);
-      if (!spawned)
-         break;
-   }
-
-   CarbonThreadExit();
-
-   return NULL;
-}
-
-bool CarbonEmulatePthreadCreate(pthread_t* thread)
-{
-   ThreadSpawnRequest req;
-      
-   // Wait for a spawn request
-   CarbonGetThreadToSpawn(&req);
-
-   if(req.func)
-   {
-      pthread_attr_t attr;
-      pthread_attr_init(&attr);
-      pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-     
-      CarbonPthreadAttrInitOtherAttr(&attr);
-
-      pthread_create(thread, &attr, CarbonSpawnManagedThread, NULL);
-      return true;
-   }
-   return false;
+   LOG_PRINT("Starting pthread_create()");
+   int ret = pthread_create(thread, NULL, CarbonManagedThread, NULL);
+   assert(ret == 0);
+   LOG_PRINT("Finished pthread_create()");
 }
 
 // This function initialized the pthread attributes

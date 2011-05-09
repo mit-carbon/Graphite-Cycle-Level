@@ -1,9 +1,6 @@
-#ifndef CORE_MANAGER_H
-#define CORE_MANAGER_H
+#pragma once
 
 #include <iostream>
-#include <fstream>
-#include <map>
 #include <vector>
 
 #include "fixed_types.h"
@@ -11,7 +8,6 @@
 #include "lock.h"
 
 class Core;
-class Lock;
 
 class CoreManager
 {
@@ -19,7 +15,6 @@ class CoreManager
       CoreManager();
       ~CoreManager();
 
-      void initializeCommId(SInt32 comm_id);
       void initializeThread();
       void initializeThread(core_id_t core_id);
       void terminateThread();
@@ -28,23 +23,17 @@ class CoreManager
       core_id_t getCurrentCoreID(); // id of currently active core (or INVALID_CORE_ID)
 
       Core *getCurrentCore();
-      UInt32 getCurrentCoreIndex();
       Core *getCoreFromID(core_id_t id);
-      Core *getCoreFromIndex(UInt32 index);
 
       void outputSummary(std::ostream &os);
-
-      UInt32 getCoreIndexFromID(core_id_t core_id);
 
       bool amiAppThread();
       bool amiSimThread();
    private:
 
-      void doInitializeThread(UInt32 core_index);
+      void doInitializeThread(core_id_t core_id);
 
-      UInt32 *tid_map;
       TLS *m_core_tls;
-      TLS *m_core_index_tls;
       TLS *m_thread_type_tls;
 
       enum ThreadType {
@@ -61,5 +50,3 @@ class CoreManager
 
       std::vector<Core*> m_cores;
 };
-
-#endif

@@ -4,7 +4,6 @@
 #include "log.h"
 #include "config.h"
 #include "simulator.h"
-#include "transport.h"
 #include "event.h"
 
 SimThreadManager::SimThreadManager()
@@ -25,22 +24,24 @@ void
 SimThreadManager::initializeSimThreadIDToCoreIDMappings()
 {
    // Compute the mapping from core id to sim thread id
-   SInt32 num_sim_threads = Config::getSingleton()->getLocalSimThreadCount();
+   SInt32 num_cores = Config::getSingleton()->getTotalCores();
+   SInt32 num_sim_threads = Config::getSingleton()->getTotalSimThreads();
    // Compute a stupid mapping -- Refine Later
    SInt32 sim_thread_id = 0;
-   Config::CoreList core_id_list = Config::getSingleton()->getCoreListForCurrentProcess();
    
-   SInt32 num_cores_per_sim_thread = core_id_list.size() / num_sim_threads;
-   _sim_thread_id__to__core_id_list__mapping.resize(num_sim_threads);
+   SInt32 num_cores_per_sim_thread = num_cores / num_sim_threads;
 
-   SInt32 core_index = 0;
-   for (Config::CLCI i = core_id_list.begin(); i != core_id_list.end(); i++)
+   _sim_thread_id__to__core_id_list__mapping.resize(num_sim_threads);
+   _core_id__to__sim_thread_id__mapping.resize(num_cores);
+
+   for (core_id_t core_id = 0; core_id < num_cores; )
    {
-      _core_id__to__sim_thread_id__mapping[*i] = sim_thread_id;
-      _sim_thread_id__to__core_id_list__mapping[sim_thread_id].push_back(*i);
+      _core_id__to__sim_thread_id__mapping[core_id] = sim_thread_id;
+      _sim_thread_id__to__core_id_list__mapping[sim_thread_id].push_back(core_id);
       
-      core_index ++;
-      if ((core_index % num_cores_per_sim_thread) == 0)
+      core_id ++;      
+      
+      if ((core_id % num_cores_per_sim_thread) == 0)
          sim_thread_id = ((sim_thread_id + 1) % num_sim_threads);
       assert(sim_thread_id < num_sim_threads);
    }
@@ -61,10 +62,9 @@ SimThreadManager::getSimThreadIDFromCoreID(core_id_t core_id)
 void
 SimThreadManager::spawnSimThreads()
 {
-   UInt32 num_sim_threads = Config::getSingleton()->getLocalSimThreadCount();
+   UInt32 num_sim_threads = Config::getSingleton()->getTotalSimThreads();
 
-   LOG_PRINT("Starting %d threads on proc: %d.", 
-         num_sim_threads, Config::getSingleton()->getCurrentProcessNum());
+   LOG_PRINT("Starting %d threads", num_sim_threads);
 
    m_sim_threads = new SimThread[num_sim_threads];
 
@@ -85,7 +85,7 @@ SimThreadManager::quitSimThreads()
 {
    LOG_PRINT("Sending quit messages.");
 
-   UInt32 num_sim_threads = Config::getSingleton()->getLocalSimThreadCount();
+   UInt32 num_sim_threads = Config::getSingleton()->getTotalSimThreads();
 
    // This is something of a hard-wired emulation of Network::netSend
    // ... not the greatest thing to do, but whatever.
@@ -95,8 +95,8 @@ SimThreadManager::quitSimThreads()
       core_id_t core_id = _sim_thread_id__to__core_id_list__mapping[i].front();
       pkt->receiver = core_id;
 
-      UnstructuredBuffer event_args;
-      event_args << pkt->receiver << pkt;
+      UnstructuredBuffer* event_args = new UnstructuredBuffer();
+      (*event_args) << pkt->receiver << pkt;
       EventNetwork* event = new EventNetwork(0 /* time */, event_args);
       Event::processInOrder(event, pkt->receiver, EventQueue::UNORDERED);
    }
@@ -107,8 +107,6 @@ SimThreadManager::quitSimThreads()
       sched_yield();
 
    delete [] m_sim_threads;
-
-   Transport::getSingleton()->barrier();
 
    LOG_PRINT("All threads have exited.");
 }

@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
+#include <cmath>
 using namespace std;
 
 #include <boost/lexical_cast.hpp>

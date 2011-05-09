@@ -1,5 +1,6 @@
 #include "semaphore.h"
 
+#include <stdio.h>
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <linux/futex.h>

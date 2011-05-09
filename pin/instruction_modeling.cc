@@ -1,135 +1,90 @@
 #include "instruction_modeling.h"
-
 #include "simulator.h"
-#include "performance_model.h"
-#include "opcodes.h"
 #include "core_manager.h"
 #include "core.h"
+#include "performance_model.h"
+#include "opcodes.h"
 
-void handleBasicBlock(BasicBlock *sim_basic_block)
+void handleInstruction(Instruction *instruction, bool atomic_memory_update, UInt32 num_memory_args, ...)
 {
-   PerformanceModel *prfmdl = Sim()->getCoreManager()->getCurrentCore()->getPerformanceModel();
+   LOG_PRINT("handleInstruction(%p,%s,%u)", instruction, atomic_memory_update ? "TRUE" : "FALSE", num_memory_args);
 
-   prfmdl->queueBasicBlock(sim_basic_block);
+   Core* core = Sim()->getCoreManager()->getCurrentCore();
+   assert(core);
 
-   //FIXME: put this in a thread
-   prfmdl->iterate();
+   if (core->getPerformanceModel()->isEnabled())
+   {
+      UnstructuredBuffer* instruction_info = new UnstructuredBuffer();
+      
+      (*instruction_info) << instruction;
+      (*instruction_info) << atomic_memory_update;
+
+      va_list memory_args;
+      va_start(memory_args, num_memory_args);
+      PerformanceModel::MemoryAccessList* memory_access_list = new PerformanceModel::MemoryAccessList();
+      for (UInt32 i = 0; i < num_memory_args; i++)
+      {
+         IntPtr address = va_arg(memory_args, IntPtr);
+         UInt32 size = va_arg(memory_args, UInt32);
+        
+         memory_access_list->push_back(make_pair(address,size));
+         LOG_PRINT("Address(0x%llx), Size(%u)", address, size);
+      }
+      va_end(memory_args);
+
+      (*instruction_info) << memory_access_list;
+
+      // Send request to sim thread
+      AppRequest app_request(AppRequest::HANDLE_INSTRUCTION, instruction_info);
+      Sim()->getThreadInterface(core->getId())->sendAppRequest(app_request);
+   }
 }
 
-void handleBranch(BOOL taken, ADDRINT target)
-{
-   assert(Sim() && Sim()->getCoreManager() && Sim()->getCoreManager()->getCurrentCore());
-   PerformanceModel *prfmdl = Sim()->getCoreManager()->getCurrentCore()->getPerformanceModel();
-
-   DynamicInstructionInfo info = DynamicInstructionInfo::createBranchInfo(taken, target);
-   prfmdl->pushDynamicInstructionInfo(info);
-}
-
-void fillOperandListMemOps(OperandList *list, INS ins)
+void fillOperandListMemOps(OperandList* list, INS ins)
 {
    // NOTE: This code is written to reflect rewriteStackOp and
    // rewriteMemOp etc from redirect_memory.cc and it MUST BE
    // MAINTAINED to reflect that code.
 
-   if (Config::getSingleton()->getSimulationMode() == Config::FULL)
+   // mem ops
+   if (INS_IsMemoryRead(ins) || INS_IsMemoryWrite(ins))
    {
-      // string ops
-      if ((INS_RepPrefix(ins) || INS_RepnePrefix(ins)))
-      {
-         if (INS_Opcode(ins) == XED_ICLASS_SCASB ||
-             INS_Opcode(ins) == XED_ICLASS_CMPSB)
-         {
-            // handled by StringInstruction
-            return;
-         }
-      }
-
-      // stack ops
-      if (INS_Opcode (ins) == XED_ICLASS_PUSH)
-      {
-         if (INS_OperandIsImmediate (ins, 0))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-         
-         else if (INS_OperandIsReg (ins, 0))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-
-         else if (INS_OperandIsMemory (ins, 0))
-         {
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-         }
-      }
-      
-      else if (INS_Opcode (ins) == XED_ICLASS_POP)
-      {
-         if (INS_OperandIsReg (ins, 0))
-         {
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-         }
-
-         else if (INS_OperandIsMemory (ins, 0))
-         {
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-         }
-      }
-     
-      else if (INS_IsCall (ins))
-      {
-         if (INS_OperandIsMemory (ins, 0))
-         {
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-         }
-
-         else
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-      }
-
-      else if (INS_IsRet (ins))
+      if (INS_IsMemoryRead(ins))
          list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
 
-      else if (INS_Opcode (ins) == XED_ICLASS_LEAVE)
+      if (INS_HasMemoryRead2(ins))
          list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
 
-      else if ((INS_Opcode (ins) == XED_ICLASS_PUSHF) || (INS_Opcode (ins) == XED_ICLASS_PUSHFD))
+      if (INS_IsMemoryWrite(ins))
          list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-
-      else if ((INS_Opcode (ins) == XED_ICLASS_POPF) || (INS_Opcode (ins) == XED_ICLASS_POPFD))
-         list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-   
-      // mem ops
-      else if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
-      {
-         if (INS_IsMemoryRead (ins))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-
-         if (INS_HasMemoryRead2 (ins))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-
-         if (INS_IsMemoryWrite (ins))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-      }
-   }
-   
-   else // mode = LITE
-   {
-      // mem ops
-      if (INS_IsMemoryRead (ins) || INS_IsMemoryWrite (ins))
-      {
-         if (INS_IsMemoryRead (ins))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-
-         if (INS_HasMemoryRead2 (ins))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::READ));
-
-         if (INS_IsMemoryWrite (ins))
-            list->push_back(Operand(Operand::MEMORY, 0, Operand::WRITE));
-      }
    }
 }
 
-VOID fillOperandList(OperandList *list, INS ins)
+UInt32 fillMemInfo(IARGLIST& iarg_memory_info, INS ins)
+{
+   UInt32 num_memory_args = 0;
+   if (INS_IsMemoryRead(ins) || INS_IsMemoryWrite(ins))
+   {
+      if (INS_IsMemoryRead(ins))
+      {
+         num_memory_args ++;
+         IARGLIST_AddArguments(iarg_memory_info, IARG_MEMORYREAD_EA, IARG_MEMORYREAD_SIZE, IARG_END);
+      }
+      if (INS_HasMemoryRead2(ins))
+      {
+         num_memory_args ++;
+         IARGLIST_AddArguments(iarg_memory_info, IARG_MEMORYREAD2_EA, IARG_MEMORYREAD_SIZE, IARG_END);
+      }
+      if (INS_IsMemoryWrite(ins))
+      {
+         num_memory_args ++;
+         IARGLIST_AddArguments(iarg_memory_info, IARG_MEMORYWRITE_EA, IARG_MEMORYWRITE_SIZE, IARG_END);
+      }
+   }
+   return num_memory_args;
+}
+
+void fillOperandList(OperandList* list, INS ins)
 {
    // memory
    fillOperandListMemOps(list, ins);
@@ -160,63 +115,46 @@ VOID fillOperandList(OperandList *list, INS ins)
    }
 }
 
-VOID addInstructionModeling(INS ins)
+void addInstructionModeling(INS ins)
 {
-   BasicBlock *basic_block = new BasicBlock();
-
    OperandList list;
    fillOperandList(&list, ins);
 
-   // branches
-   if (INS_IsBranch(ins) && INS_HasFallThrough(ins))
-   {
-      basic_block->push_back(new BranchInstruction(list));
-
-      INS_InsertCall(
-         ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)handleBranch,
-         IARG_BOOL, TRUE,
-         IARG_BRANCH_TARGET_ADDR,
-         IARG_END);
-
-      INS_InsertCall(
-         ins, IPOINT_AFTER, (AFUNPTR)handleBranch,
-         IARG_BOOL, FALSE,
-         IARG_BRANCH_TARGET_ADDR,
-         IARG_END);
-   }
+   Instruction* instruction;
 
    // Now handle instructions which have a static cost
-   else
+   switch(INS_Opcode(ins))
    {
-      switch(INS_Opcode(ins))
-      {
-      case OPCODE_DIV:
-         basic_block->push_back(new ArithInstruction(INST_DIV, list));
-         break;
-      case OPCODE_MUL:
-         basic_block->push_back(new ArithInstruction(INST_MUL, list));
-         break;
-      case OPCODE_FDIV:
-         basic_block->push_back(new ArithInstruction(INST_FDIV, list));
-         break;
-      case OPCODE_FMUL:
-         basic_block->push_back(new ArithInstruction(INST_FMUL, list));
-         break;
-
-      case OPCODE_SCASB:
-      case OPCODE_CMPSB:
-         if (Config::getSingleton()->getSimulationMode() == Config::FULL)
-         {
-            basic_block->push_back(new StringInstruction(list));
-            break;
-         }
-      
-      default:
-         basic_block->push_back(new GenericInstruction(list));
-      }
+   case OPCODE_DIV:
+      instruction = new ArithInstruction(INST_DIV, list);
+      break;
+   case OPCODE_MUL:
+      instruction = new ArithInstruction(INST_MUL, list);
+      break;
+   case OPCODE_FDIV:
+      instruction = new ArithInstruction(INST_FDIV, list);
+      break;
+   case OPCODE_FMUL:
+      instruction = new ArithInstruction(INST_FMUL, list);
+      break;
+   default:
+      instruction = new GenericInstruction(list);
+      break;
    }
 
-   basic_block->front()->setAddress(INS_Address(ins));
+   // Set Instruction Address
+   instruction->setAddress(INS_Address(ins));
 
-   INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(handleBasicBlock), IARG_PTR, basic_block, IARG_END);
+   // Add Memory Read/Write Addresses/Size
+   IARGLIST iarg_memory_info = IARGLIST_Alloc();
+   UInt32 num_memory_args = fillMemInfo(iarg_memory_info, ins);
+   
+   INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(handleInstruction),
+         IARG_PTR, instruction,
+         IARG_BOOL, INS_IsAtomicUpdate(ins),
+         IARG_UINT32, num_memory_args,
+         IARG_IARGLIST, iarg_memory_info,
+         IARG_END);
+
+   IARGLIST_Free(iarg_memory_info);
 }

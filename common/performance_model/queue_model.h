@@ -1,8 +1,6 @@
-#ifndef __QUEUE_MODEL_H__
-#define __QUEUE_MODEL_H__
+#pragma once
 
 #include <iostream>
-
 #include "fixed_types.h"
 
 class QueueModel
@@ -15,5 +13,3 @@ public:
 
    static QueueModel* create(std::string model_type, UInt64 min_processing_time);
 };
-
-#endif /* __QUEUE_MODEL_H__ */

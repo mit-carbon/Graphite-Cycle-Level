@@ -8,7 +8,7 @@
 class EventHeap : public EventQueue
 {
    public:
-      EventHeap(EventQueueManager* event_queue_manager, \
+      EventHeap(EventQueueManager* event_queue_manager,
             MetaEventHeap* parent_event_heap, SInt32 event_heap_index_in_parent);
       ~EventHeap();
 
@@ -18,7 +18,10 @@ class EventHeap : public EventQueue
       // get packet with the minimum time: dequeue may include waiting for the packet
       void processEvents();
       // enqueue the packet based on its time
-      void push(Event* event);
+      void push(Event* event, bool is_locked = false);
+      // Acquire/Release Locks
+      void acquireLock() { _lock.acquire(); }
+      void releaseLock() { _lock.release(); }
 
    private:
       // Timestamp of the most recent event

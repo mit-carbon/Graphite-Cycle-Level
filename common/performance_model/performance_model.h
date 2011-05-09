@@ -1,101 +1,59 @@
-#ifndef PERFORMANCE_MODEL_H
-#define PERFORMANCE_MODEL_H
-// This class represents the actual performance model for a given core
+#pragma once
 
-#include <queue>
-#include <iostream>
-#include <string>
-
-// Forward Decls
-class Core;
-class BranchPredictor;
-
+#include <vector>
+using std::vector;
+using std::pair;
+#include "packetize.h"
 #include "instruction.h"
-#include "basic_block.h"
-#include "fixed_types.h"
-#include "lock.h"
-#include "dynamic_instruction_info.h"
+
+class Core;
 
 class PerformanceModel
 {
 public:
+   typedef vector<pair<IntPtr,UInt32> > MemoryAccessList;
+
    PerformanceModel(Core* core, float frequency);
    virtual ~PerformanceModel();
 
-   void queueDynamicInstruction(Instruction *i);
-   void queueBasicBlock(BasicBlock *basic_block);
-   void iterate();
+   static PerformanceModel* create(Core* core);
+   
+   virtual bool handleInstruction(Instruction* ins, bool atomic_memory_update,
+         MemoryAccessList* memory_access_list) = 0;
+   virtual void handleCompletedMemoryAccess(UInt64 time, UInt32 memory_access_id) = 0;
+   virtual void flushPipeline() = 0;
 
-   volatile float getFrequency() { return m_frequency; }
+   virtual void outputSummary(std::ostream& os);
+   
+   float getFrequency() { return _frequency; }
    void updateInternalVariablesOnFrequencyChange(volatile float frequency);
    void recomputeAverageFrequency(); 
-
-   UInt64 getCycleCount() { return m_cycle_count; }
+   
+   UInt64 getCycleCount();
+   void updateCycleCount(UInt64 cycle_count);
    void setCycleCount(UInt64 cycle_count);
+   UInt64 getTime();
+   void updateTime(UInt64 time);
+   void setTime(UInt64 time);
 
-   void pushDynamicInstructionInfo(DynamicInstructionInfo &i);
-   void popDynamicInstructionInfo();
-   DynamicInstructionInfo& getDynamicInstructionInfo();
-
-   static PerformanceModel* create(Core* core);
-
-   BranchPredictor *getBranchPredictor() { return m_bp; }
-
-   void disable();
-   void enable();
-   bool isEnabled() { return m_enabled; }
-   void reset() {}
-
-   virtual void outputSummary(std::ostream &os) = 0;
-
-   class AbortInstructionException { };
-
+   void enable() { _enabled = true; }
+   void disable() { _enabled = false; }
+   bool isEnabled() { return _enabled; }
+   
 protected:
-   friend class SpawnInstruction;
-
-   typedef std::queue<DynamicInstructionInfo> DynamicInstructionInfoQueue;
-   typedef std::queue<BasicBlock *> BasicBlockQueue;
-
-   Core* getCore() { return m_core; }
    void frequencySummary(std::ostream &os);
-
-   UInt64 m_cycle_count;
-
+   Core* getCore() { return _core; }
+   
+   UInt64 _cycle_count;
+   
 private:
+   Core* _core;
+   
+   float _frequency;
 
-   class DynamicInstructionInfoNotAvailableException { };
+   float _average_frequency;
+   UInt64 _total_time;
+   UInt64 _checkpointed_cycle_count;
 
-   virtual void handleInstruction(Instruction *instruction) = 0;
-
-   // Instruction Counters
-   void initializeInstructionCounters();
-   void updateInstructionCounters(Instruction* i);
-
-   Core* m_core;
-
-   volatile float m_frequency;
-
-   volatile float m_average_frequency;
-   UInt64 m_total_time;
-   UInt64 m_checkpointed_cycle_count;
-
-   bool m_enabled;
-
-   BasicBlockQueue m_basic_block_queue;
-   Lock m_basic_block_queue_lock;
-
-   DynamicInstructionInfoQueue m_dynamic_info_queue;
-   Lock m_dynamic_info_queue_lock;
-
-   UInt32 m_current_ins_index;
-
-   BranchPredictor *m_bp;
-
-   // Instruction Counters
-   UInt64 m_total_recv_instructions;
-   UInt64 m_total_recv_instruction_costs;
-   UInt64 m_total_sync_instructions;
-   UInt64 m_total_sync_instruction_costs;
+   bool _enabled;
 };
-
-#endif

@@ -13,7 +13,9 @@ class UnorderedEventQueue : public EventQueue
       ~UnorderedEventQueue();
 
       void processEvents();
-      void push(Event* event);
+      void push(Event* event, bool is_locked = false);
+      void acquireLock() { _lock.acquire(); }
+      void releaseLock() { _lock.release(); }
 
       bool empty() { return _queue.empty(); }
 

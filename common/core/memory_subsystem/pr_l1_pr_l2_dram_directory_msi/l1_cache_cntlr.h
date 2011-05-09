@@ -28,17 +28,10 @@ namespace PrL1PrL2DramDirectoryMSI
          Cache* m_l1_dcache;
          L2CacheCntlr* m_l2_cache_cntlr;
 
-         core_id_t m_core_id;
-         UInt32 m_cache_block_size;
-
          MissStatusMaps m_miss_status_maps;
 
-         Lock m_l1_icache_lock;
-         Lock m_l1_dcache_lock;
-         Semaphore m_app_thread_semaphore;
-         Semaphore m_sim_thread_semaphore;
-
-         ShmemPerfModel* m_shmem_perf_model;
+         // States if the private caches are locked
+         bool m_locked;
 
          // Private Functions
          void accessCache(MemComponent::component_t mem_component,
@@ -58,9 +51,10 @@ namespace PrL1PrL2DramDirectoryMSI
          void deinitializeMissStatusMaps();
 
          // Get Cache Block Size
-         UInt32 getCacheBlockSize(void) { return m_cache_block_size; }
+         core_id_t getCoreId();
+         UInt32 getCacheBlockSize();
          MemoryManager* getMemoryManager() { return m_memory_manager; }
-         ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
+         ShmemPerfModel* getShmemPerfModel();
 
          // Initiate Actual Cache Access
          void doInitiateCacheAccess(MemComponent::component_t mem_component,
@@ -77,15 +71,12 @@ namespace PrL1PrL2DramDirectoryMSI
          void processNextCacheRequest(MemComponent::component_t mem_component, IntPtr address);
 
       public:
-         L1CacheCntlr(core_id_t core_id,
-               MemoryManager* memory_manager,
-               UInt32 cache_block_size,
-               UInt32 l1_icache_size, UInt32 l1_icache_associativity,
-               std::string l1_icache_replacement_policy,
-               UInt32 l1_dcache_size, UInt32 l1_dcache_associativity,
-               std::string l1_dcache_replacement_policy,
-               ShmemPerfModel* shmem_perf_model);
-         
+         L1CacheCntlr(MemoryManager* memory_manager,
+                      UInt32 cache_block_size,
+                      UInt32 l1_icache_size, UInt32 l1_icache_associativity,
+                      std::string l1_icache_replacement_policy,
+                      UInt32 l1_dcache_size, UInt32 l1_dcache_associativity,
+                      std::string l1_dcache_replacement_policy);
          ~L1CacheCntlr();
 
          Cache* getL1ICache() { return m_l1_icache; }
@@ -117,7 +108,8 @@ namespace PrL1PrL2DramDirectoryMSI
                IntPtr address, CacheState::cstate_t cstate);
          void invalidateCacheBlock(MemComponent::component_t mem_component, IntPtr address);
 
-         void acquireLock(MemComponent::component_t mem_component);
-         void releaseLock(MemComponent::component_t mem_component);
+         void acquireLock();
+         void releaseLock();
+         bool isLocked();
    };
 }

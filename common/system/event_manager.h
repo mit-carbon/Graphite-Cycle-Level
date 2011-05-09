@@ -41,9 +41,5 @@ class EventManager
 
       // The different event heaps - Works only with single process
       MetaEventHeap* _global_meta_event_heap;
-      MetaEventHeap* _app_meta_event_heap;
-      MetaEventHeap* _sim_meta_event_heap;
       vector<EventQueueManager*> _event_queue_manager_list;
-
-      void checkCycleAccurateMode();
 };

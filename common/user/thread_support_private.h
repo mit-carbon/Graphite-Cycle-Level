@@ -5,18 +5,12 @@
 extern "C" {
 #endif
 
-void CarbonGetThreadToSpawn(ThreadSpawnRequest *req);
-void CarbonThreadStart(ThreadSpawnRequest *req);
+void CarbonThreadStart(core_id_t core_id);
 void CarbonThreadExit();
-void *CarbonSpawnManagedThread(void *p);
-void *CarbonThreadSpawner(void *p);
-int CarbonSpawnThreadSpawner();
-void CarbonDequeueThreadSpawnReq (ThreadSpawnRequest *req);
+ThreadSpawnRequest CarbonDequeueThreadSpawnReq();
 
-int CarbonPthreadCreate(pthread_t *tid, int *attr, thread_func_t func, void *arg);
-int CarbonPthreadJoin(pthread_t tid, void **pparg);
-bool CarbonEmulatePthreadCreate(pthread_t* thread);
-
+void* CarbonManagedThread(void*);
+void CarbonPthreadCreate(pthread_t* thread);
 void CarbonPthreadAttrInitOtherAttr(pthread_attr_t *attr);
 
 #ifdef __cplusplus

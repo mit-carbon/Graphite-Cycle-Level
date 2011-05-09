@@ -1,16 +1,12 @@
-#ifndef CORE_H
-#define CORE_H
+#pragma once
 
 #include <string.h>
 
 // some forward declarations for cross includes
 class Network;
 class MemoryManager;
-class SyscallMdl;
-class SyncClient;
-class ClockSkewMinimizationClient;
+class SyscallClient;
 class PerformanceModel;
-
 // FIXME: Move this out of here eventually
 class PinMemoryManager;
 
@@ -21,19 +17,16 @@ class PinMemoryManager;
 #include "shmem_perf_model.h"
 #include "capi.h"
 #include "packet_type.h"
+#include "network.h"
 
 using namespace std;
 
 class Core
 {
 public:
-   enum State
+   enum Status
    {
       RUNNING = 0,
-      INITIALIZING,
-      STALLED,
-      SLEEPING,
-      WAKING_UP,
       IDLE,
       NUM_STATES
    };
@@ -60,28 +53,21 @@ public:
       NUM_MEM_OP_TYPES = MAX_MEM_OP - MIN_MEM_OP + 1
    };
 
-   Core(SInt32 id);
+   Core(core_id_t id);
    ~Core();
 
    void outputSummary(std::ostream &os);
 
-   int coreSendW(int sender, int receiver, char *buffer, int size, carbon_network_t net_type);
-   int coreRecvW(int sender, int receiver, char *buffer, int size, carbon_network_t net_type);
-  
-   void initiateMemoryAccess(UInt64 time,
-         MemComponent::component_t mem_component,
-         lock_signal_t lock_signal,
-         mem_op_t mem_op_type,
-         IntPtr address,
-         Byte* data_buffer,
-         UInt32 bytes,
-         bool modeled = false);
-   void completeCacheAccess(UInt64 time, UInt32 memory_access_id);
+   // User Messages
+   void sendMsg(core_id_t sender, core_id_t receiver, char *buffer, SInt32 size, carbon_network_t net_type);
+   void recvMsg(core_id_t sender, core_id_t receiver, char *buffer, SInt32 size, carbon_network_t net_type);
+   void __recvMsg(const NetPacket& packet);
 
-   void accessMemory(lock_signal_t lock_signal, mem_op_t mem_op_type,
-         IntPtr d_addr, char* data_buffer, UInt32 data_size, bool modeled = false);
-   void nativeMemOp(lock_signal_t lock_signal, mem_op_t mem_op_type,
-         IntPtr d_addr, char* data_buffer, UInt32 data_size);
+  
+   void initiateMemoryAccess(UInt64 time, UInt32 memory_access_id, MemComponent::component_t mem_component,
+         lock_signal_t lock_signal, mem_op_t mem_op_type,
+         IntPtr address, Byte* data_buffer, UInt32 bytes, bool modeled = false);
+   void completeCacheAccess(UInt64 time, UInt32 memory_access_id);
 
    // network accessor since network is private
    int getId() { return m_core_id; }
@@ -89,26 +75,20 @@ public:
    PerformanceModel *getPerformanceModel() { return m_performance_model; }
    MemoryManager *getMemoryManager() { return m_memory_manager; }
    PinMemoryManager *getPinMemoryManager() { return m_pin_memory_manager; }
-   SyscallMdl *getSyscallMdl() { return m_syscall_model; }
-   SyncClient *getSyncClient() { return m_sync_client; }
-   ClockSkewMinimizationClient* getClockSkewMinimizationClient() { return m_clock_skew_minimization_client; }
+   SyscallClient *getSyscallClient() { return m_syscall_client; }
    ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
 
-   void updateInternalVariablesOnFrequencyChange(volatile float frequency);
-
-   State getState();
-   void setState(State core_state);
+   void updateInternalVariablesOnFrequencyChange(float frequency);
 
    void enablePerformanceModels();
    void disablePerformanceModels();
-   void resetPerformanceModels();
 
 private:
    
    class MemoryAccessStatus
    {
    public:
-      MemoryAccessStatus(SInt32 access_id, UInt64 time,
+      MemoryAccessStatus(UInt32 access_id, UInt64 time,
                          IntPtr address, UInt32 bytes,
                          MemComponent::component_t mem_component,
                          lock_signal_t lock_signal,
@@ -146,29 +126,34 @@ private:
       bool _modeled;
    };
 
+   class RecvBuffer
+   {
+   public:
+      RecvBuffer() : _buffer(NULL), _size(0) {}
+      RecvBuffer(char* buffer, SInt32 size) : _buffer(buffer), _size(size) {}
+      char* _buffer;
+      SInt32 _size;
+   };
+
    core_id_t m_core_id;
    MemoryManager *m_memory_manager;
    PinMemoryManager *m_pin_memory_manager;
    Network *m_network;
    PerformanceModel *m_performance_model;
-   SyscallMdl *m_syscall_model;
-   SyncClient *m_sync_client;
-   ClockSkewMinimizationClient *m_clock_skew_minimization_client;
+   SyscallClient *m_syscall_client;
    ShmemPerfModel* m_shmem_perf_model;
   
-   State m_core_state;
-   
    // Memory Access Status
-   UInt32 m_last_memory_access_id;
-   std::map<UInt32, MemoryAccessStatus*> m_memory_access_status_map; 
-   
-   Lock m_core_state_lock;
-   static Lock m_global_core_lock;
+   std::map<UInt32, MemoryAccessStatus*> m_memory_access_status_map;
 
+   // Recv Buffer
+   RecvBuffer m_recv_buffer;
+   
    PacketType getPktTypeFromUserNetType(carbon_network_t net_type);
 
+   // Memory Access
    void continueMemoryAccess(MemoryAccessStatus& memory_access_status);
    void completeMemoryAccess(MemoryAccessStatus& memory_access_status);
 };
 
-#endif
+void coreRecvMsg(void* obj, NetPacket packet);

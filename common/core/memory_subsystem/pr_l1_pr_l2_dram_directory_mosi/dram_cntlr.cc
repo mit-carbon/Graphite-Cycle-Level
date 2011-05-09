@@ -20,9 +20,7 @@ DramCntlr::DramCntlr(MemoryManager* memory_manager,
 {
    m_dram_perf_model = new DramPerfModel(dram_access_cost, 
          dram_bandwidth,
-         dram_queue_model_enabled,
-         dram_queue_model_type, 
-         cache_block_size);
+         dram_queue_model_enabled);
 
    m_dram_access_count = new AccessCountMap[NUM_ACCESS_TYPES];
 }

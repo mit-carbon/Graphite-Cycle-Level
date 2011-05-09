@@ -9,17 +9,12 @@
 #include "clock_converter.h"
 #include "config_file.hpp"
 #include "handle_args.h"
-#include "fxsupport.h"
+#include "routine_manager.h"
 
 #include "carbon_user.h"
 #include "thread_support_private.h"
 
 static config::ConfigFile cfg;
-
-core_id_t CarbonGetCoreId()
-{
-   return Sim()->getCoreManager()->getCurrentCoreID();
-}
 
 int CarbonStartSim(int argc, char **argv)
 {
@@ -42,48 +37,28 @@ int CarbonStartSim(int argc, char **argv)
    Simulator::allocate();
    Sim()->start();
 
-   if (Config::getSingleton()->getCurrentProcessNum() == 0)
-   {
-      // Main process
-      Sim()->getCoreManager()->initializeThread(0);
-  
-      if (Config::getSingleton()->getSimulationMode() == Config::FULL)
-         CarbonSpawnThreadSpawner();
+   // Main process
+   Sim()->getThreadManager()->onThreadStart(0);
 
-      LOG_PRINT("Returning to main()...");
-      return 0;
-   }
-   else
-   {
-      LOG_PRINT("Replacing main()...");
-
-      if (Config::getSingleton()->getSimulationMode() == Config::FULL)
-         CarbonThreadSpawner (NULL);
-
-      // Not main process
-      while (!Sim()->finished())
-         usleep(100);
-
-      CarbonStopSim();
-
-      // Otherwise we will run main ...
-      exit(0);
-   }
+   LOG_PRINT("Returning to main()...");
+   return 0;
 }
 
 void CarbonStopSim()
 {
+   // Main Thread
+   Sim()->getThreadManager()->onThreadExit();
+
    Simulator::release();
 }
 
 UInt64 CarbonGetTime()
 {
-   // Floating Point Save/Restore
-   FloatingPointHandler floating_point_handler;
+   return emulateRoutine(Routine::CARBON_GET_TIME);
+}
 
-   Core* core = Sim()->getCoreManager()->getCurrentCore();
-   UInt64 time = convertCycleCount(core->getPerformanceModel()->getCycleCount(), \
-         core->getPerformanceModel()->getFrequency(), 1.0);
-
-   return time;
+UInt64 __CarbonGetTime(core_id_t core_id)
+{
+   Core* core = Sim()->getCoreManager()->getCoreFromID(core_id);
+   return core->getPerformanceModel()->getTime();
 }
