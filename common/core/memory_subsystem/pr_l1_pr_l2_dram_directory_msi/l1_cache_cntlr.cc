@@ -13,7 +13,8 @@ L1CacheCntlr::L1CacheCntlr(MemoryManager* memory_manager,
                            UInt32 l1_dcache_size, UInt32 l1_dcache_associativity,
                            std::string l1_dcache_replacement_policy):
    m_memory_manager(memory_manager),
-   m_l2_cache_cntlr(NULL)
+   m_l2_cache_cntlr(NULL),
+   m_locked(false)
 {
    m_l1_icache = new Cache("L1-I",
          l1_icache_size,
