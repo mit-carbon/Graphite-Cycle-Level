@@ -66,8 +66,8 @@ EventHeap::processEvents()
 {
    _lock.acquire();
    
-   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]) enter", \
-         getEventQueueManager()->getId(), _first_event_time);
+   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]), Size(%u) enter", \
+         getEventQueueManager()->getId(), _first_event_time, _heap.size());
    
    while (Sim()->getEventManager()->isReady(_first_event_time))
    {
@@ -80,7 +80,6 @@ EventHeap::processEvents()
 
       // Network, Instruction, Memory Modeling 
       event->process();
-      delete event;
       
       _lock.acquire();
 
@@ -98,18 +97,27 @@ EventHeap::processEvents()
       LOG_PRINT("EventHeap(%i): After extractMin(), Next Event (Type[%u],Time[%llu])", \
             getEventQueueManager()->getId(), next_event_type, next_event_time);
 
-      // Update Local Time - Global Time is always updated since top of heap changes
-      _parent_event_heap->updateTime(_event_heap_index_in_parent, next_event_time);
+      LOG_ASSERT_ERROR(next_event_time >= event->getTime(), "Next Event Time(%llu), Curr Event Time(%llu)",
+            next_event_time, event->getTime());
 
-      // Update _first_event_time
-      _first_event_time = next_event_time;
+      if (next_event_time > event->getTime())
+      {
+         // Update Local Time - Global Time is always updated since top of heap changes
+         _parent_event_heap->updateTime(_event_heap_index_in_parent, next_event_time);
 
-      // Wake up others(/sim_threads) who are sleeping who have ready events
-      Sim()->getEventManager()->wakeUpWaiters();
+         // Update _first_event_time
+         _first_event_time = next_event_time;
+
+         // Wake up others(/sim_threads) who are sleeping who have ready events
+         Sim()->getEventManager()->wakeUpWaiters();
+      }
+
+      // Delete the Curr Event
+      delete event;
    }
       
-   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]) exit", \
-         getEventQueueManager()->getId(), _first_event_time);
+   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]), Size(%u) exit", \
+         getEventQueueManager()->getId(), _first_event_time, _heap.size());
    
    _lock.release(); 
 }

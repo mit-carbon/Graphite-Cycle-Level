@@ -52,6 +52,9 @@ DramPerfModel::getAccessLatency(UInt64 pkt_time, UInt64 pkt_size, core_id_t requ
 {
    // pkt_size is in 'Bytes'
    // m_dram_bandwidth is in 'Bytes per clock cycle'
+   if (!m_enabled)
+      return 0;
+
    assert(m_enabled);
 
    UInt64 processing_time = (UInt64) ((float) pkt_size/m_dram_bandwidth) + 1;

@@ -63,13 +63,14 @@ EventManager::getEventQueueManager(SInt32 sim_thread_id)
 bool
 EventManager::isReady(UInt64 event_time)
 {
-   UInt64 global_time = _global_meta_event_heap->getFirstEventTime();
-   LOG_ASSERT_ERROR(event_time >= global_time,
-         "Event Time(%llu), Global Time(%llu)", 
-         event_time, global_time);
+   // UInt64 global_time = _global_meta_event_heap->getFirstEventTime();
+   // LOG_ASSERT_ERROR(event_time >= global_time,
+   //       "Event Time(%llu), Global Time(%llu)", 
+   //       event_time, global_time);
 
+   UInt64 global_time = _global_meta_event_heap->getFirstEventTime();
    // TODO: Make this a range later
-   return ( (event_time == _global_meta_event_heap->getFirstEventTime()) && (event_time != UINT64_MAX) );
+   return ( (event_time == global_time) && (event_time != UINT64_MAX) );
 }
 
 void

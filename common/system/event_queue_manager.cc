@@ -41,7 +41,7 @@ EventQueueManager::processEvents()
 void
 EventQueueManager::signalEvent()
 {
-   LOG_PRINT("EventQueueManager(%i): signalEvent() exit", getId());
+   LOG_PRINT("EventQueueManager(%i): signalEvent() enter", getId());
    if ( (Sim()->getEventManager()->isReady(_event_heap->getFirstEventTime()))
          || (!_unordered_event_queue->empty()) )
    {
