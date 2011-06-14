@@ -70,9 +70,9 @@ Config::Config()
    m_core_id_length = computeCoreIDLength(m_total_cores);
 
    // Assert Conditions
-   if (m_simulation_mode != CYCLE_ACCURATE)
+   if (m_simulation_mode != CYCLE_LEVEL)
    {
-      fprintf(stderr, "ERROR: Only cycle_accurate mode allowed\n");
+      fprintf(stderr, "ERROR: Only cycle_level mode allowed\n");
       exit(EXIT_FAILURE);
    }
    if (m_total_sim_threads > m_total_cores)
@@ -154,8 +154,8 @@ Config::SimulationMode Config::parseSimulationMode(string mode)
       return FULL;
    else if (mode == "lite")
       return LITE;
-   else if (mode == "cycle_accurate")
-      return CYCLE_ACCURATE;
+   else if (mode == "cycle_level")
+      return CYCLE_LEVEL;
    else
    {
       fprintf(stderr, "Unrecognized Simulation Mode(%s)\n", mode.c_str());

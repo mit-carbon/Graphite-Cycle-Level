@@ -67,7 +67,7 @@ public:
    {
       FULL = 0,
       LITE,
-      CYCLE_ACCURATE,
+      CYCLE_LEVEL,
       NUM_SIMULATION_MODES
    };
 
