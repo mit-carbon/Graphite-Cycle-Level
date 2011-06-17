@@ -42,11 +42,10 @@ int main(int argc, char* argv[])
 {
    printf("\n[SYNTHETIC NETWORK BENCHMARK]: Starting Test\n\n");
 
-   debug_printf("CarbonStartSim() start\n");
    CarbonStartSim(argc, argv);
-   debug_printf("CarbonStartSim() end\n");
+   debug_printf("Executed CarbonStartSim()\n");
 
-   Simulator::enablePerformanceModelsInCurrentProcess();
+   Simulator::__enablePerformanceModels();
    debug_printf("Enabled Performance Models\n");
    
    // Read Command Line Arguments
@@ -77,7 +76,7 @@ int main(int argc, char* argv[])
 
    debug_printf("Finished parsing command line arguments\n");
 
-   _num_cores = (SInt32) Config::getSingleton()->getApplicationCores();
+   _num_cores = (SInt32) Config::getSingleton()->getTotalCores();
    debug_printf("Num Application Cores(%i)\n", _num_cores);
 
    // Initialize Core Specific Variables
@@ -89,8 +88,7 @@ int main(int argc, char* argv[])
    Event::registerHandler(EVENT_PUSH_FIRST_EVENTS, pushFirstEvents);
    
    // Push First Event
-   UnstructuredBuffer event_args;
-   Event* push_first_events = new Event((Event::Type) EVENT_PUSH_FIRST_EVENTS, 0 /* time */, event_args);
+   Event* push_first_events = new Event((Event::Type) EVENT_PUSH_FIRST_EVENTS, 0 /* time */);
    Event::processInOrder(push_first_events, 0 /* core_id */, EventQueue::ORDERED);
 
    // Wait till all packets are sent and received
@@ -104,7 +102,7 @@ int main(int argc, char* argv[])
    // Delete Core Specific Variables
    deinitializeCoreSpVars();
 
-   Simulator::disablePerformanceModelsInCurrentProcess();
+   Simulator::__disablePerformanceModels();
    
    printf("\n[SYNTHETIC NETWORK BENCHMARK]: Finished Test successfully\n\n");
 
@@ -197,8 +195,8 @@ void processNetSendEvent(Event* event)
    assert(event->getType() == (Event::Type) EVENT_NET_SEND);
    
    Core* core;
-   UnstructuredBuffer& event_args = event->getArgs();
-   event_args >> core;
+   UnstructuredBuffer* event_args = event->getArgs();
+   (*event_args) >> core;
 
    RandNum* rand_num = _core_sp_vars[core->getId()]._rand_num;
    UInt64& total_packets_sent = _core_sp_vars[core->getId()]._total_packets_sent;
@@ -211,8 +209,8 @@ void processNetSendEvent(Event* event)
       {
          if ((core->getId() == 0) && ((total_packets_sent % 100) == 0))
          {
-            printf("Core(0) sending packet(%llu), Time(%llu)\n", \
-                  (long long unsigned int) total_packets_sent, (long long unsigned int) event->getTime());
+            debug_printf("Core(0) sending packet(%llu), Time(%llu)\n", \
+                         (long long unsigned int) total_packets_sent, (long long unsigned int) event->getTime());
          }
 
          // Send a packet to its destination core
@@ -248,8 +246,8 @@ void processRecvdPacket(void* obj, NetPacket net_packet)
    
    if ((recv_core->getId() == 0) && ((total_packets_received % 100) == 0))
    {
-      printf("Core(0) receiving packet(%llu), Time(%llu)\n", \
-            (long long unsigned int) total_packets_received, (long long unsigned int) net_packet.time);
+      debug_printf("Core(0) receiving packet(%llu), Time(%llu)\n", \
+                   (long long unsigned int) total_packets_received, (long long unsigned int) net_packet.time);
    }
 
    total_packets_received ++;
@@ -273,8 +271,8 @@ void pushFirstEvents(Event* event)
 
 void pushEvent(UInt64 time, Core* core)
 {
-   UnstructuredBuffer event_args;
-   event_args << core;
+   UnstructuredBuffer* event_args = new UnstructuredBuffer();
+   (*event_args) << core;
    Event* event = new Event((Event::Type) EVENT_NET_SEND, time, event_args);
    Event::processInOrder(event, core->getId(), EventQueue::ORDERED);
 }
