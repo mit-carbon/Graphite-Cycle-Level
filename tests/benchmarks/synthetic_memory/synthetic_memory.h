@@ -9,8 +9,8 @@ using std::vector;
 #include "core.h"
 #include "rand_num.h"
 
-#define EVENT_START_SIMULATION               100
-#define EVENT_ISSUE_MEMORY_ACCESS            101
+#define EVENT_START_SIMULATION               1000
+#define EVENT_ISSUE_MEMORY_ACCESS            1001
 
 void debug_printf(const char* fmt, ...);
 
@@ -73,6 +73,8 @@ private:
 
    Core* _core;
    UInt64 _core_time;
+
+   UInt32 _last_memory_access_id;
 
    vector<IntPtr> _rd_only_shared_address_list;
    vector<IntPtr> _rd_wr_shared_address_list;

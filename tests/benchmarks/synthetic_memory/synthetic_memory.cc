@@ -1,4 +1,6 @@
 #include <stdarg.h>
+#include <iostream>
+#include <fstream>
 #include "carbon_user.h"
 #include "simulator.h"
 #include "core_manager.h"
@@ -68,7 +70,7 @@ int main(int argc, char* argv[])
    }
 
    // Enable all the simulation models
-   Simulator::enablePerformanceModelsInCurrentProcess();
+   Simulator::__enablePerformanceModels();
 
    // Register Event Handlers
    Event::registerHandler(EVENT_START_SIMULATION, processStartSimulationEvent);
@@ -76,8 +78,7 @@ int main(int argc, char* argv[])
    Event::registerHandler(Event::COMPLETE_MEMORY_ACCESS, processCompleteMemoryAccessEvent);
 
    // Create First Event
-   UnstructuredBuffer event_args;
-   Event* event = new Event((Event::Type) EVENT_START_SIMULATION, 0 /* time */, event_args);
+   Event* event = new Event((Event::Type) EVENT_START_SIMULATION, 0 /* time */);
    Event::processInOrder(event, 0 /* core_id */, EventQueue::ORDERED);
 
    // Wait for all cores to finish processing events
@@ -91,7 +92,7 @@ int main(int argc, char* argv[])
    printf("Success: Completion Time (%llu)\n", (long long unsigned int) _completion_time);
 
    // Disable all the simulation models
-   Simulator::disablePerformanceModelsInCurrentProcess();
+   Simulator::__disablePerformanceModels();
    debug_printf("Disabled Performance Models\n");
 
    CarbonStopSim();
@@ -168,10 +169,12 @@ void readConfigurationParameters(int argc, char* argv[])
          "Should be power of 2. num_shared_addresses(%i), _num_private_addresses(%i)",
          _num_shared_addresses, _num_private_addresses);
 
-   ifstream instruction_probabilites_file("./tests/benchmarks/synthetic_memory/instruction_probabilities.dat");
+   ifstream instruction_probabilites_file;
+   instruction_probabilites_file.open("./tests/benchmarks/synthetic_memory/instruction_probabilities.dat");
    // This is initially a discrete probablity function
    for (UInt32 i = 0; i < SyntheticCore::NUM_INSTRUCTION_TYPES; i++)
       instruction_probabilites_file >> _instruction_type_probabilities[i];
+   instruction_probabilites_file.close();
    
    // Do this calculation before converting them into cumulative probabilites
    _fraction_read_only_shared_addresses =
@@ -267,13 +270,13 @@ void processIssueMemoryAccessEvent(Event* event)
    assert(event->getType() == EVENT_ISSUE_MEMORY_ACCESS);
 
    UInt64 time = event->getTime();
-   UnstructuredBuffer& event_args = event->getArgs();
+   UnstructuredBuffer* event_args = event->getArgs();
 
    Core* core;
    IntPtr address;
    SyntheticCore::MemoryOperation memory_operation;
 
-   event_args >> core >> address >> memory_operation;
+   (*event_args) >> core >> address >> memory_operation;
 
    _synthetic_core_list[core->getId()]->processIssueMemoryAccessEvent(time, address, memory_operation); 
 }
@@ -283,12 +286,12 @@ void processCompleteMemoryAccessEvent(Event* event)
    assert(event->getType() == Event::COMPLETE_MEMORY_ACCESS);
    
    UInt64 time = event->getTime();
-   UnstructuredBuffer& event_args = event->getArgs();
+   UnstructuredBuffer* event_args = event->getArgs();
 
    DynamicInstructionInfo info;
    Core* core;
 
-   event_args >> core >> info;
+   (*event_args) >> core >> info;
 
    assert((info.type == DynamicInstructionInfo::MEMORY_READ) || (info.type == DynamicInstructionInfo::MEMORY_WRITE));
    SyntheticCore::MemoryOperation memory_operation = (info.type == DynamicInstructionInfo::MEMORY_READ) ?
@@ -304,6 +307,7 @@ SyntheticCore::SyntheticCore(Core* core,
                              vector<IntPtr>& private_address_list)
    : _core(core)
    , _core_time(0)
+   , _last_memory_access_id(0)
    , _rd_only_shared_address_list(rd_only_shared_address_list)
    , _rd_wr_shared_address_list(rd_wr_shared_address_list)
    , _private_address_list(private_address_list)
@@ -471,9 +475,12 @@ SyntheticCore::initiateMemoryAccess(UInt64 time, IntPtr address, MemoryOperation
    SInt32 buffer = 0;
 
    // Initiate Memory Access Event
-   UnstructuredBuffer event_args;
-   event_args << _core << MemComponent::L1_DCACHE << Core::NONE << core_mem_op << address
-              << &buffer << sizeof(buffer) << true;
+   UnstructuredBuffer* event_args = new UnstructuredBuffer();
+   (*event_args) << _core
+                 << _last_memory_access_id ++
+                 << MemComponent::L1_DCACHE << Core::NONE << core_mem_op
+                 << address << &buffer << sizeof(buffer)
+                 << true;
    EventInitiateMemoryAccess* event = new EventInitiateMemoryAccess(time, event_args);
    Event::processInOrder(event, _core->getId(), EventQueue::ORDERED);
 }
@@ -504,8 +511,8 @@ SyntheticCore::generateInstructions(UInt64 time)
          debug_printf("Created Memory Access Instruction [Core Id(%i), Time(%llu), Address(0x%llx), MemoryOperation(%u)]\n", \
                _core->getId(), (long long unsigned int) time, address, memory_operation);
          
-         UnstructuredBuffer event_args;
-         event_args << _core << address << memory_operation;
+         UnstructuredBuffer* event_args = new UnstructuredBuffer();
+         (*event_args) << _core << address << memory_operation;
          Event* event = new Event((Event::Type) EVENT_ISSUE_MEMORY_ACCESS, time, event_args);
          Event::processInOrder(event, _core->getId(), EventQueue::ORDERED);
          
