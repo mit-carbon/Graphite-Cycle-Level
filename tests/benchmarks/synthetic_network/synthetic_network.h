@@ -52,7 +52,7 @@ void deinitializeCoreSpVars();
 
 void processNetSendEvent(Event* event);
 void processRecvdPacket(void* obj, NetPacket net_packet);
-void pushFirstEvents(Event* event);
+void processStartSimulationEvent(Event* event);
 void pushEvent(UInt64 time, Core* core);
 
 bool canSendPacket(double offered_load, RandNum* rand_num);

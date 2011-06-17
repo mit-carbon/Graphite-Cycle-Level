@@ -34,7 +34,7 @@ UInt64 _quantum = 1000;
 Semaphore _semaphore;
 
 UInt32 EVENT_NET_SEND = 100;
-UInt32 EVENT_PUSH_FIRST_EVENTS = 102;
+UInt32 EVENT_START_SIMULATION = 102;
 
 #include "traffic_generators.h"
 
@@ -85,17 +85,17 @@ int main(int argc, char* argv[])
    // Register (NetSend, NetRecv, PushFirstEvents) Events
    Event::registerHandler(EVENT_NET_SEND, processNetSendEvent);
    registerRecvdPacketHandler();
-   Event::registerHandler(EVENT_PUSH_FIRST_EVENTS, pushFirstEvents);
+   Event::registerHandler(EVENT_START_SIMULATION, processStartSimulationEvent);
    
    // Push First Event
-   Event* push_first_events = new Event((Event::Type) EVENT_PUSH_FIRST_EVENTS, 0 /* time */);
+   Event* push_first_events = new Event((Event::Type) EVENT_START_SIMULATION, 0 /* time */);
    Event::processInOrder(push_first_events, 0 /* core_id */, EventQueue::ORDERED);
 
    // Wait till all packets are sent and received
    waitForCompletion();
    
    // Unregister events
-   Event::unregisterHandler(EVENT_PUSH_FIRST_EVENTS);
+   Event::unregisterHandler(EVENT_START_SIMULATION);
    unregisterRecvdPacketHandler();
    Event::unregisterHandler(EVENT_NET_SEND);
 
@@ -258,9 +258,9 @@ void processRecvdPacket(void* obj, NetPacket net_packet)
    }
 }
 
-void pushFirstEvents(Event* event)
+void processStartSimulationEvent(Event* event)
 {
-   debug_printf("pushFirstEvents\n");
+   debug_printf("processStartSimulationEvent\n");
    for (SInt32 i = 0; i < _num_cores; i++)
    {
       Core* ith_core = Sim()->getCoreManager()->getCoreFromID(i);
