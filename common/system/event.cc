@@ -56,9 +56,7 @@ Event::process()
 void
 Event::registerHandler(UInt32 type, Handler handler)
 {
-   assert(!_handler_map[type]);
-   LOG_ASSERT_ERROR(type >= Event::NUM_TYPES, "Event Type(%u) < NUM_TYPES(%u)",
-         type, Event::NUM_TYPES);
+   LOG_ASSERT_ERROR(!_handler_map[type], "Event Type(%u) already registered", type);
 
    LOG_PRINT("registerHandler(Type[%u], Handler[%p])", type, handler);
    _handler_map[type] = handler;
@@ -67,9 +65,7 @@ Event::registerHandler(UInt32 type, Handler handler)
 void
 Event::unregisterHandler(UInt32 type)
 {
-   assert(_handler_map[type]);
-   LOG_ASSERT_ERROR(type >= Event::NUM_TYPES, "Event Type(%u) < NUM_TYPES(%u)",
-         type, Event::NUM_TYPES);
+   LOG_ASSERT_ERROR(_handler_map[type], "Event Type(%u) not registered", type);
 
    LOG_PRINT("unregisterHandler(Type[%u])", type);
    _handler_map.erase(type);
