@@ -63,12 +63,19 @@ private:
    };
    
 public:
-   enum SimulationMode
+   enum AccuracyMode
+   {
+      NORMAL = 0,
+      CYCLE_LEVEL,
+      NUM_ACCURACY_MODES
+   };
+
+   enum ExecutionMode
    {
       FULL = 0,
       LITE,
-      CYCLE_LEVEL,
-      NUM_SIMULATION_MODES
+      NATIVE,
+      NUM_EXECUTION_MODES
    };
 
    typedef std::vector<UInt32> CoreToProcMap;
@@ -95,8 +102,12 @@ public:
    UInt32 getCoreIDLength()
    { return m_core_id_length; }
 
-   SimulationMode getSimulationMode()
-   { return m_simulation_mode; }
+   AccuracyMode getAccuracyMode()
+   { return m_accuracy_mode; }
+   ExecutionMode getExecutionMode()
+   { return m_execution_mode; }
+   void setExecutionMode(ExecutionMode mode)
+   { m_execution_mode = mode; }
 
    // Core & Network Parameters
    std::string getCoreType(core_id_t core_id);
@@ -129,8 +140,9 @@ private:
 
    CommToCoreMap m_comm_to_core_map;
 
-   // Simulation Mode
-   SimulationMode m_simulation_mode;
+   // Accuracy & Execution Modes
+   AccuracyMode m_accuracy_mode;
+   ExecutionMode m_execution_mode;
 
    static Config *m_singleton;
 
@@ -145,7 +157,10 @@ private:
    void parseCoreParameters();
    void parseNetworkParameters();
 
-   static SimulationMode parseSimulationMode(std::string mode);
+   // Accuracy & Execution Modes
+   static AccuracyMode parseAccuracyMode(std::string mode);
+   static ExecutionMode parseExecutionMode(std::string mode);
+
    static UInt32 computeCoreIDLength(UInt32 core_count);
    static UInt32 getNearestAcceptableCoreCount(UInt32 core_count);
 };

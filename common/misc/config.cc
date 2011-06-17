@@ -41,8 +41,9 @@ Config::Config()
       m_knob_enable_performance_modeling = Sim()->getCfg()->getBool("general/enable_performance_modeling");
       m_knob_enable_power_modeling = Sim()->getCfg()->getBool("general/enable_power_modeling");
 
-      // Simulation Mode
-      m_simulation_mode = parseSimulationMode(Sim()->getCfg()->getString("general/mode"));
+      // Accuracy & Execution Modes
+      m_accuracy_mode = parseAccuracyMode(Sim()->getCfg()->getString("general/accuracy_mode"));
+      m_execution_mode = parseExecutionMode(Sim()->getCfg()->getString("general/execution_mode"));
    }
    catch(...)
    {
@@ -70,7 +71,7 @@ Config::Config()
    m_core_id_length = computeCoreIDLength(m_total_cores);
 
    // Assert Conditions
-   if (m_simulation_mode != CYCLE_LEVEL)
+   if (m_accuracy_mode != CYCLE_LEVEL)
    {
       fprintf(stderr, "ERROR: Only cycle_level mode allowed\n");
       exit(EXIT_FAILURE);
@@ -148,17 +149,30 @@ UInt32 Config::getCoreFromCommId(UInt32 comm_id)
    return it == m_comm_to_core_map.end() ? INVALID_CORE_ID : it->second;
 }
 
-Config::SimulationMode Config::parseSimulationMode(string mode)
+Config::AccuracyMode Config::parseAccuracyMode(string mode)
+{
+   if (mode == "normal")
+      return NORMAL;
+   else if (mode == "cycle_level")
+      return CYCLE_LEVEL;
+   else
+   {
+      fprintf(stderr, "Unrecognized Accuracy Mode(%s)\n", mode.c_str());
+      exit(EXIT_FAILURE);
+   }
+}
+
+Config::ExecutionMode Config::parseExecutionMode(string mode)
 {
    if (mode == "full")
       return FULL;
    else if (mode == "lite")
       return LITE;
-   else if (mode == "cycle_level")
-      return CYCLE_LEVEL;
+   else if (mode == "native")
+      return NATIVE;
    else
    {
-      fprintf(stderr, "Unrecognized Simulation Mode(%s)\n", mode.c_str());
+      fprintf(stderr, "Unrecognized Execution Mode(%s)\n", mode.c_str());
       exit(EXIT_FAILURE);
    }
 }

@@ -37,6 +37,9 @@ int CarbonStartSim(int argc, char **argv)
    Simulator::allocate();
    Sim()->start();
 
+   // Set Pin Mode
+   Config::getSingleton()->setExecutionMode(Config::NATIVE);
+
    // Main process
    Sim()->getThreadManager()->onThreadStart(0);
 

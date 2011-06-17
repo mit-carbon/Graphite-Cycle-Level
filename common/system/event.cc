@@ -15,13 +15,20 @@ Event::Event(Type type, UInt64 time, UnstructuredBuffer* event_args)
 
 Event::~Event()
 {
-   assert(_event_args);
-   delete _event_args;
+   if (_event_args)
+      delete _event_args;
 }
 
 void
 Event::processInOrder(Event* event, core_id_t recv_core_id, EventQueue::Type event_queue_type)
 {
+   if ( (Config::getSingleton()->getExecutionMode() == Config::NATIVE) &&
+        ((event->getType() == START_THREAD) || (event->getType() == RESUME_THREAD)) )
+   {
+      delete event;
+      return;
+   }
+
    LOG_PRINT("Queueing Event (Type[%u], Time[%llu], Processing Core Id[%i])", \
          event->getType(), event->getTime(), recv_core_id);
 

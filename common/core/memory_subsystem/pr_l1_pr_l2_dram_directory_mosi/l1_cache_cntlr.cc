@@ -148,7 +148,7 @@ L1CacheCntlr::processMemOpFromCore(
          m_core_id, INVALID_CORE_ID, false, ca_address);
    getMemoryManager()->sendMsg(m_core_id, shmem_msg);
 
-   if (Config::getSingleton()->getSimulationMode() != Config::CYCLE_LEVEL)
+   if (Config::getSingleton()->getAccuracyMode() != Config::CYCLE_LEVEL)
    {
       waitForSimThread();
       reprocessMemOpFromCore(mem_component, l1_miss_status);
@@ -165,7 +165,7 @@ L1CacheCntlr::reprocessMemOpFromCore(
    if (l1_miss_status->_lock_signal != Core::UNLOCK)
       acquireLock(mem_component);
 
-   if (Config::getSingleton()->getSimulationMode() != Config::CYCLE_LEVEL)
+   if (Config::getSingleton()->getAccuracyMode() != Config::CYCLE_LEVEL)
    {
       // Wake up the sim thread after acquiring the lock
       wakeUpSimThread();
@@ -381,7 +381,7 @@ L1CacheCntlr::releaseLock(MemComponent::component_t mem_component)
 void
 L1CacheCntlr::signalDataReady(MemComponent::component_t mem_component, IntPtr address)
 {
-   if (Config::getSingleton()->getSimulationMode() != Config::CYCLE_LEVEL)
+   if (Config::getSingleton()->getAccuracyMode() != Config::CYCLE_LEVEL)
    {
       getShmemPerfModel()->setCycleCount(ShmemPerfModel::_APP_THREAD,
             getShmemPerfModel()->getCycleCount());

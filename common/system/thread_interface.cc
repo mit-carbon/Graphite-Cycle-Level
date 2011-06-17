@@ -17,11 +17,17 @@ ThreadInterface::sendAppRequest(AppRequest app_request)
 {
    LOG_PRINT("CoreID(%i): sendAppRequest(Type[%u])", _core->getId(), app_request.getType());
 
-   _lock.acquire();
-   _app_request_queue.push(app_request);
-   _lock.release();
-
-   _request_semaphore.signal();
+   if (Config::getSingleton()->getExecutionMode() == Config::NATIVE)
+   {
+      app_request.process(_core);
+   }
+   else // (Config::getSingleton()->getExecutionMode() != Config::NATIVE)
+   {
+      _lock.acquire();
+      _app_request_queue.push(app_request);
+      _lock.release();
+      _request_semaphore.signal();
+   }
 }
 
 AppRequest

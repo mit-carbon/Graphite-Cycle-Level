@@ -19,6 +19,8 @@ AppRequest::process(Core* req_core)
    {
    case HANDLE_INSTRUCTION:
       {
+         assert(Config::getSingleton()->getExecutionMode() != Config::NATIVE);
+         
          Instruction* ins;
          bool atomic_memory_update;
          PerformanceModel::MemoryAccessList* memory_access_list;
@@ -31,6 +33,8 @@ AppRequest::process(Core* req_core)
 
    case EMULATE_ROUTINE:
       {
+         assert(Config::getSingleton()->getExecutionMode() != Config::NATIVE);
+         
          Routine::Id routine_id;
          (*_request) >> routine_id;
          UnstructuredBuffer* routine_args = _request;
@@ -43,6 +47,8 @@ AppRequest::process(Core* req_core)
 
    case HANDLE_SYSCALL:
       {
+         assert(Config::getSingleton()->getExecutionMode() != Config::NATIVE);
+         
          IntPtr syscall_number;
          SyscallManager::syscall_args_t args;
          (*_request) >> syscall_number >> args;
