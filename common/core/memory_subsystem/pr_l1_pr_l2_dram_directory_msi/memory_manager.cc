@@ -114,17 +114,17 @@ MemoryManager::MemoryManager(Core* core,
 
    if (getCore()->getId() == 0)
    {
-      LOG_ASSERT_ERROR(directory_type != "limited_broadcast", \
+      LOG_ASSERT_ERROR(directory_type != "limited_broadcast",
             "Limited Broadcast directory scheme CANNOT be used with the MSI protocol.");
    }
 
    LOG_PRINT("Starting to calculate memory controller positions");
    std::vector<core_id_t> core_list_with_dram_controllers = getCoreListWithMemoryControllers();
-   if (getCore()->getId() == 0)
-      printCoreListWithMemoryControllers(core_list_with_dram_controllers);
+   // if (getCore()->getId() == 0)
+   //    printCoreListWithMemoryControllers(core_list_with_dram_controllers);
    LOG_PRINT("Finished calculating memory controller positions");
 
-   if (find(core_list_with_dram_controllers.begin(), core_list_with_dram_controllers.end(), getCore()->getId()) \
+   if (find(core_list_with_dram_controllers.begin(), core_list_with_dram_controllers.end(), getCore()->getId())
          != core_list_with_dram_controllers.end())
    {
       m_dram_cntlr_present = true;

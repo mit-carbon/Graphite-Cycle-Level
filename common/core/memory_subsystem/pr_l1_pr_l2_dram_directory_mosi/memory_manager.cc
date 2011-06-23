@@ -116,8 +116,8 @@ MemoryManager::MemoryManager(Core* core,
    }
 
    std::vector<core_id_t> core_list_with_dram_controllers = getCoreListWithMemoryControllers();
-   if (getCore()->getId() == 0)
-      printCoreListWithMemoryControllers(core_list_with_dram_controllers);
+   // if (getCore()->getId() == 0)
+   //    printCoreListWithMemoryControllers(core_list_with_dram_controllers);
    
    if (find(core_list_with_dram_controllers.begin(), core_list_with_dram_controllers.end(), getCore()->getId()) \
          != core_list_with_dram_controllers.end())
