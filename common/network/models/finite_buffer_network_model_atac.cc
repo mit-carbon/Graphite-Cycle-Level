@@ -130,14 +130,14 @@ FiniteBufferNetworkModelAtac::initializeANetTopologyParameters()
    LOG_ASSERT_ERROR(_enet_width % _sqrt_cluster_size == 0, \
          "Mesh Width(%i) must be a multiple of sqrt_cluster_size(%i)", \
          _enet_width, _sqrt_cluster_size);
-   LOG_ASSERT_ERROR(_enet_height == (_enet_width + 1),
+   LOG_ASSERT_ERROR(_enet_height == _enet_width,
          "Mesh Width(%i), Mesh Height(%i)", _enet_width, _enet_height);
    LOG_ASSERT_ERROR((_enet_width * _enet_height) == (SInt32) total_cores,
          "Mesh Width(%i), Mesh Height(%i), Core Count(%i)", \
          _enet_width, _enet_height, total_cores);
 
    // Number of Clusters
-   _num_clusters = (_enet_width / _sqrt_cluster_size) * ceil(1.0 * _enet_height / _sqrt_cluster_size);
+   _num_clusters = (_enet_width / _sqrt_cluster_size) * (_enet_height / _sqrt_cluster_size);
 }
 
 void
