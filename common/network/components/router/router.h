@@ -24,6 +24,5 @@ public:
 
       core_id_t _core_id;
       SInt32 _index;
-      static const SInt32 CORE_INTERFACE = -1;
    };
 };

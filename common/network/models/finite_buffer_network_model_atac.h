@@ -39,7 +39,6 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       };
       enum NodeType
       {
-         CORE_INTERFACE = -1,
          EMESH = 0,
          SENDING_HUB = 1,
          RECEIVING_HUB = 2
@@ -115,16 +114,18 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       LocalRoute parseLocalRoute(string str);
 
       // Compute Next Hops
-      void computeNextHopsOnENet(NetworkNode* curr_network_node, \
-            core_id_t sender, core_id_t receiver, \
+      void computeNextHopsOnENet(NetworkNode* curr_network_node,
+            core_id_t sender, core_id_t receiver,
             vector<Channel::Endpoint>& output_endpoint_list);
-      void computeNextHopsOnONet(NetworkNode* curr_network_node, \
-            core_id_t sender, core_id_t receiver, \
+      void computeNextHopsOnONet(NetworkNode* curr_network_node,
+            core_id_t sender, core_id_t receiver,
             vector<Channel::Endpoint>& output_endpoint_list);
-      void computeNextHopsOnBNet(NetworkNode* curr_network_node, \
-            core_id_t sender, core_id_t receiver, \
+      void computeNextHopsOnBNet(NetworkNode* curr_network_node,
+            core_id_t sender, core_id_t receiver,
             vector<Channel::Endpoint>& output_endpoint_list);
       
       // Virtual Function in FiniteBufferNetworkModel
       void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
+      // Compute Ingress Router Id
+      Router::Id computeIngressRouterId(core_id_t core_id);
 };

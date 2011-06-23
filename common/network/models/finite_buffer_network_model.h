@@ -51,6 +51,8 @@ class FiniteBufferNetworkModel : public NetworkModel
       PacketType _flow_control_packet_type;
       // Flit Width
       SInt32 _flit_width;
+      // CORE_INTERFACE port
+      static const SInt32 CORE_INTERFACE = -1;
 
    private:
       // Lock
@@ -70,6 +72,8 @@ class FiniteBufferNetworkModel : public NetworkModel
 
       // Compute the output endpoints->[channel, index] of a particular flit
       virtual void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node) = 0;
+      // Compute the ingress router id
+      virtual Router::Id computeIngressRouterId(core_id_t core_id) = 0;
 
       // Process Received Packet to record packet delays
       void updatePacketStatistics(NetPacket& pkt, UInt64 zero_load_delay);

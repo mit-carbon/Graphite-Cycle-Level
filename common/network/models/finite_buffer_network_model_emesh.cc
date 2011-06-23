@@ -10,7 +10,7 @@
 #include "config.h"
 #include "log.h"
 
-FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net, \
+FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net,
       SInt32 network_id, bool broadcast_enabled):
    FiniteBufferNetworkModel(net, network_id)
 {
@@ -254,20 +254,26 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Networ
          router_index = EMESH;
 
       Router::Id router_id(*it, router_index);
-      Channel::Endpoint& output_endpoint = \
-            curr_network_node->getOutputEndpointFromRouterId(router_id);
+      Channel::Endpoint& output_endpoint = curr_network_node->getOutputEndpointFromRouterId(router_id);
       output_endpoint_vec.push_back(output_endpoint);
       
-      LOG_PRINT("Next Router(%i,%i), Output Endpoint(%i,%i)", \
-            router_id._core_id, router_id._index, \
+      LOG_PRINT("Next Router(%i,%i), Output Endpoint(%i,%i)",
+            router_id._core_id, router_id._index,
             output_endpoint._channel_id, output_endpoint._index);
    }
 
    // Initialize the output channel struct inside head_flit
    head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_vec);
    
-   LOG_PRINT("computeOutputEndpointList(%p,%p) exit, channel_endpoint_list.size(%u)", \
+   LOG_PRINT("computeOutputEndpointList(%p,%p) exit, channel_endpoint_list.size(%u)",
          head_flit, curr_network_node, head_flit->_output_endpoint_list->size());
+}
+
+Router::Id
+FiniteBufferNetworkModelEMesh::computeIngressRouterId(core_id_t core_id)
+{
+   assert(core_id == _core_id);
+   return Router::Id(core_id, EMESH);
 }
 
 void

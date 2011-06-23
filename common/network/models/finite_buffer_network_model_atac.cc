@@ -526,6 +526,13 @@ FiniteBufferNetworkModelAtac::computeOutputEndpointList(Flit* head_flit, Network
    LOG_PRINT("computeOutputEndpointList(%p, %p) end", head_flit, curr_network_node);
 }
 
+Router::Id
+FiniteBufferNetworkModelAtac::computeIngressRouterId(core_id_t core_id)
+{
+   assert(core_id == _core_id);
+   return Router::Id(core_id, EMESH);
+}
+
 FiniteBufferNetworkModelAtac::GlobalRoute
 FiniteBufferNetworkModelAtac::computeGlobalRoute(core_id_t sender, core_id_t receiver)
 {

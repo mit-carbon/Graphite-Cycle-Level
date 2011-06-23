@@ -19,7 +19,6 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
    private:
       enum NodeType
       {
-         CORE_INTERFACE = -1,
          EMESH = 0
       };
 
@@ -35,6 +34,8 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
 
       // Main Routing Function
       void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
+      // Compute Ingress Router Id
+      Router::Id computeIngressRouterId(core_id_t core_id);
 
       // Private Variables
       volatile float _frequency;

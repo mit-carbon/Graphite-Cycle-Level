@@ -62,19 +62,20 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
          net_packet, net_packet_list_to_send,
          num_flits, requester);
 
+   // Get the ingress router id
+   Router::Id ingress_router_id = computeIngressRouterId(_core_id);
+
+   // Send out all the flits
    list<NetPacket*>::iterator packet_it = net_packet_list_to_send.begin();
-   for (UInt32 flit_num = 0;
-        packet_it != net_packet_list_to_send.end();
-        packet_it ++, flit_num ++)
+   for ( ; packet_it != net_packet_list_to_send.end(); packet_it ++)
    {
       NetPacket* net_packet_to_send = *packet_it;
       net_packet_to_send->sender = _core_id;
-      net_packet_to_send->receiver = _core_id;
+      net_packet_to_send->receiver = ingress_router_id._core_id;
       
       Flit* flit_to_send = (Flit*) net_packet_to_send->data;
-      flit_to_send->_sender_router_index = Router::Id::CORE_INTERFACE;
-      // FIXME: EMesh router for now (Make general later, eg. for concentrated mesh and other topologies)
-      flit_to_send->_receiver_router_index = 0;
+      flit_to_send->_sender_router_index = CORE_INTERFACE;
+      flit_to_send->_receiver_router_index = ingress_router_id._index;
    }
 
    LOG_PRINT("sendNetPacket() exit, net_packet_list_to_send.size(%u)", net_packet_list_to_send.size());
@@ -86,8 +87,8 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
 {
    ScopedLock sl(_lock);
 
-   LOG_PRINT("receiveNetPacket(%p): Time(%llu), Sender(%i), Receiver(%i), Length(%i), Sequence Num(%llu), Raw(%s) enter", \
-         net_packet, net_packet->time, net_packet->sender, net_packet->receiver, \
+   LOG_PRINT("receiveNetPacket(%p): Time(%llu), Sender(%i), Receiver(%i), Length(%i), Sequence Num(%llu), Raw(%s) enter",
+         net_packet, net_packet->time, net_packet->sender, net_packet->receiver,
          net_packet->length, net_packet->sequence_num, (net_packet->is_raw) ? "YES" : "NO");
 
    if (net_packet->is_raw)
@@ -106,7 +107,7 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
       NetworkMsg* network_msg = (NetworkMsg*) net_packet->data;
       SInt32 router_idx = network_msg->_receiver_router_index;
       
-      if (router_idx == Router::Id::CORE_INTERFACE)
+      if (router_idx == CORE_INTERFACE)
       {
          assert(network_msg->_type == NetworkMsg::DATA);
          // Handle the local network packet
@@ -172,7 +173,7 @@ FiniteBufferNetworkModel::receiveRawPacket(NetPacket* raw_packet)
 
    UInt64 packet_id = computePacketId(raw_packet->sender, raw_packet->sequence_num);
   
-   LOG_PRINT("sender(%i), sequence_num(%llu), packet_id(0x%llx)", \
+   LOG_PRINT("sender(%i), sequence_num(%llu), packet_id(0x%llx)",
          raw_packet->sender, raw_packet->sequence_num, packet_id);
 
    map<UInt64,NetPacket*>::iterator modeling_it = _received_modeling_packet_map.find(packet_id);
@@ -232,7 +233,7 @@ FiniteBufferNetworkModel::receiveModelingPacket(NetPacket* modeling_packet)
    if (modeling_it == _received_modeling_packet_map.end())
    {
       LOG_PRINT("New Modeling packet received");
-      pair<map<UInt64,NetPacket*>::iterator,bool> modeling_it_pair = \
+      pair<map<UInt64,NetPacket*>::iterator,bool> modeling_it_pair =
             _received_modeling_packet_map.insert(make_pair<UInt64,NetPacket*>(packet_id,modeling_packet));
       assert(modeling_it_pair.second);
       modeling_it = modeling_it_pair.first;
@@ -391,17 +392,17 @@ FiniteBufferNetworkModel::printNetPacketList(const list<NetPacket*>& net_packet_
       if (network_msg->_type == NetworkMsg::DATA)
       {
          Flit* flit = (Flit*) network_msg;
-         LOG_PRINT("Flit: Time(%llu), Type(%s), Sender(%i), Receiver(%i), Output Endpoint(%i,%i), Sequence Num(%llu)", \
-               flit->_normalized_time, flit->getTypeString().c_str(), \
-               flit->_sender, flit->_receiver, \
-               flit->_output_endpoint._channel_id, flit->_output_endpoint._index, \
+         LOG_PRINT("Flit: Time(%llu), Type(%s), Sender(%i), Receiver(%i), Output Endpoint(%i,%i), Sequence Num(%llu)",
+               flit->_normalized_time, flit->getTypeString().c_str(),
+               flit->_sender, flit->_receiver,
+               flit->_output_endpoint._channel_id, flit->_output_endpoint._index,
                flit->_net_packet->sequence_num);
       }
       else // (network_msg->_type == NetworkMsg::BUFFER_MANAGEMENT)
       {
          BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
          LOG_PRINT("Buffer Management: Time(%llu)", buffer_msg->_normalized_time);
-         assert(recipient != Router::Id(_core_id, Router::Id::CORE_INTERFACE));
+         assert(recipient != Router::Id(_core_id, CORE_INTERFACE));
       }
    } // for ( ; packet_it != net_packet_list.end(); packet_it ++)
 }
