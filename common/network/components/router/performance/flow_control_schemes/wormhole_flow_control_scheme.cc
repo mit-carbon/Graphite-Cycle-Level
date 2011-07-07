@@ -157,10 +157,49 @@ WormholeFlowControlScheme::sendFlit(SInt32 input_channel)
       flit_buffer->_output_endpoint_list = flit->_output_endpoint_list;
    }
 
+   // Check if the Output Endpoint List is an empty vector
+   if (flit_buffer->_output_endpoint_list->empty())
+   {
+      // Update Flit time first
+      LOG_PRINT("Update Flit Time");
+      flit_buffer->updateFlitTime();
+      // Update Buffer Time to account for the size of the flit
+      flit_buffer->updateBufferTime();
+      
+      // Remove flit from queue
+      // Update upstream buffer usage history
+      BufferManagementMsg* upstream_buffer_msg = flit_buffer->dequeue();
+      if (upstream_buffer_msg)
+      {
+         LOG_PRINT("Sending Upstream Buffer Msg (%p)", upstream_buffer_msg);
+
+         upstream_buffer_msg->_input_endpoint = flit->_input_endpoint;
+         _network_msg_list->push_back(upstream_buffer_msg);
+      }
+      
+      // If TAIL flit, delete the output_endpoint_list
+      if (flit->_type & Flit::TAIL)
+      {
+         LOG_PRINT("TAIL flit");
+
+         // Delete _output_endpoint_list
+         delete flit_buffer->_output_endpoint_list;
+         flit_buffer->_output_endpoint_list = NULL;
+   
+         LOG_PRINT("sendFlit(%i) exit->(true,true)", input_channel);
+         return make_pair<bool,bool>(true,true);
+      }
+      else // A HEAD or BODY flit
+      {
+         LOG_PRINT("sendFlit(%i) exit->(true,false)", input_channel);
+         return make_pair<bool,bool>(true,false);
+      }
+   }
+
    // Get the curr output_endpoint
    flit->_output_endpoint = flit_buffer->_output_endpoint_list->curr();
 
-   LOG_PRINT("Output Endpoint(%i,%i)", flit->_output_endpoint._channel_id, \
+   LOG_PRINT("Output Endpoint(%i,%i)", flit->_output_endpoint._channel_id,
          flit->_output_endpoint._index);
 
    if (flit->_output_endpoint == flit_buffer->_output_endpoint_list->first())
@@ -171,7 +210,7 @@ WormholeFlowControlScheme::sendFlit(SInt32 input_channel)
 
    SInt32 output_channel = flit->_output_endpoint._channel_id;
 
-   if ( (_input_channels_allocated_vec[output_channel] != Channel::INVALID) && \
+   if ( (_input_channels_allocated_vec[output_channel] != Channel::INVALID) &&
       (_input_channels_allocated_vec[output_channel] != input_channel) )
    {
       // Flits of some other flow are occupying the output channel to use
@@ -277,7 +316,7 @@ bool
 WormholeFlowControlScheme::allocateDownstreamBuffer(Flit* flit)
 {
    Channel::Endpoint& output_endpoint = flit->_output_endpoint;
-   ListOfBufferUsageHistories* list_of_buffer_usage_histories = \
+   ListOfBufferUsageHistories* list_of_buffer_usage_histories =
          _list_of_downstream_buffer_usage_histories_vec[output_endpoint._channel_id];
    return list_of_buffer_usage_histories->allocateBuffer(flit, output_endpoint._index);
 }

@@ -33,7 +33,7 @@ BufferModel::updateFlitTime()
 {
    Flit* flit = _queue.front();
    
-   LOG_PRINT("updateFlitTime() enter: Flit Time(%llu), Buffer Time(%llu)", \
+   LOG_PRINT("updateFlitTime() enter: Flit Time(%llu), Buffer Time(%llu)",
          flit->_normalized_time, _queue_time);
 
    // Synchronize the flit time to the buffer time

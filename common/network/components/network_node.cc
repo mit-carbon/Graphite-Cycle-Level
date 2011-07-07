@@ -46,7 +46,7 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
    _last_net_packet_time = input_net_packet->time;
 
    LOG_PRINT("#########################################################");
-   printNetPacket(input_net_packet, true);
+   // printNetPacket(input_net_packet, true);
    LOG_PRINT("=========================================================");
 
    NetworkMsg* input_network_msg = (NetworkMsg*) input_net_packet->data;
