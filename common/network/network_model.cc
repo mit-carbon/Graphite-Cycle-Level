@@ -4,10 +4,8 @@ using namespace std;
 #include "network_types.h"
 #include "network_model_magic.h"
 #include "network_model_emesh_hop_counter.h"
-#include "network_model_emesh_hop_by_hop_basic.h"
-#include "network_model_emesh_hop_by_hop_broadcast_tree.h"
-#include "finite_buffer_network_model_emesh_basic.h"
-#include "finite_buffer_network_model_emesh_broadcast_tree.h"
+#include "network_model_emesh_hop_by_hop.h"
+#include "finite_buffer_network_model_emesh.h"
 #include "finite_buffer_network_model_atac.h"
 #include "log.h"
 
@@ -43,17 +41,11 @@ NetworkModel::createModel(Network *net, SInt32 network_id, UInt32 model_type)
    case NETWORK_EMESH_HOP_COUNTER:
       return new NetworkModelEMeshHopCounter(net, network_id);
 
-   case NETWORK_EMESH_HOP_BY_HOP_BASIC:
-      return new NetworkModelEMeshHopByHopBasic(net, network_id);
+   case NETWORK_EMESH_HOP_BY_HOP:
+      return new NetworkModelEMeshHopByHop(net, network_id);
 
-   case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
-      return new NetworkModelEMeshHopByHopBroadcastTree(net, network_id);
-
-   case FINITE_BUFFER_NETWORK_EMESH_BASIC:
-      return new FiniteBufferNetworkModelEMeshBasic(net, network_id);
-
-   case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
-      return new FiniteBufferNetworkModelEMeshBroadcastTree(net, network_id);
+   case FINITE_BUFFER_NETWORK_EMESH:
+      return new FiniteBufferNetworkModelEMesh(net, network_id);
 
    case FINITE_BUFFER_NETWORK_ATAC:
       return new FiniteBufferNetworkModelAtac(net, network_id);
@@ -71,14 +63,10 @@ NetworkModel::parseNetworkType(string str)
       return NETWORK_MAGIC;
    else if (str == "emesh_hop_counter")
       return NETWORK_EMESH_HOP_COUNTER;
-   else if (str == "emesh_hop_by_hop_basic")
-      return NETWORK_EMESH_HOP_BY_HOP_BASIC;
-   else if (str == "emesh_hop_by_hop_broadcast_tree")
-      return NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE;
-   else if (str == "finite_buffer_emesh_basic")
-      return FINITE_BUFFER_NETWORK_EMESH_BASIC;
-   else if (str == "finite_buffer_emesh_broadcast_tree")
-      return FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE;
+   else if (str == "emesh_hop_by_hop")
+      return NETWORK_EMESH_HOP_BY_HOP;
+   else if (str == "finite_buffer_emesh")
+      return FINITE_BUFFER_NETWORK_EMESH;
    else if (str == "finite_buffer_atac")
       return FINITE_BUFFER_NETWORK_ATAC;
    else
@@ -97,12 +85,10 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
       case NETWORK_EMESH_HOP_COUNTER:
          return make_pair(false,core_count);
 
-      case NETWORK_EMESH_HOP_BY_HOP_BASIC:
-      case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
-         return NetworkModelEMeshHopByHopGeneric::computeCoreCountConstraints(core_count);
+      case NETWORK_EMESH_HOP_BY_HOP:
+         return NetworkModelEMeshHopByHop::computeCoreCountConstraints(core_count);
 
-      case FINITE_BUFFER_NETWORK_EMESH_BASIC:
-      case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
+      case FINITE_BUFFER_NETWORK_EMESH:
          return FiniteBufferNetworkModelEMesh::computeCoreCountConstraints(core_count);
 
       case FINITE_BUFFER_NETWORK_ATAC:
@@ -135,12 +121,10 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
             return make_pair(false, core_list_with_memory_controllers);
          }
 
-      case NETWORK_EMESH_HOP_BY_HOP_BASIC:
-      case NETWORK_EMESH_HOP_BY_HOP_BROADCAST_TREE:
-         return NetworkModelEMeshHopByHopGeneric::computeMemoryControllerPositions(num_memory_controllers);
+      case NETWORK_EMESH_HOP_BY_HOP:
+         return NetworkModelEMeshHopByHop::computeMemoryControllerPositions(num_memory_controllers);
 
-      case FINITE_BUFFER_NETWORK_EMESH_BASIC:
-      case FINITE_BUFFER_NETWORK_EMESH_BROADCAST_TREE:
+      case FINITE_BUFFER_NETWORK_EMESH:
          return FiniteBufferNetworkModelEMesh::computeMemoryControllerPositions(num_memory_controllers);
       
       case FINITE_BUFFER_NETWORK_ATAC:

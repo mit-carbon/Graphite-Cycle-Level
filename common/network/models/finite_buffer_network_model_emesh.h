@@ -5,7 +5,7 @@
 class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
 {
    public:
-      FiniteBufferNetworkModelEMesh(Network* net, SInt32 network_id, bool broadcast_enabled);
+      FiniteBufferNetworkModelEMesh(Network* net, SInt32 network_id);
       ~FiniteBufferNetworkModelEMesh();
   
       volatile float getFrequency() { return _frequency; }

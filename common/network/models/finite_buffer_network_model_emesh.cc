@@ -10,15 +10,10 @@
 #include "config.h"
 #include "log.h"
 
-FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net,
-      SInt32 network_id, bool broadcast_enabled):
+FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net, SInt32 network_id):
    FiniteBufferNetworkModel(net, network_id)
 {
-   if (broadcast_enabled)
-      _emesh_network = "network/emesh_hop_by_hop_broadcast_tree/";
-   else
-      _emesh_network = "network/emesh_hop_by_hop_basic/";
-
+   _emesh_network = "network/emesh_hop_by_hop/";
    // Initialize EMesh Topology Parameters
    computeEMeshTopologyParameters(_emesh_width, _emesh_height);
 
@@ -27,7 +22,7 @@ FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net,
    {
       _frequency = Sim()->getCfg()->getFloat(_emesh_network + "frequency");
       _flit_width = Sim()->getCfg()->getInt(_emesh_network + "flit_width");
-      _flow_control_scheme = FlowControlScheme::parse( \
+      _flow_control_scheme = FlowControlScheme::parse(
             Sim()->getCfg()->getString(_emesh_network + "flow_control_scheme"));
    }
    catch (...)
@@ -127,20 +122,20 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
    }
 
    // Create the router performance model
-   RouterPerformanceModel* router_performance_model = \
-         new RouterPerformanceModel( \
-               _flow_control_scheme, \
-               data_pipeline_delay, \
-               credit_pipeline_delay, \
-               num_input_channels, num_output_channels, \
-               num_input_endpoints_list, num_output_endpoints_list, \
-               input_buffer_management_schemes, downstream_buffer_management_schemes, \
-               input_buffer_size_list, downstream_buffer_size_list);
+   RouterPerformanceModel* router_performance_model =
+         new RouterPerformanceModel(
+             _flow_control_scheme,
+             data_pipeline_delay,
+             credit_pipeline_delay,
+             num_input_channels, num_output_channels,
+             num_input_endpoints_list, num_output_endpoints_list,
+             input_buffer_management_schemes, downstream_buffer_management_schemes,
+             input_buffer_size_list, downstream_buffer_size_list);
 
    // Create the router power model
-   RouterPowerModel* router_power_model = \
-         RouterPowerModel::create(num_input_channels, num_output_channels, \
-               router_input_buffer_size, _flit_width);
+   RouterPowerModel* router_power_model =
+         RouterPowerModel::create(num_input_channels, num_output_channels,
+                                  router_input_buffer_size, _flit_width);
 
    // Create the output link performance and power models
    vector<LinkPerformanceModel*> link_performance_model_list;

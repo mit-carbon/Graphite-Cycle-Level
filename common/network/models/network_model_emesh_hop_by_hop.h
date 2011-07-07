@@ -1,5 +1,4 @@
-#ifndef __NETWORK_MODEL_EMESH_HOP_BY_HOP_GENERIC_H__
-#define __NETWORK_MODEL_EMESH_HOP_BY_HOP_GENERIC_H__
+#pragma once
 
 #include "network.h"
 #include "network_model.h"
@@ -10,7 +9,7 @@
 #include "electrical_link_performance_model.h"
 #include "electrical_link_power_model.h"
 
-class NetworkModelEMeshHopByHopGeneric : public NetworkModel
+class NetworkModelEMeshHopByHop : public NetworkModel
 {
    public:
       typedef enum
@@ -115,8 +114,8 @@ class NetworkModelEMeshHopByHopGeneric : public NetworkModel
       void initializeModels();
    
    public:
-      NetworkModelEMeshHopByHopGeneric(Network* net, SInt32 network_id);
-      ~NetworkModelEMeshHopByHopGeneric();
+      NetworkModelEMeshHopByHop(Network* net, SInt32 network_id);
+      ~NetworkModelEMeshHopByHop();
 
       volatile float getFrequency() { return m_frequency; }
 
@@ -135,5 +134,3 @@ class NetworkModelEMeshHopByHopGeneric : public NetworkModel
       void disable();
       void reset();
 };
-
-#endif /* __NETWORK_MODEL_EMESH_HOP_BY_HOP_GENERIC_H__ */

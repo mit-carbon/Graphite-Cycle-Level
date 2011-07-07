@@ -511,13 +511,13 @@ FiniteBufferNetworkModelAtac::computeOutputEndpointList(Flit* head_flit, Network
    if (global_route == GLOBAL_ENET)
    {
       LOG_PRINT("Global Route: ENET");
-      computeNextHopsOnENet(curr_network_node, head_flit->_sender, head_flit->_receiver, \
+      computeNextHopsOnENet(curr_network_node, head_flit->_sender, head_flit->_receiver,
             output_endpoint_vec);
    }
    else if (global_route == GLOBAL_ONET)
    {
       LOG_PRINT("Global Route: ONET");
-      computeNextHopsOnONet(curr_network_node, head_flit->_sender, head_flit->_receiver, \
+      computeNextHopsOnONet(curr_network_node, head_flit->_sender, head_flit->_receiver,
             output_endpoint_vec);
    }
 
@@ -599,7 +599,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
                vector<Router::Id>::iterator it = _access_point_list.begin();
                for ( ; it != _access_point_list.end(); it ++)
                {
-                  Channel::Endpoint& output_endpoint = \
+                  Channel::Endpoint& output_endpoint =
                         curr_network_node->getOutputEndpointFromRouterId(*it);
                   output_endpoint_vec.push_back(output_endpoint);
                }
@@ -607,7 +607,7 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
             else // (receiver != NetPacket::BROADCAST)
             {
                Router::Id& access_point = getNearestAccessPoint(receiver);
-               Channel::Endpoint& output_endpoint = \
+               Channel::Endpoint& output_endpoint =
                      curr_network_node->getOutputEndpointFromRouterId(access_point);
                output_endpoint_vec.push_back(output_endpoint);
             }
