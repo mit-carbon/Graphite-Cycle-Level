@@ -255,6 +255,7 @@ void processRecvdPacket(void* obj, NetPacket net_packet)
    if (total_packets_received == _total_packets)
    {
       _semaphore.signal();
+      debug_printf("Core(%i) received all packets\n", receiver);
    }
 }
 
