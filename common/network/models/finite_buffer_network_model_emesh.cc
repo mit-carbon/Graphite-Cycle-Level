@@ -17,7 +17,7 @@ FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net, SInt3
    // Initialize EMesh Topology Parameters
    computeEMeshTopologyParameters(_emesh_width, _emesh_height);
 
-   // Get Network Parameters
+   // Get Network parameters
    try
    {
       _frequency = Sim()->getCfg()->getFloat(_emesh_network + "frequency");
