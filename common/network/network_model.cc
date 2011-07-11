@@ -6,7 +6,9 @@ using namespace std;
 #include "network_model_emesh_hop_counter.h"
 #include "network_model_emesh_hop_by_hop.h"
 #include "finite_buffer_network_model_emesh.h"
+#include "finite_buffer_network_model_clos.h"
 #include "finite_buffer_network_model_atac.h"
+#include "finite_buffer_network_model_flip_atac.h"
 #include "log.h"
 
 #include "network.h"
@@ -50,6 +52,12 @@ NetworkModel::createModel(Network *net, SInt32 network_id, UInt32 model_type)
    case FINITE_BUFFER_NETWORK_ATAC:
       return new FiniteBufferNetworkModelAtac(net, network_id);
 
+   case FINITE_BUFFER_NETWORK_CLOS:
+	  return new FiniteBufferNetworkModelClos(net, network_id);
+     
+   case FINITE_BUFFER_NETWORK_FLIP_ATAC:
+      return new FiniteBufferNetworkModelFlipAtac(net, network_id);
+   
    default:
       LOG_PRINT_ERROR("Unrecognized Network Model(%u)", model_type);
       return NULL;
@@ -69,6 +77,10 @@ NetworkModel::parseNetworkType(string str)
       return FINITE_BUFFER_NETWORK_EMESH;
    else if (str == "finite_buffer_atac")
       return FINITE_BUFFER_NETWORK_ATAC;
+   else if(str == "finite_buffer_clos")
+	  return FINITE_BUFFER_NETWORK_CLOS;
+   else if (str == "finite_buffer_flip_atac")
+     return FINITE_BUFFER_NETWORK_FLIP_ATAC;
    else
    {
       fprintf(stderr, "Unrecognized Network Type(%s)\n", str.c_str());
@@ -94,6 +106,12 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
       case FINITE_BUFFER_NETWORK_ATAC:
          return FiniteBufferNetworkModelAtac::computeCoreCountConstraints(core_count);
 
+      case FINITE_BUFFER_NETWORK_CLOS:
+         return FiniteBufferNetworkModelClos::computeCoreCountConstraints(core_count);
+			
+      case FINITE_BUFFER_NETWORK_FLIP_ATAC:
+         return FiniteBufferNetworkModelFlipAtac::computeCoreCountConstraints(core_count);
+         
       default:
          fprintf(stderr, "Unrecognized network type(%u)\n", network_type);
          assert(false);
@@ -130,6 +148,12 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
       case FINITE_BUFFER_NETWORK_ATAC:
          return FiniteBufferNetworkModelAtac::computeMemoryControllerPositions(num_memory_controllers);
 
+      case FINITE_BUFFER_NETWORK_CLOS:
+            return FiniteBufferNetworkModelClos::computeMemoryControllerPositions(num_memory_controllers);
+
+      case FINITE_BUFFER_NETWORK_FLIP_ATAC:
+         return FiniteBufferNetworkModelFlipAtac::computeMemoryControllerPositions(num_memory_controllers); 
+         
       default:
          LOG_PRINT_ERROR("Unrecognized network type(%u)", network_type);
          return make_pair(false, vector<core_id_t>());
