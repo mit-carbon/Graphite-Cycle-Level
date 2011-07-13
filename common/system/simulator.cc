@@ -76,8 +76,12 @@ Simulator::start()
 {
    LOG_PRINT("In Simulator ctor.");
 
+   // Get Graphite Home
+   char* graphite_home_str = getenv("GRAPHITE_HOME");
+   _graphite_home = (graphite_home_str) ? ((string)graphite_home_str) : ".";
+   
    // Create Orion Config Object
-   string orion_cfg_file = "./contrib/orion/orion.cfg";
+   string orion_cfg_file = _graphite_home + "/contrib/orion/orion.cfg";
    OrionConfig::allocate(orion_cfg_file);
    LOG_PRINT("Allocated OrionConfig");
    // OrionConfig::getSingleton()->print_config(cout);
