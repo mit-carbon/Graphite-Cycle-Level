@@ -28,6 +28,8 @@ NetworkNode::NetworkNode(Router::Id router_id,
 {
    assert(_router_performance_model);
    createMappings();
+   
+   // printNode();
 
    // Time Normalizer
    // _time_normalizer = TimeNormalizer::create(Config::getSingleton()->getApplicationCores());
@@ -345,11 +347,11 @@ NetworkNode::createMappings()
    {
       for (SInt32 j = 0; j < (SInt32) _input_channel_to_router_id_list__mapping[i].size(); j++)
       {
-         _router_id_to_input_endpoint_mapping.insert( \
-               make_pair<Router::Id, Channel::Endpoint>( \
-                  Router::Id(_input_channel_to_router_id_list__mapping[i][j]), \
-                  Channel::Endpoint(i,j) \
-               ) \
+         _router_id_to_input_endpoint_mapping.insert(
+               make_pair<Router::Id, Channel::Endpoint>(
+                  Router::Id(_input_channel_to_router_id_list__mapping[i][j]),
+                  Channel::Endpoint(i,j)
+               )
             );
       }
    }
@@ -358,11 +360,11 @@ NetworkNode::createMappings()
    {
       for (SInt32 j = 0; j < (SInt32) _output_channel_to_router_id_list__mapping[i].size(); j++)
       {
-         _router_id_to_output_endpoint_mapping.insert( \
-               make_pair<Router::Id, Channel::Endpoint>( \
-                  Router::Id(_output_channel_to_router_id_list__mapping[i][j]), \
-                  Channel::Endpoint(i,j) \
-               ) \
+         _router_id_to_output_endpoint_mapping.insert(
+               make_pair<Router::Id, Channel::Endpoint>(
+                  Router::Id(_output_channel_to_router_id_list__mapping[i][j]),
+                  Channel::Endpoint(i,j)
+               )
             );
       }
    }
@@ -371,14 +373,16 @@ NetworkNode::createMappings()
 Channel::Endpoint&
 NetworkNode::getInputEndpointFromRouterId(Router::Id& router_id)
 {
-   assert(_router_id_to_input_endpoint_mapping.find(router_id) != _router_id_to_input_endpoint_mapping.end());
+   LOG_ASSERT_ERROR(_router_id_to_input_endpoint_mapping.find(router_id) != _router_id_to_input_endpoint_mapping.end(),
+         "Router ID(%i,%i), Network Node(%i,%i)", router_id._core_id, router_id._index, _router_id._core_id, _router_id._index);
    return _router_id_to_input_endpoint_mapping[router_id];
 }
 
 Channel::Endpoint&
 NetworkNode::getOutputEndpointFromRouterId(Router::Id& router_id)
 {
-   assert(_router_id_to_output_endpoint_mapping.find(router_id) != _router_id_to_output_endpoint_mapping.end());
+   LOG_ASSERT_ERROR(_router_id_to_output_endpoint_mapping.find(router_id) != _router_id_to_output_endpoint_mapping.end(),
+         "Router ID(%i,%i), Network Node(%i,%i)", router_id._core_id, router_id._index, _router_id._core_id, _router_id._index);
    return _router_id_to_output_endpoint_mapping[router_id];
 }
 
@@ -407,6 +411,34 @@ NetworkNode::getRouterIdListFromOutputChannel(SInt32 output_channel_id)
 {
    assert( (output_channel_id >= 0) && (output_channel_id < (SInt32) _output_channel_to_router_id_list__mapping.size()) );
    return _output_channel_to_router_id_list__mapping[output_channel_id];
+}
+
+void
+NetworkNode::printNode()
+{
+   fprintf(stderr, "\n\nRouter Id(%i,%i)\n", _router_id._core_id, _router_id._index);
+   fprintf(stderr, "Input Channels\n");
+   for (UInt32 i = 0; i < _input_channel_to_router_id_list__mapping.size(); i++)
+   {
+      fprintf(stderr, "%i -> ", i);
+      for (UInt32 j = 0; j < _input_channel_to_router_id_list__mapping[i].size(); j++)
+      {
+         Router::Id router_id = _input_channel_to_router_id_list__mapping[i][j];
+         fprintf(stderr, "(%i,%i), ", router_id._core_id, router_id._index);
+      }
+      fprintf(stderr, "\n");
+   }
+   fprintf(stderr, "Output Channels\n");
+   for (UInt32 i = 0; i < _output_channel_to_router_id_list__mapping.size(); i++)
+   {
+      fprintf(stderr, "%i -> ", i);
+      for (UInt32 j = 0; j < _output_channel_to_router_id_list__mapping[i].size(); j++)
+      {
+         Router::Id router_id = _output_channel_to_router_id_list__mapping[i][j];
+         fprintf(stderr, "(%i,%i), ", router_id._core_id, router_id._index);
+      }
+      fprintf(stderr, "\n");
+   }
 }
 
 void
