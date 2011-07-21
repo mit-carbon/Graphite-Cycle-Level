@@ -34,7 +34,7 @@ class FiniteBufferNetworkModelFlipAtac : public FiniteBufferNetworkModel
    private:
       
       // Creates a network node (a router with appropriate connections and performance/power models)
-      NetworkNode* createNetworkNode(core_id_t node_coreID, SInt32 router_index);
+      NetworkNode* createNetworkNode(core_id_t node_coreID, SInt32 router_index, core_id_t mid_cluster_id);
 	  	
       // Topology Parameters
       // m x n x r Clos network (according to Dally notation)
@@ -48,7 +48,8 @@ class FiniteBufferNetworkModelFlipAtac : public FiniteBufferNetworkModel
 	  
       // Info about the cluster this core is located on
       core_id_t _cluster_id;                        // the id of this core's cluster
-      vector<core_id_t> cluster_mux_coreID_list;    // list of core_id's of MUX_ROUTERs this core's cluster contains
+      core_id_t _mid_cluster_id;					// need middle router cluster id for cases when _num_mid_routers > _num_in_routers since middle router with this coreID might be in different cluster than core with this ID
+	  vector<core_id_t> cluster_mux_coreID_list;    // list of core_id's of MUX_ROUTERs this core's cluster contains
 	  
      // lists of ingress, middle, and egress routers' coreIDs
 	  vector<core_id_t> _ingress_coreID_list;
