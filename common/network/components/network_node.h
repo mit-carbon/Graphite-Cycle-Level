@@ -96,6 +96,8 @@ private:
    // Create Router <-> Channel Mappings 
    void createMappings();
 
+   // Print Router
+   void printNode();
    // Print NetPacket
    void printNetPacket(NetPacket* net_packet, bool is_input_msg = false);
 };
