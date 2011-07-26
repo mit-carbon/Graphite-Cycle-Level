@@ -76,6 +76,7 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
       Flit* flit_to_send = (Flit*) net_packet_to_send->data;
       flit_to_send->_sender_router_index = CORE_INTERFACE;
       flit_to_send->_receiver_router_index = ingress_router_id._index;
+      flit_to_send->_net_packet = net_packet;
    }
 
    LOG_PRINT("sendNetPacket() exit, net_packet_list_to_send.size(%u)", net_packet_list_to_send.size());
@@ -121,6 +122,7 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
 
       else // (router_idx != Router::Id::CORE_INTERFACE)
       {
+         LOG_PRINT("Receiver Router coreID %i, _network_node_list size = %i", net_packet->receiver, _network_node_list.size()); 
          LOG_ASSERT_ERROR(router_idx >= 0 && router_idx < (SInt32) _network_node_list.size(),
                "Receiver Router Idx(%i), Type(%s)", router_idx, network_msg->getTypeString().c_str());
 

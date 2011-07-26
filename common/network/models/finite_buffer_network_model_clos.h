@@ -53,7 +53,28 @@ class FiniteBufferNetworkModelClos : public FiniteBufferNetworkModel
 	  //max = 5
 	  SInt32 num_nodes_on_core; 		
 	  
-	  // Virtual function in FiniteBufferNetworkModel
+	  // Event counters
+     // note: router_switch_allocator gets incremented once per packet
+     // and the rest of event counters get incremented once per flit
+     UInt64 _input_link_traversal;                  //from core to INGRESS
+     UInt64 _ingress_to_mid_link_traversal;         //from INGRESS to MIDDLE
+     UInt64 _mid_to_egress_link_traversal;          //from MIDDLE to EGRESS
+     UInt64 _output_link_traversal;                 //from EGRESS to core
+     // INGRESS router event counts
+     UInt64 _ingress_buffer_access;                
+     UInt64 _ingress_switch_allocator;              
+     UInt64 _ingress_crossbar_traversal;
+     // MIDDLE router event counts
+     UInt64 _mid_buffer_access;                
+     UInt64 _mid_switch_allocator;              
+     UInt64 _mid_crossbar_traversal;
+     // EGRESS router event counts
+     UInt64 _egress_buffer_access;                
+     UInt64 _egress_switch_allocator;              
+     UInt64 _egress_crossbar_traversal;
+     
+     UInt32 _num_flits;
+     // Virtual function in FiniteBufferNetworkModel
 	  // Main Routing Function ************************
       void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
       // Function to compute ingress router sender core is connected to

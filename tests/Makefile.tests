@@ -39,7 +39,7 @@ PIN_RUN=$(PIN_BIN) -mt -t $(PIN_TOOL)
 VALGRIND = # valgrind --leak-check=yes
 
 PROCS ?= 1
-CORES ?= 1024
+CORES ?= 64 
 ENABLE_SM ?= true 
 APP_FLAGS ?=
 BUILD_MODE ?= # Set to nonempty to not run anything
