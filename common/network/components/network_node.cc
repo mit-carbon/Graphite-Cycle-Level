@@ -28,7 +28,14 @@ NetworkNode::NetworkNode(Router::Id router_id,
 {
    assert(_router_performance_model);
    createMappings();
-   
+
+   // Number of Input and Output Channels
+   _num_input_channels = _input_channel_to_router_id_list__mapping.size();
+   _num_output_channels = _output_channel_to_router_id_list__mapping.size();
+  
+   // Initialize Event Counters
+   initializeEventCounters();
+
    // printNode();
 
    // Time Normalizer
@@ -253,6 +260,13 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
          // Increment Zero Load Delay
          flit->_zero_load_delay += (_router_performance_model->getDataPipelineDelay() +
                                     _link_performance_model_list[output_channel]->getDelay());
+
+         // Increment Event Counters
+         _total_input_buffer_writes += flit->_length;
+         _total_input_buffer_reads += flit->_length;
+         _total_switch_allocator_requests += ((flit->_type & Flit::HEAD) ? 1 : 0);
+         _total_crossbar_traversals += flit->_length;
+         _total_link_traversals[output_channel] += flit->_length;
       }
       
       break;
@@ -280,6 +294,37 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
       break;
    }
    LOG_PRINT("performRouterAndLinkTraversal(%p) end", output_network_msg)
+}
+
+void
+NetworkNode::initializeEventCounters()
+{
+   _total_input_buffer_writes = 0;
+   _total_input_buffer_reads = 0;
+   _total_switch_allocator_requests = 0;
+   _total_crossbar_traversals = 0;
+   _total_link_traversals.resize(_num_output_channels);
+   for (SInt32 i = 0; i < _num_output_channels; i++)
+      _total_link_traversals[i] = 0;
+}
+
+UInt64
+NetworkNode::getTotalLinkTraversals(SInt32 channel_id)
+{
+   if (channel_id == Channel::ALL)
+   {
+      UInt64 total_traversals = 0;
+      for (SInt32 i = 0; i < _num_output_channels; i++)
+         total_traversals += _total_link_traversals[i];
+      return total_traversals;
+   }
+   else
+   {
+      LOG_ASSERT_ERROR(channel_id >= 0 && channel_id < _num_output_channels,
+            "Invalid Channel ID(%i) not in [0,%i]",
+            channel_id, _num_output_channels);
+      return _total_link_traversals[channel_id];
+   }
 }
 
 void

@@ -37,6 +37,9 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
       // Compute Ingress Router Id
       Router::Id computeIngressRouterId(core_id_t core_id);
 
+      // Event Count Summary
+      void outputEventCountSummary(ostream& out);
+
       // Private Variables
       volatile float _frequency;
       

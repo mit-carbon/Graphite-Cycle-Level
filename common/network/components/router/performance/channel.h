@@ -25,5 +25,6 @@ public:
       static const SInt32 ALL;
    };
 
+   static const SInt32 ALL;
    static const SInt32 INVALID;
 };
