@@ -371,4 +371,16 @@ void
 FiniteBufferNetworkModelEMesh::outputSummary(ostream& out)
 {
    FiniteBufferNetworkModel::outputSummary(out);
+   outputEventCountSummary(out);
+}
+
+void
+FiniteBufferNetworkModelEMesh::outputEventCountSummary(ostream& out)
+{
+   out << "  Event Counters: " << endl;
+   out << "    Total Input Buffer Writes: " << _network_node_list[EMESH]->getTotalInputBufferWrites() << endl;
+   out << "    Total Input Buffer Reads: " << _network_node_list[EMESH]->getTotalInputBufferReads() << endl;
+   out << "    Total Switch Allocator Requests: " << _network_node_list[EMESH]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Total Crossbar Traversals: " << _network_node_list[EMESH]->getTotalCrossbarTraversals() << endl;
+   out << "    Total Link Traversals: " << _network_node_list[EMESH]->getTotalLinkTraversals(Channel::ALL) << endl;
 }

@@ -47,6 +47,17 @@ public:
    Router::Id& getRouterIdFromOutputEndpoint(Channel::Endpoint& output_endpoint);
    vector<Router::Id>& getRouterIdListFromOutputChannel(SInt32 output_channel_id);
 
+   // Query Event Counters
+   UInt64 getTotalInputBufferWrites()
+   { return _total_input_buffer_writes; }
+   UInt64 getTotalInputBufferReads()
+   { return _total_input_buffer_reads; }
+   UInt64 getTotalSwitchAllocatorRequests()
+   { return _total_switch_allocator_requests; }
+   UInt64 getTotalCrossbarTraversals()
+   { return _total_crossbar_traversals; }
+   UInt64 getTotalLinkTraversals(SInt32 channel_id);
+
    // RouterPerformanceModel
    RouterPerformanceModel* getRouterPerformanceModel()
    { return _router_performance_model; }
@@ -67,8 +78,19 @@ private:
    vector<LinkPerformanceModel*> _link_performance_model_list;
    vector<LinkPowerModel*> _link_power_model_list;
 
+   // Event Counters
+   UInt64 _total_input_buffer_writes;
+   UInt64 _total_input_buffer_reads;
+   UInt64 _total_switch_allocator_requests;
+   UInt64 _total_crossbar_traversals;
+   vector<UInt64> _total_link_traversals;
+
    // Time Normalizer
    // TimeNormalizer* _time_normalizer;
+
+   // Number of Input and Output Channels
+   SInt32 _num_input_channels;
+   SInt32 _num_output_channels;
 
    // Endpoint <-> Router Id mapping
    vector<vector<Router::Id> > _input_channel_to_router_id_list__mapping;
@@ -95,6 +117,9 @@ private:
   
    // Create Router <-> Channel Mappings 
    void createMappings();
+   
+   // Initialize Event Counters
+   void initializeEventCounters();
 
    // Print Router
    void printNode();
