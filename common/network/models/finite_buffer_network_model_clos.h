@@ -53,27 +53,6 @@ class FiniteBufferNetworkModelClos : public FiniteBufferNetworkModel
 	  //max = 5
 	  SInt32 num_nodes_on_core; 		
 	  
-	  // // Event counters
-     // // note: router_switch_allocator gets incremented once per packet
-     // // and the rest of event counters get incremented once per flit
-     // UInt64 _input_link_traversal;                  //from core to INGRESS
-     // UInt64 _ingress_to_mid_link_traversal;         //from INGRESS to MIDDLE
-     // UInt64 _mid_to_egress_link_traversal;          //from MIDDLE to EGRESS
-     // UInt64 _output_link_traversal;                 //from EGRESS to core
-     // // INGRESS router event counts
-     // UInt64 _ingress_buffer_access;                
-     // UInt64 _ingress_switch_allocator;              
-     // UInt64 _ingress_crossbar_traversal;
-     // // MIDDLE router event counts
-     // UInt64 _mid_buffer_access;                
-     // UInt64 _mid_switch_allocator;              
-     // UInt64 _mid_crossbar_traversal;
-     // // EGRESS router event counts
-     // UInt64 _egress_buffer_access;                
-     // UInt64 _egress_switch_allocator;              
-     // UInt64 _egress_crossbar_traversal;
-     void outputEventCountSummary(ostream& out);
-     
      UInt32 _num_flits;
      // Virtual function in FiniteBufferNetworkModel
 	  // Main Routing Function ************************
@@ -90,6 +69,7 @@ class FiniteBufferNetworkModelClos : public FiniteBufferNetworkModel
       // Private Functions
       static void readTopologyParams(UInt32& m, UInt32& n, UInt32& r);
       UInt32 getRandNum(UInt32 start, UInt32 end);          // to generate random middle router index
+      void outputEventCountSummary(ostream& out);           // Print out event counts in sim.out file
       
       //functions used in createNetworkNode to compute the core_id of connected routers
       core_id_t computeInterfaceCoreID(core_id_t node_coreID, UInt32 i);
