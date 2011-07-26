@@ -1,5 +1,5 @@
-#include <algorithm> //??
-#include <cmath>	//??
+#include <algorithm> 
+#include <cmath>	
 
 #include "router.h"
 #include "router_performance_model.h"
@@ -71,24 +71,36 @@ FiniteBufferNetworkModelFlipAtac::FiniteBufferNetworkModelFlipAtac(Network* netw
 	// store these coreIDs in list for ingress, middle and/or egress
 	LOG_PRINT("Computing which cores have ingress, middle, and/or egress routers...");
 	// INGRESS_ROUTER list of coreIDs
-   for (UInt32 i = 0; i < _num_in_routers; i++)
+   for (UInt32 i = 0; i < (_num_in_routers *_num_clusters); i++)
    {
-      _ingress_coreID_list.push_back((_cluster_id * _num_in_routers + i) * _num_router_ports);		//this is the mapping convention for ingress routers
+      _ingress_coreID_list.push_back(i * _num_router_ports);		//this is the mapping convention for ingress routers
    }
 	
 	// MIDDLE_ROUTER list of coreIDs
    SInt32 num_in_cores = _num_in_routers * _num_router_ports;
-   for (UInt32 i = 0; i < _num_mid_routers; i++)
+   for (UInt32 i = 0; i < (_num_mid_routers *_num_clusters); i++)
    {
-      _middle_coreID_list.push_back( ((_cluster_id * _num_mid_routers + i) * (num_in_cores/_num_mid_routers)) + 1);
+      _middle_coreID_list.push_back( (i * (num_in_cores/_num_mid_routers)) + 1);
    }
 
+    _mid_cluster_id = _cluster_id;
+	// need middle router cluster id for cases when _num_mid_routers > _num_in_routers
+    if (core_id){ //if core_id = 0, keep _mid_cluster_id 0
+		UInt32 mid_index = ((core_id -1) / (num_in_cores/_num_mid_routers)); // - (_cluster_id * _num_mid_routers);
+		_mid_cluster_id = mid_index/_num_mid_routers;
+		LOG_PRINT("mid_index is %i", mid_index);
+	}
+	LOG_PRINT("_mid_cluster_id created for core id %i is %i", core_id,_mid_cluster_id);
+
+	LOG_PRINT("Egress router list for cluster id %i", _cluster_id);
 	// EGRESS_ROUTER list of coreIDs
-   for (UInt32 i = 0; i < _num_in_routers; i++)
+   for (UInt32 i = 0; i < (_num_in_routers*_num_clusters); i++)
    {
-      _egress_coreID_list.push_back( ((_cluster_id * _num_in_routers + i) * _num_router_ports) + _num_router_ports-1);
+      _egress_coreID_list.push_back( (i * _num_router_ports) + _num_router_ports-1);
+		//LOG_PRINT("Egress router list: core_id %i", (((mid_cluster_id * _num_in_routers + i) * _num_router_ports) + _num_router_ports-1));
    }
-    
+   
+   
    // Create this cluster's list of MUX_ROUTERs
    for (UInt32 i = 0; i < _num_cores_per_cluster; i++){
       core_id_t mux_core_id = (_cluster_id * _num_cores_per_cluster) + i;
@@ -98,24 +110,24 @@ FiniteBufferNetworkModelFlipAtac::FiniteBufferNetworkModelFlipAtac(Network* netw
    // Always create all types of nodes (BCAST, MUX, INGRESS, MIDDLE, EGRESS) for each core. 
    // Note: this is to comply with the finite buffer model framework (indexing in _network_node_list vector)
    LOG_PRINT("Create BCAST_ROUTER for core_id %i", core_id);
-	NetworkNode* bcast_router = createNetworkNode(core_id, BCAST_ROUTER);
+	NetworkNode* bcast_router = createNetworkNode(core_id, BCAST_ROUTER, _mid_cluster_id);
 	// add this node to the list of network nodes associated with this core (list is declared protected in "finite_buffer_network_model.h")
 	_network_node_list.push_back(bcast_router);
    
    LOG_PRINT("Create MUX_ROUTER for core_id %i", core_id);
-	NetworkNode* mux_router = createNetworkNode(core_id, MUX_ROUTER);
+	NetworkNode* mux_router = createNetworkNode(core_id, MUX_ROUTER, _mid_cluster_id);
 	_network_node_list.push_back(mux_router);          // add this node to the list of network nodes associated with this core
    
    LOG_PRINT("Create INGRESS_ROUTER for core_id %i", core_id);
-	NetworkNode* ingress_router = createNetworkNode(core_id, INGRESS_ROUTER);
+	NetworkNode* ingress_router = createNetworkNode(core_id, INGRESS_ROUTER, _mid_cluster_id);
 	_network_node_list.push_back(ingress_router);      // add this node to the list of network nodes associated with this core
          
    LOG_PRINT("Create MIDDLE_ROUTER for core_id %i", core_id);
-	NetworkNode* middle_router = createNetworkNode(core_id, MIDDLE_ROUTER);
+	NetworkNode* middle_router = createNetworkNode(core_id, MIDDLE_ROUTER, _mid_cluster_id);
 	_network_node_list.push_back(middle_router);       // add this node to the list of network nodes associated with this core
 	
    LOG_PRINT("Create EGRESS_ROUTER for core_id %i", core_id);
-	NetworkNode* egress_router = createNetworkNode(core_id, EGRESS_ROUTER);
+	NetworkNode* egress_router = createNetworkNode(core_id, EGRESS_ROUTER, _mid_cluster_id);
 	_network_node_list.push_back(egress_router);       // add this node to the list of network nodes associated with this core
    
   
@@ -274,9 +286,10 @@ FiniteBufferNetworkModelFlipAtac::computeOutputEndpointList(Flit* head_flit, Net
       
       //compute coreID of egress router the receiving core is connected to (based on coreID)
       //simular computation as for sending core connections to ingress routers
-      core_id_t next_coreID = _egress_coreID_list[(head_flit->_receiver/_num_router_ports) - (_cluster_id * _num_in_routers)];
-      
-      //this is router id for next destination
+      core_id_t next_coreID = _egress_coreID_list[(head_flit->_receiver/_num_router_ports)]; // - (_cluster_id * _num_in_routers)];
+      //LOG_PRINT("Next destination from middle has core Id %i", _egress_coreID_list[1]);
+     
+	 //this is router id for next destination
       Router::Id router_id(next_coreID, EGRESS_ROUTER); 
       LOG_PRINT("Next destination Router Id [%i,%i]", router_id._core_id, router_id._index);
       
@@ -315,7 +328,7 @@ FiniteBufferNetworkModelFlipAtac::computeOutputEndpointList(Flit* head_flit, Net
 
 // creates network node of type router_index for the core with id node_coreID
 NetworkNode*
-FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt32 router_index)
+FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt32 router_index, core_id_t mid_cluster_id)
 {
 	LOG_PRINT("createNetworkNode for Router Id(%i, %i) enter", node_coreID, router_index);
    
@@ -438,7 +451,7 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 		LOG_PRINT("Creating INGRESS output...");
       // add connections to all middle routers at output
 		for (UInt32 i = 0; i < _num_mid_routers; i++){
-			core_id_t coreID = computeMiddleCoreID(i);  
+			core_id_t coreID = computeMiddleCoreID((_cluster_id*_num_mid_routers)+i);  
 			Router::Id router_id(coreID, MIDDLE_ROUTER);
 			NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, router_id); 
 			num_output_endpoints_list.push_back(1);	
@@ -457,10 +470,11 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
       // for each input channel of middle router
 	   // add connections to all ingress routers
 		for (UInt32 i = 0; i < _num_in_routers; i++){
-			core_id_t coreID = computeIngressCoreID(i); 
+			core_id_t coreID = computeIngressCoreID((mid_cluster_id*_num_in_routers) + i); 
 			Router::Id router_id(coreID, INGRESS_ROUTER);
 			NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, router_id); 
 			num_input_endpoints_list.push_back(1);					
+			LOG_PRINT("MIDDLE input router id: %i, %i", coreID, INGRESS_ROUTER);
 			
 			// set buffer schemes
 			input_buffer_management_schemes.push_back(buffer_management_scheme);
@@ -471,7 +485,8 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
       LOG_PRINT("Creating MIDDLE output...");
 	   // add connections to all egress routers
 		for (UInt32 i = 0; i < _num_in_routers; i++){
-			core_id_t coreID = computeEgressCoreID(i);  
+			LOG_PRINT("mid_cluster_id is %i", mid_cluster_id);
+			core_id_t coreID = computeEgressCoreID((mid_cluster_id*_num_in_routers)+i); 
 			Router::Id router_id(coreID, EGRESS_ROUTER);
 			NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, router_id); 
 			num_output_endpoints_list.push_back(1);	
@@ -489,7 +504,7 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 		LOG_PRINT("Creating EGRESS input...");
       // add connections to all ingress routers
 		for (UInt32 i = 0; i < _num_mid_routers; i++){
-			core_id_t coreID = computeMiddleCoreID(i);  
+			core_id_t coreID = computeMiddleCoreID((_cluster_id*_num_mid_routers)+i);  
 			Router::Id router_id(coreID, MIDDLE_ROUTER);
 			NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, router_id); 
 			num_input_endpoints_list.push_back(1);				       
