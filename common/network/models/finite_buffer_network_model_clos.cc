@@ -27,21 +27,21 @@ FiniteBufferNetworkModelClos::FiniteBufferNetworkModelClos(Network* network, SIn
    UInt64 link_delay;
    UInt64 router_delay;
    
-   //Initialize event counts
-   _input_link_traversal =0;                  //from core to INGRESS
-   _ingress_to_mid_link_traversal=0;         //from INGRESS to MIDDLE
-   _mid_to_egress_link_traversal=0;          //from MIDDLE to EGRESS
-   _output_link_traversal=0;                 //from EGRESS to core
+   // //Initialize event counts
+   // _input_link_traversal =0;                  //from core to INGRESS
+   // _ingress_to_mid_link_traversal=0;         //from INGRESS to MIDDLE
+   // _mid_to_egress_link_traversal=0;          //from MIDDLE to EGRESS
+   // _output_link_traversal=0;                 //from EGRESS to core
    
-   _ingress_buffer_access =0;
-   _ingress_switch_allocator =0;              
-   _ingress_crossbar_traversal=0;
-   _mid_buffer_access=0;                
-   _mid_switch_allocator=0;              
-   _mid_crossbar_traversal=0;
-   _egress_buffer_access=0;                
-   _egress_switch_allocator=0;              
-   _egress_crossbar_traversal=0;
+   // _ingress_buffer_access =0;
+   // _ingress_switch_allocator =0;              
+   // _ingress_crossbar_traversal=0;
+   // _mid_buffer_access=0;                
+   // _mid_switch_allocator=0;              
+   // _mid_crossbar_traversal=0;
+   // _egress_buffer_access=0;                
+   // _egress_switch_allocator=0;              
+   // _egress_crossbar_traversal=0;
    
    volatile double link_length;
 
@@ -196,15 +196,15 @@ FiniteBufferNetworkModelClos::computeOutputEndpointList(Flit* head_flit, Network
       Channel::Endpoint& output_endpoint = curr_network_node->getOutputEndpointFromRouterId(router_id);        //check that the routerID in param of function is supposed to be *next* (not curr) router!!!
       output_endpoint_vec.push_back(output_endpoint);
       
-      // Increment event counters
-      //*Note*: computeOutputEndpoints() gets called once per packet, at head flit
-      // Update link traversals
-      _input_link_traversal += _num_flits;                  //update for core to ingress (for each flit traversing)
-      _ingress_to_mid_link_traversal += _num_flits;         //update also for ingress to middle
-     // Update ingress router event counts
-      _ingress_buffer_access += _num_flits;          
-      _ingress_switch_allocator ++;                         //update once per packet (not once per flit)           
-      _ingress_crossbar_traversal += _num_flits;
+      // // Increment event counters
+      // //*Note*: computeOutputEndpoints() gets called once per packet, at head flit
+      // // Update link traversals
+      // _input_link_traversal += _num_flits;                  //update for core to ingress (for each flit traversing)
+      // _ingress_to_mid_link_traversal += _num_flits;         //update also for ingress to middle
+     // // Update ingress router event counts
+      // _ingress_buffer_access += _num_flits;          
+      // _ingress_switch_allocator ++;                         //update once per packet (not once per flit)           
+      // _ingress_crossbar_traversal += _num_flits;
    }
 	
    //if at MIDDLE_ROUTER
@@ -227,14 +227,14 @@ FiniteBufferNetworkModelClos::computeOutputEndpointList(Flit* head_flit, Network
       Channel::Endpoint& output_endpoint = curr_network_node->getOutputEndpointFromRouterId(router_id);        //check that the routerID in param of function is supposed to be *next* (not curr) router!!!
       output_endpoint_vec.push_back(output_endpoint);
       
-      // Increment event counters
-      //*Note*: computeOutputEndpoints() gets called once per packet, at head flit
-      // Update link traversals
-      _mid_to_egress_link_traversal += _num_flits;         //update for middle to egress router
-      // Update middle router event counts
-      _mid_buffer_access += _num_flits;          
-      _mid_switch_allocator ++;                         //update once per packet (not once per flit)           
-      _mid_crossbar_traversal += _num_flits;
+      // // Increment event counters
+      // //*Note*: computeOutputEndpoints() gets called once per packet, at head flit
+      // // Update link traversals
+      // _mid_to_egress_link_traversal += _num_flits;         //update for middle to egress router
+      // // Update middle router event counts
+      // _mid_buffer_access += _num_flits;          
+      // _mid_switch_allocator ++;                         //update once per packet (not once per flit)           
+      // _mid_crossbar_traversal += _num_flits;
    }
    
    //if at EGRESS_ROUTER
@@ -253,14 +253,14 @@ FiniteBufferNetworkModelClos::computeOutputEndpointList(Flit* head_flit, Network
       Channel::Endpoint& output_endpoint = curr_network_node->getOutputEndpointFromRouterId(router_id);        //check that the routerID in param of function is supposed to be *next* (not curr) router!!!
       output_endpoint_vec.push_back(output_endpoint);
       
-      // Increment event counters
-      //*Note*: computeOutputEndpoints() gets called once per packet, at head flit
-      // Update link traversals
-      _output_link_traversal += _num_flits;                 //update for core to ingress (for each flit traversing)
-     // Update ingress router event counts
-      _egress_buffer_access += _num_flits;          
-      _egress_switch_allocator ++;                         //update once per packet (not once per flit)           
-      _egress_crossbar_traversal += _num_flits;
+      // // Increment event counters
+      // //*Note*: computeOutputEndpoints() gets called once per packet, at head flit
+      // // Update link traversals
+      // _output_link_traversal += _num_flits;                 //update for core to ingress (for each flit traversing)
+     // // Update ingress router event counts
+      // _egress_buffer_access += _num_flits;          
+      // _egress_switch_allocator ++;                         //update once per packet (not once per flit)           
+      // _egress_crossbar_traversal += _num_flits;
       
    }
      
@@ -270,24 +270,24 @@ FiniteBufferNetworkModelClos::computeOutputEndpointList(Flit* head_flit, Network
    head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_vec);
    
    
-   LOG_PRINT("EVENT COUNTS...");
-   LOG_PRINT("Input link traversals: %i", _input_link_traversal);
-   LOG_PRINT("Ingress to mid traversals: %i", _ingress_to_mid_link_traversal);
-   LOG_PRINT("Mid to egress traversals: %i", _mid_to_egress_link_traversal);
-   LOG_PRINT("Output link traversals: %i", _output_link_traversal);
-   LOG_PRINT("Output link traversals: %i", _output_link_traversal);
+   // LOG_PRINT("EVENT COUNTS...");
+   // LOG_PRINT("Input link traversals: %i", _input_link_traversal);
+   // LOG_PRINT("Ingress to mid traversals: %i", _ingress_to_mid_link_traversal);
+   // LOG_PRINT("Mid to egress traversals: %i", _mid_to_egress_link_traversal);
+   // LOG_PRINT("Output link traversals: %i", _output_link_traversal);
+   // LOG_PRINT("Output link traversals: %i", _output_link_traversal);
    
-   LOG_PRINT("Ingress buffer access: %i", _ingress_buffer_access);
-   LOG_PRINT("Ingress switch allocator: %i", _ingress_switch_allocator); 
-   LOG_PRINT("Ingress crossbar: %i", _ingress_crossbar_traversal);
+   // LOG_PRINT("Ingress buffer access: %i", _ingress_buffer_access);
+   // LOG_PRINT("Ingress switch allocator: %i", _ingress_switch_allocator); 
+   // LOG_PRINT("Ingress crossbar: %i", _ingress_crossbar_traversal);
    
-   LOG_PRINT("Middle buffer: %i", _mid_buffer_access);                
-   LOG_PRINT("Middle switch: %i", _mid_switch_allocator);              
-   LOG_PRINT("Middle crossbar: %i",_mid_crossbar_traversal);
-     // EGRESS router event counts
-   LOG_PRINT("Egress buffer: %i", _egress_buffer_access);                
-   LOG_PRINT("Egress switch: %i", _egress_switch_allocator);              
-   LOG_PRINT("Egress crossbar: %i", _egress_crossbar_traversal);
+   // LOG_PRINT("Middle buffer: %i", _mid_buffer_access);                
+   // LOG_PRINT("Middle switch: %i", _mid_switch_allocator);              
+   // LOG_PRINT("Middle crossbar: %i",_mid_crossbar_traversal);
+     // // EGRESS router event counts
+   // LOG_PRINT("Egress buffer: %i", _egress_buffer_access);                
+   // LOG_PRINT("Egress switch: %i", _egress_switch_allocator);              
+   // LOG_PRINT("Egress crossbar: %i", _egress_crossbar_traversal);
    
    LOG_PRINT("computeOutputEndpointList(%p, %p) end", head_flit, curr_network_node);
 
@@ -568,11 +568,35 @@ void
 FiniteBufferNetworkModelClos::outputSummary(ostream& out)
 {
    FiniteBufferNetworkModel::outputSummary(out);
-   out << "  Activity Counters:" << endl;
-   out << "    Input link traversals: " << _input_link_traversal << endl;
-   out << "    Output link traversals: " << _output_link_traversal << endl;
-   
+   // out << "  Activity Counters:" << endl;
+   // out << "    Input link traversals: " << _input_link_traversal << endl;
+   // out << "    Output link traversals: " << _output_link_traversal << endl;
+   outputEventCountSummary(out);
 }
+
+void
+FiniteBufferNetworkModelClos::outputEventCountSummary(ostream& out)
+{
+   out << "  Event Counters: " << endl;
+   out << "    Ingress Total Input Buffer Writes: " << _network_node_list[INGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Ingress Total Input Buffer Reads: " << _network_node_list[INGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Ingress Total Switch Allocator Requests: " << _network_node_list[INGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Ingress Total Crossbar Traversals: " << _network_node_list[INGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Ingress Total Link Traversals: " << _network_node_list[INGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Middle  Total Input Buffer Writes: " << _network_node_list[MIDDLE_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Middle  Total Input Buffer Reads: " << _network_node_list[MIDDLE_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Middle  Total Switch Allocator Requests: " << _network_node_list[MIDDLE_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Middle  Total Crossbar Traversals: " << _network_node_list[MIDDLE_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Middle  Total Link Traversals: " << _network_node_list[MIDDLE_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Egress  Total Input Buffer Writes: " << _network_node_list[EGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Egress  Total Input Buffer Reads: " << _network_node_list[EGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Egress  Total Switch Allocator Requests: " << _network_node_list[EGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Egress  Total Crossbar Traversals: " << _network_node_list[EGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Egress  Total Link Traversals: " << _network_node_list[EGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+}
+
 
 
 //??????????????????????? copied from old eclos
