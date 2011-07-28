@@ -73,6 +73,7 @@ class FiniteBufferNetworkModelFlipAtac : public FiniteBufferNetworkModel
       // Private Functions
       static void readTopologyParams(UInt32& num_router_ports, UInt32& num_in_routers, UInt32& num_mid_routers, UInt32& num_clusters);
       UInt32 getRandNum(UInt32 start, UInt32 end);          // to generate random middle router index
+      void outputEventCountSummary(ostream& out);           // Print out event counts in sim.out file
       
       //functions used in createNetworkNode to compute the core_id of connected routers
       core_id_t computeInterfaceCoreID(core_id_t node_coreID, UInt32 i);               

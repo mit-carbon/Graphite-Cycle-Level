@@ -650,7 +650,44 @@ void
 FiniteBufferNetworkModelFlipAtac::outputSummary(ostream& out)
 {
    FiniteBufferNetworkModel::outputSummary(out);
+     outputEventCountSummary(out);
 }
+
+void
+FiniteBufferNetworkModelFlipAtac::outputEventCountSummary(ostream& out)
+{
+   out << "  Event Counters: " << endl;
+   out << "    Bcast Total Input Buffer Writes: " << _network_node_list[BCAST_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Bcast Total Input Buffer Reads: " << _network_node_list[BCAST_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Bcast Total Switch Allocator Requests: " << _network_node_list[BCAST_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Bcast Total Crossbar Traversals: " << _network_node_list[BCAST_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Bcast Total Link Traversals: " << _network_node_list[BCAST_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Mux Total Input Buffer Writes: " << _network_node_list[MUX_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Mux Total Input Buffer Reads: " << _network_node_list[MUX_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Mux Total Switch Allocator Requests: " << _network_node_list[MUX_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Mux Total Crossbar Traversals: " << _network_node_list[MUX_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Mux Total Link Traversals: " << _network_node_list[MUX_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Ingress Total Input Buffer Writes: " << _network_node_list[INGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Ingress Total Input Buffer Reads: " << _network_node_list[INGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Ingress Total Switch Allocator Requests: " << _network_node_list[INGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Ingress Total Crossbar Traversals: " << _network_node_list[INGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Ingress Total Link Traversals: " << _network_node_list[INGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Middle  Total Input Buffer Writes: " << _network_node_list[MIDDLE_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Middle  Total Input Buffer Reads: " << _network_node_list[MIDDLE_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Middle  Total Switch Allocator Requests: " << _network_node_list[MIDDLE_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Middle  Total Crossbar Traversals: " << _network_node_list[MIDDLE_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Middle  Total Link Traversals: " << _network_node_list[MIDDLE_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Egress  Total Input Buffer Writes: " << _network_node_list[EGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Egress  Total Input Buffer Reads: " << _network_node_list[EGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Egress  Total Switch Allocator Requests: " << _network_node_list[EGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Egress  Total Crossbar Traversals: " << _network_node_list[EGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Egress  Total Link Traversals: " << _network_node_list[EGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+}
+
 
 
 pair<bool,UInt32>
