@@ -76,7 +76,7 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
       Flit* flit_to_send = (Flit*) net_packet_to_send->data;
       flit_to_send->_sender_router_index = CORE_INTERFACE;
       flit_to_send->_receiver_router_index = ingress_router_id._index;
-      flit_to_send->_net_packet = net_packet;
+      
    }
 
    LOG_PRINT("sendNetPacket() exit, net_packet_list_to_send.size(%u)", net_packet_list_to_send.size());

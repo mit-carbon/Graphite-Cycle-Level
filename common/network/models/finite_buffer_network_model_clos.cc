@@ -143,16 +143,6 @@ FiniteBufferNetworkModelClos::computeOutputEndpointList(Flit* head_flit, Network
    LOG_PRINT("computeOutputEndpointList: head_flit, curr_network _node =(%p,%p) enter", head_flit, curr_network_node);
    LOG_PRINT("head_flit->_sender %i, head_flit->_receiver %i", head_flit->_sender, head_flit->_receiver);
    
-   // get number of flits this packet contains (need this for updating event counters)
-   LOG_PRINT("head_flit->_length %i", head_flit->_length);
-
-   UInt32 packet_length = getNetwork()->getModeledLength((*(head_flit->_net_packet)));
-   _num_flits =(SInt32) ceil((float) (packet_length * 8) / _flit_width);
-   LOG_PRINT("num_flits %i", _num_flits);
-   LOG_PRINT("packet_length %i", packet_length);
-   LOG_PRINT("flit_width %i", _flit_width);
-   
-   
    // get routerID from curr_network_node to determine if core, ingress, middle, or egress
 	// for each case, will determine the next destinations and put them in head flit
    Router::Id curr_router_id = curr_network_node->getRouterId();
