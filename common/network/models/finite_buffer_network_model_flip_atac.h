@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdlib.h>	//need for random function
+#include <stdlib.h>
 
 #include "finite_buffer_network_model.h"
 
@@ -35,7 +35,7 @@ class FiniteBufferNetworkModelFlipAtac : public FiniteBufferNetworkModel
       
       // Creates a network node (a router with appropriate connections and performance/power models)
       NetworkNode* createNetworkNode(core_id_t node_coreID, SInt32 router_index, core_id_t mid_cluster_id);
-	  	
+
       // Topology Parameters
       // m x n x r Clos network (according to Dally notation)
       UInt32 _num_mid_routers;			// m, the number of middle routers
@@ -45,26 +45,25 @@ class FiniteBufferNetworkModelFlipAtac : public FiniteBufferNetworkModel
       // Other useful topology parameters that are derived from above user-input parameters
       UInt32 _num_cores; 				   // = num_in_routers * num_router_ports
       UInt32 _num_cores_per_cluster; 	// = num_cores/num_clusters
-	  
+
       // Info about the cluster this core is located on
-      core_id_t _cluster_id;                        // the id of this core's cluster
-      core_id_t _mid_cluster_id;					// need middle router cluster id for cases when _num_mid_routers > _num_in_routers since middle router with this coreID might be in different cluster than core with this ID
-	  vector<core_id_t> cluster_mux_coreID_list;    // list of core_id's of MUX_ROUTERs this core's cluster contains
-	  
-     // lists of ingress, middle, and egress routers' coreIDs
-	  vector<core_id_t> _ingress_coreID_list;
-	  vector<core_id_t> _middle_coreID_list;
-	  vector<core_id_t> _egress_coreID_list;
-	  
-	  // the number of nodes associated with this core 
-	  SInt32 _num_nodes_on_core; 		
-	  
-	  // Virtual function in FiniteBufferNetworkModel 
-      void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);    	  // Main Routing Function
-      // Function to compute the first router that the sender core is connected to (in this case, this is the BCAST router)
+      core_id_t _cluster_id;                       // the id of this core's cluster
+      core_id_t _mid_cluster_id;					      // need middle router's cluster id for cases when _num_mid_routers > _num_in_routers since middle router with this coreID might be in different cluster than core with this ID
+      vector<core_id_t> cluster_mux_coreID_list;    // list of MUX_ROUTER coreIDs this cluster contains
+
+      // lists of ingress, middle, and egress routers' coreIDs
+      vector<core_id_t> _ingress_coreID_list;
+      vector<core_id_t> _middle_coreID_list;
+      vector<core_id_t> _egress_coreID_list;
+
+      // Virtual function in FiniteBufferNetworkModel 
+      // Main Routing Function ************************
+      // Compute the next router to send the head packet to
+      void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);    	  
+      // Function to compute the first router that the sender core is connected to (for flip_atac, this is the BCAST router)
       Router::Id computeIngressRouterId(core_id_t core_id);             
             
-	  // Private variables
+      // Private variables
       volatile float _frequency;
 
       // Rand Data Buffer
@@ -74,7 +73,7 @@ class FiniteBufferNetworkModelFlipAtac : public FiniteBufferNetworkModel
       static void readTopologyParams(UInt32& num_router_ports, UInt32& num_in_routers, UInt32& num_mid_routers, UInt32& num_clusters);
       UInt32 getRandNum(UInt32 start, UInt32 end);          // to generate random middle router index
       void outputEventCountSummary(ostream& out);           // Print out event counts in sim.out file
-      
+
       //functions used in createNetworkNode to compute the core_id of connected routers
       core_id_t computeInterfaceCoreID(core_id_t node_coreID, UInt32 i);               
       core_id_t computeEgressInterfaceCoreID(core_id_t node_coreID, UInt32 i);         
