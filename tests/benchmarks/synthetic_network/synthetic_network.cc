@@ -15,7 +15,7 @@
 // #define DEBUG 1
 
 // Network Traffic Pattern Type
-NetworkTrafficType _traffic_pattern_type = TRANSPOSE;
+NetworkTrafficType _traffic_pattern_type = UNIFORM_RANDOM;
 // Number of packets injected per core per cycle
 double _offered_load = 0.1;
 // Fraction of Broadcasts among injected packets
