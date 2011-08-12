@@ -3,6 +3,7 @@
 #include <cmath>
 #include "simulator.h"
 #include "core_manager.h"
+#include "event_manager.h"
 #include "config.h"
 #include "core.h"
 #include "network.h"
@@ -14,9 +15,11 @@
 // #define DEBUG 1
 
 // Network Traffic Pattern Type
-NetworkTrafficType _traffic_pattern_type = UNIFORM_RANDOM;
+NetworkTrafficType _traffic_pattern_type = TRANSPOSE;
 // Number of packets injected per core per cycle
 double _offered_load = 0.1;
+// Fraction of Broadcasts among injected packets
+double _fraction_broadcasts = 0.0;
 // Size of each Packet in Bytes
 SInt32 _packet_size = 8;
 // Total number of packets injected into the network per core
@@ -29,9 +32,8 @@ PacketType _packet_type = USER_2;
 // FIXME: Hard-coded for now (in bits), Change Later
 SInt32 _flit_width = 64;
 
-CoreSpVars* _core_sp_vars;
+vector<SyntheticCore*> _synthetic_core_list;
 UInt64 _quantum = 1000;
-Semaphore _semaphore;
 
 UInt32 EVENT_NET_SEND = 100;
 UInt32 EVENT_START_SIMULATION = 102;
@@ -55,6 +57,8 @@ int main(int argc, char* argv[])
          _traffic_pattern_type = parseTrafficPattern(string(argv[i+1]));
       else if (string(argv[i]) == "-l")
          _offered_load = (double) atof(argv[i+1]);
+      else if (string(argv[i]) == "-b")
+         _fraction_broadcasts = (double) atof(argv[i+1]);
       else if (string(argv[i]) == "-s")
          _packet_size = (SInt32) atoi(argv[i+1]);
       else if (string(argv[i]) == "-N")
@@ -80,27 +84,27 @@ int main(int argc, char* argv[])
    debug_printf("Num Application Cores(%i)\n", _num_cores);
 
    // Initialize Core Specific Variables
-   initializeCoreSpVars();
+   initializeSyntheticCores();
 
    // Register (NetSend, NetRecv, PushFirstEvents) Events
    Event::registerHandler(EVENT_NET_SEND, processNetSendEvent);
-   registerRecvdPacketHandler();
+   registerNetRecvHandler();
    Event::registerHandler(EVENT_START_SIMULATION, processStartSimulationEvent);
    
    // Push First Event
-   Event* push_first_events = new Event((Event::Type) EVENT_START_SIMULATION, 0 /* time */);
-   Event::processInOrder(push_first_events, 0 /* core_id */, EventQueue::ORDERED);
+   Event* start_simulation_event = new Event((Event::Type) EVENT_START_SIMULATION, 0 /* time */);
+   Event::processInOrder(start_simulation_event, 0 /* core_id */, EventQueue::ORDERED);
 
    // Wait till all packets are sent and received
    waitForCompletion();
    
    // Unregister events
    Event::unregisterHandler(EVENT_START_SIMULATION);
-   unregisterRecvdPacketHandler();
+   unregisterNetRecvHandler();
    Event::unregisterHandler(EVENT_NET_SEND);
 
    // Delete Core Specific Variables
-   deinitializeCoreSpVars();
+   deinitializeSyntheticCores();
 
    Simulator::__disablePerformanceModels();
    
@@ -111,42 +115,9 @@ int main(int argc, char* argv[])
    return 0;
 }
 
-void registerRecvdPacketHandler()
+void initializeSyntheticCores()
 {
-   for (SInt32 i = 0; i < _num_cores; i++)
-   {
-      Core* core = Sim()->getCoreManager()->getCoreFromID(i);
-      core->getNetwork()->registerCallback(_packet_type, processRecvdPacket, core);
-   }
-}
-
-void unregisterRecvdPacketHandler()
-{
-   for (SInt32 i = 0; i < _num_cores; i++)
-   {
-      Core* core = Sim()->getCoreManager()->getCoreFromID(i);
-      core->getNetwork()->unregisterCallback(_packet_type);
-   }
-}
-
-void waitForCompletion()
-{
-   for (SInt32 i = 0; i < (2 * _num_cores); i++)
-      _semaphore.wait();
-}
-
-void printHelpMessage()
-{
-   fprintf(stderr, "[Usage]: ./synthetic_network_traffic_generator -p <arg1> -l <arg2> -s <arg3> -N <arg4>\n");
-   fprintf(stderr, "where <arg1> = Network Traffic Pattern Type (uniform_random, bit_complement, shuffle, transpose, tornado, nearest_neighbor) (default uniform_random)\n");
-   fprintf(stderr, " and  <arg2> = Number of Packets injected into the Network per Core per Cycle (default 0.1)\n");
-   fprintf(stderr, " and  <arg3> = Size of each Packet in Bytes (default 8)\n");
-   fprintf(stderr, " and  <arg4> = Total Number of Packets injected into the Network per Core (default 10000)\n");
-}
-
-void initializeCoreSpVars()
-{
-   _core_sp_vars = new CoreSpVars[_num_cores];
+   _synthetic_core_list.resize(_num_cores);
    for (SInt32 i = 0; i < _num_cores; i++)
    {
       vector<int> send_vec;
@@ -178,16 +149,27 @@ void initializeCoreSpVars()
             break;
       }
 
-      RandNum* rand_num = new RandNum(0,1 /* range */, i /* seed */);
-
       // Populate the core specific structure
-      _core_sp_vars[i].init(rand_num, send_vec, receive_vec);
+      Core* core = Sim()->getCoreManager()->getCoreFromID(i);
+      _synthetic_core_list[i] = new SyntheticCore(core, send_vec, receive_vec);
    }
 }
 
-void deinitializeCoreSpVars()
+void deinitializeSyntheticCores()
 {
-   delete [] _core_sp_vars;
+   for (SInt32 i = 0; i < _num_cores; i++)
+      delete _synthetic_core_list[i];
+   _synthetic_core_list.clear();
+}
+
+void processStartSimulationEvent(Event* event)
+{
+   debug_printf("processStartSimulationEvent\n");
+   for (SInt32 i = 0; i < _num_cores; i++)
+   {
+      // Push the first events
+      _synthetic_core_list[i]->pushNetSendEvent(0 /* time */);
+   }
 }
 
 void processNetSendEvent(Event* event)
@@ -198,95 +180,55 @@ void processNetSendEvent(Event* event)
    UnstructuredBuffer* event_args = event->getArgs();
    (*event_args) >> core;
 
-   RandNum* rand_num = _core_sp_vars[core->getId()]._rand_num;
-   UInt64& total_packets_sent = _core_sp_vars[core->getId()]._total_packets_sent;
-   vector<int>& send_vec = _core_sp_vars[core->getId()]._send_vec;
-   UInt64& last_packet_time = _core_sp_vars[core->getId()]._last_packet_time;
-   
-   for (UInt64 time = event->getTime(); time < (event->getTime() + _quantum); time++)
-   {
-      if ((total_packets_sent < _total_packets) && (canSendPacket(_offered_load, rand_num)))
-      {
-         if ((core->getId() == 0) && ((total_packets_sent % 100) == 0))
-         {
-            debug_printf("Core(0) sending packet(%llu), Time(%llu)\n", \
-                         (long long unsigned int) total_packets_sent, (long long unsigned int) event->getTime());
-         }
-
-         // Send a packet to its destination core
-         Byte data[_packet_size];
-         SInt32 receiver = send_vec[total_packets_sent % send_vec.size()];
-         
-         last_packet_time = getMax<UInt64>(last_packet_time, time);
-         NetPacket net_packet(last_packet_time, _packet_type, core->getId(), receiver, _packet_size, data);
-         core->getNetwork()->netSend(net_packet);
-        
-         last_packet_time += computeNumFlits(core->getNetwork()->getModeledLength(net_packet)); 
-         total_packets_sent ++;
-      }
-   }
-
-   if (total_packets_sent < _total_packets)
-   {
-      pushEvent(event->getTime() + _quantum, core);
-   }
-   else // (total_packets_sent == _total_packets)
-   {
-      _semaphore.signal();
-   }
+   _synthetic_core_list[core->getId()]->processNetSendEvent(event);
 }
 
-void processRecvdPacket(void* obj, NetPacket net_packet)
+void processNetRecvEvent(void* obj, NetPacket net_packet)
 {
    Core* recv_core = (Core*) obj;
    core_id_t receiver = recv_core->getId();
    assert((receiver >= 0) && (receiver < _num_cores));
-   
-   UInt64& total_packets_received = _core_sp_vars[receiver]._total_packets_received;
-   
-   if ((recv_core->getId() == 0) && ((total_packets_received % 100) == 0))
-   {
-      debug_printf("Core(0) receiving packet(%llu), Time(%llu)\n", \
-                   (long long unsigned int) total_packets_received, (long long unsigned int) net_packet.time);
-   }
 
-   total_packets_received ++;
-
-   if (total_packets_received == _total_packets)
-   {
-      _semaphore.signal();
-      debug_printf("Core(%i) received all packets\n", receiver);
-   }
+   _synthetic_core_list[receiver]->processNetRecvEvent(net_packet);
 }
 
-void processStartSimulationEvent(Event* event)
+void registerNetRecvHandler()
 {
-   debug_printf("processStartSimulationEvent\n");
    for (SInt32 i = 0; i < _num_cores; i++)
    {
-      Core* ith_core = Sim()->getCoreManager()->getCoreFromID(i);
-      // Push the first events
-      pushEvent(0 /* time */, ith_core);
+      Core* core = Sim()->getCoreManager()->getCoreFromID(i);
+      core->getNetwork()->registerCallback(_packet_type, processNetRecvEvent, core);
    }
 }
 
-void pushEvent(UInt64 time, Core* core)
+void unregisterNetRecvHandler()
 {
-   UnstructuredBuffer* event_args = new UnstructuredBuffer();
-   (*event_args) << core;
-   Event* event = new Event((Event::Type) EVENT_NET_SEND, time, event_args);
-   Event::processInOrder(event, core->getId(), EventQueue::ORDERED);
+   for (SInt32 i = 0; i < _num_cores; i++)
+   {
+      Core* core = Sim()->getCoreManager()->getCoreFromID(i);
+      core->getNetwork()->unregisterCallback(_packet_type);
+   }
 }
 
-bool canSendPacket(double offered_load, RandNum* rand_num)
+void waitForCompletion()
 {
-   return (rand_num->next() < offered_load); 
+   // Sleep in a loop for 100 milli-sec each. Wake up and see if done
+   while (1)
+   {
+      usleep(100000);
+      if (! Sim()->getEventManager()->hasEventsPending())
+         break;
+   }
 }
 
-SInt32 computeNumFlits(SInt32 length)
+void printHelpMessage()
 {
-   SInt32 num_flits = (SInt32) ceil((float) (length * 8) / _flit_width);
-   return num_flits;
+   fprintf(stderr, "[Usage]: ./synthetic_network_traffic_generator -p <arg1> -l <arg2> -b <arg3> -s <arg4> -N <arg5>\n");
+   fprintf(stderr, "where <arg1> = Network Traffic Pattern Type (uniform_random, bit_complement, shuffle, transpose, tornado, nearest_neighbor) (default uniform_random)\n");
+   fprintf(stderr, " and  <arg2> = Number of Packets injected into the Network per Core per Cycle (default 0.1)\n");
+   fprintf(stderr, " and  <arg3> = Fraction of Broadcasts among Packets sent (default 0.0)\n");
+   fprintf(stderr, " and  <arg4> = Size of each Packet in Bytes (default 8)\n");
+   fprintf(stderr, " and  <arg5> = Total Number of Packets injected into the Network per Core (default 10000)\n");
 }
 
 void debug_printf(const char* fmt, ...)
@@ -298,4 +240,102 @@ void debug_printf(const char* fmt, ...)
    vfprintf(stderr, fmt, ap);
    va_end(ap);
 #endif
+}
+
+SyntheticCore::SyntheticCore(Core* core, const vector<int>& send_vec, const vector<int>& receive_vec)
+   : _core(core)
+   , _send_vec(send_vec)
+   , _receive_vec(receive_vec)
+   , _total_packets_sent(0)
+   , _total_packets_received(0)
+   , _last_packet_time(0)
+{
+   _inject_packet_rand_num = new RandNum(0, 1, _core->getId() /* seed */);
+   _broadcast_packet_rand_num = new RandNum(0, 1, _core->getId() /* seed */);
+}
+
+SyntheticCore::~SyntheticCore()
+{
+   delete _inject_packet_rand_num;
+   delete _broadcast_packet_rand_num;
+}
+
+void SyntheticCore::processNetSendEvent(Event* event)
+{
+   for (UInt64 time = event->getTime(); time < (event->getTime() + _quantum); time++)
+   {
+      if (_total_packets_sent >= _total_packets)
+         break;
+
+      if (canInjectPacket())
+      {
+         logNetSend(time);
+
+         SInt32 receiver = (isBroadcastPacket()) ? NetPacket::BROADCAST :
+                                                   _send_vec[_total_packets_sent % _send_vec.size()];
+         // Send a packet to its destination core
+         Byte data[_packet_size];
+         
+         _last_packet_time = getMax<UInt64>(_last_packet_time, time);
+         NetPacket net_packet(_last_packet_time, _packet_type, _core->getId(), receiver, _packet_size, data);
+         _core->getNetwork()->netSend(net_packet);
+        
+         _last_packet_time += computeNumFlits(_core->getNetwork()->getModeledLength(net_packet)); 
+         _total_packets_sent ++;
+      }
+   }
+
+   if (_total_packets_sent < _total_packets)
+   {
+      pushNetSendEvent(event->getTime() + _quantum);
+   }
+}
+
+void SyntheticCore::processNetRecvEvent(const NetPacket& net_packet)
+{
+   logNetRecv(net_packet.time);
+
+   _total_packets_received ++;
+}
+
+void SyntheticCore::pushNetSendEvent(UInt64 time)
+{
+   UnstructuredBuffer* event_args = new UnstructuredBuffer();
+   (*event_args) << _core;
+   Event* event = new Event((Event::Type) EVENT_NET_SEND, time, event_args);
+   Event::processInOrder(event, _core->getId(), EventQueue::ORDERED);
+}
+
+bool SyntheticCore::canInjectPacket()
+{
+   return (_inject_packet_rand_num->next() < _offered_load);
+}
+
+bool SyntheticCore::isBroadcastPacket()
+{
+   return (_broadcast_packet_rand_num->next() < _fraction_broadcasts);
+}
+
+void SyntheticCore::logNetSend(UInt64 time)
+{
+   if ((_core->getId() == 0) && ((_total_packets_sent % 100) == 0))
+   {
+      debug_printf("Core(0) sending packet(%llu), Time(%llu)\n",
+                   (long long unsigned int) _total_packets_sent, (long long unsigned int) time);
+   }
+}
+
+void SyntheticCore::logNetRecv(UInt64 time)
+{
+   if ((_core->getId() == 0) && ((_total_packets_received % 100) == 0))
+   {
+      debug_printf("Core(0) receiving packet(%llu), Time(%llu)\n",
+                   (long long unsigned int) _total_packets_received, (long long unsigned int) time);
+   }
+}
+
+SInt32 SyntheticCore::computeNumFlits(SInt32 length)
+{
+   SInt32 num_flits = (SInt32) ceil((float) (length * 8) / _flit_width);
+   return num_flits;
 }

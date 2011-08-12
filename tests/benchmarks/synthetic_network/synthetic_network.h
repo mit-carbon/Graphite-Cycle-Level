@@ -10,24 +10,32 @@ using std::string;
 #include "event.h"
 #include "rand_num.h"
 
-class CoreSpVars
+class SyntheticCore
 {
 public:
-   CoreSpVars() : _total_packets_sent(0), _total_packets_received(0), _last_packet_time(0) {}
-   ~CoreSpVars() { delete _rand_num; }
-   void init(RandNum* rand_num, vector<int>& send_vec, vector<int>& receive_vec)
-   {
-      _rand_num = rand_num;
-      _send_vec = send_vec;
-      _receive_vec = receive_vec;
-   }
+   SyntheticCore(Core* core, const vector<int>& send_vec, const vector<int>& receive_vec);
+   ~SyntheticCore();
 
-   RandNum* _rand_num;
-   UInt64 _total_packets_sent;
-   UInt64 _total_packets_received;
+   void processNetSendEvent(Event* event);
+   void processNetRecvEvent(const NetPacket& net_packet);
+   void pushNetSendEvent(UInt64 time);
+
+private:
+   Core* _core;
+   RandNum* _inject_packet_rand_num;
+   RandNum* _broadcast_packet_rand_num;
    vector<int> _send_vec;
    vector<int> _receive_vec;
+   UInt64 _total_packets_sent;
+   UInt64 _total_packets_received;
    UInt64 _last_packet_time;
+   
+   bool canInjectPacket();
+   bool isBroadcastPacket();
+   void logNetSend(UInt64 time);
+   void logNetRecv(UInt64 time);
+   static SInt32 computeNumFlits(SInt32 length);
+
 };
 
 enum NetworkTrafficType
@@ -41,21 +49,18 @@ enum NetworkTrafficType
    NUM_NETWORK_TRAFFIC_TYPES
 };
 
-void printHelpMessage();
+void initializeSyntheticCores();
+void deinitializeSyntheticCores();
 
-void registerRecvdPacketHandler();
-void unregisterRecvdPacketHandler();
+void processStartSimulationEvent(Event* event);
+void processNetSendEvent(Event* event);
+void processNetRecvEvent(void* obj, NetPacket net_packet);
+
+void registerNetRecvHandler();
+void unregisterNetRecvHandler();
 
 void waitForCompletion();
-void initializeCoreSpVars();
-void deinitializeCoreSpVars();
 
-void processNetSendEvent(Event* event);
-void processRecvdPacket(void* obj, NetPacket net_packet);
-void processStartSimulationEvent(Event* event);
-void pushEvent(UInt64 time, Core* core);
-
-bool canSendPacket(double offered_load, RandNum* rand_num);
-SInt32 computeNumFlits(SInt32 length);
+void printHelpMessage();
 
 void debug_printf(const char* fmt, ...);
