@@ -22,7 +22,7 @@ FiniteBufferNetworkModelFlipAtac::FiniteBufferNetworkModelFlipAtac(Network* netw
    LOG_PRINT("num_router ports = %u, _num_in_routers = %u, _num_mid_routers = %u, num_clusters = %u", _num_router_ports, _num_in_routers, _num_mid_routers, _num_clusters);
    
    // Calculate rest of topology parameters                      
-   _num_cores_per_cluster = _num_in_routers * _num_router_ports;     //each cluster has its own Clos
+   _num_cores_per_cluster = _num_in_routers * _num_router_ports;     // note: each cluster has its own Clos
    _num_cores = _num_cores_per_cluster * _num_clusters;
    
    // Router, Link Params
@@ -86,18 +86,15 @@ FiniteBufferNetworkModelFlipAtac::FiniteBufferNetworkModelFlipAtac(Network* netw
     _mid_cluster_id = _cluster_id;
 	// need middle router cluster id for cases when _num_mid_routers > _num_in_routers
     if (core_id){ //if core_id = 0, keep _mid_cluster_id 0
-		UInt32 mid_index = ((core_id -1) / (num_in_cores/_num_mid_routers)); // - (_cluster_id * _num_mid_routers);
+		UInt32 mid_index = ((core_id -1) / (num_in_cores/_num_mid_routers)); 
 		_mid_cluster_id = mid_index/_num_mid_routers;
-		LOG_PRINT("mid_index is %i", mid_index);
 	}
-	LOG_PRINT("_mid_cluster_id created for core id %i is %i", core_id,_mid_cluster_id);
 
 	LOG_PRINT("Egress router list for cluster id %i", _cluster_id);
 	// EGRESS_ROUTER list of coreIDs
    for (UInt32 i = 0; i < (_num_in_routers*_num_clusters); i++)
    {
       _egress_coreID_list.push_back( (i * _num_router_ports) + _num_router_ports-1);
-		//LOG_PRINT("Egress router list: core_id %i", (((mid_cluster_id * _num_in_routers + i) * _num_router_ports) + _num_router_ports-1));
    }
    
    
@@ -129,10 +126,6 @@ FiniteBufferNetworkModelFlipAtac::FiniteBufferNetworkModelFlipAtac(Network* netw
    LOG_PRINT("Create EGRESS_ROUTER for core_id %i", core_id);
 	NetworkNode* egress_router = createNetworkNode(core_id, EGRESS_ROUTER, _mid_cluster_id);
 	_network_node_list.push_back(egress_router);       // add this node to the list of network nodes associated with this core
-   
-  
-   _num_nodes_on_core = _network_node_list.size();		// update number of nodes on this core
-   LOG_PRINT("Core_id %i has %i network nodes", core_id, _num_nodes_on_core);
    
    // Seed the buffer for random number generation --> will be used for MIDDLE_ROUTER stage in Clos
    srand48_r(core_id, &_rand_data_buffer);
@@ -188,22 +181,8 @@ FiniteBufferNetworkModelFlipAtac::computeOutputEndpointList(Flit* head_flit, Net
       LOG_PRINT("At BCAST_ROUTER with core_id %i. Compute next destination.", curr_core_id);
       
       // next destination is broadcast to every cluster (all output endpoints)
-     /* 
-      // create vector which has next destination channel endpoints (from router ids of all mux routers need to output to)
-      for (UInt32 i = 0; i < _num_clusters; i++){
-         core_id_t mux_coreID = i * _num_cores_per_cluster + (curr_core_id / _num_clusters); //mux_index =(node_coreID/_num_clusters);
-         Router::Id router_id(mux_coreID, MUX_ROUTER);
-         next_dest_list.push_back(router_id);
-         LOG_PRINT("Next destination Router Id [%i,%i]", router_id._core_id, router_id._index);
-         
-         Channel::Endpoint& output_endpoint = curr_network_node->getOutputEndpointFromRouterId(router_id); //get channel endpoints from the router_ids of muxes this bcast router is connected to
-         output_endpoint_vec.push_back(output_endpoint);                                     // put channels in vector
       
-         LOG_PRINT("Next Router(%i,%i), Output Endpoint(%i,%i)", router_id._core_id, router_id._index, output_endpoint._channel_id, output_endpoint._index);
-      }
-      */
-      
-      // in this version, do not broadcast to all clusters
+      // in this version, do not actually broadcast to all clusters
       // just go to cluster that contains the receiving core
       // this still models broadcast performance & power because there is only one output channel (with endpoints to each cluster)
       // this channel is considered utilized whether you send to one endpoint (one cluster) or all endpoints (all clusters)
@@ -227,12 +206,12 @@ FiniteBufferNetworkModelFlipAtac::computeOutputEndpointList(Flit* head_flit, Net
       LOG_PRINT("At MUX_ROUTER with core_id %i. Compute next destination.", curr_core_id);
       // next destination is ingress router of Clos
       
-      // but perhaps first need to check if want to drop packet (if the receiver core is not in this cluster)
+      // check if receiver core is in this cluster-->so can drop packets if need to
       // actually, don't need to drop packets in this version of code, but keep this in as an error check
       bool core_in_cluster = false;
       for (UInt32 i = 0; i < cluster_mux_coreID_list.size(); i++){
          if (head_flit->_receiver == cluster_mux_coreID_list[i]){
-             //good, then receiver core is in this cluster
+             // receiver core is in this cluster
              core_in_cluster = true;
          }
       }
@@ -279,41 +258,39 @@ FiniteBufferNetworkModelFlipAtac::computeOutputEndpointList(Flit* head_flit, Net
       output_endpoint_vec.push_back(output_endpoint);
    }
 	
-   //if at MIDDLE_ROUTER
+   // if at MIDDLE_ROUTER
    else if (curr_router_index == MIDDLE_ROUTER) {
       LOG_PRINT("At MIDDLE_ROUTER with core_id %i. Compute next destination.", curr_core_id);
       // next destination is the correct egress router
       
-      //compute coreID of egress router the receiving core is connected to (based on coreID)
-      //simular computation as for sending core connections to ingress routers
-      core_id_t next_coreID = _egress_coreID_list[(head_flit->_receiver/_num_router_ports)]; // - (_cluster_id * _num_in_routers)];
-      //LOG_PRINT("Next destination from middle has core Id %i", _egress_coreID_list[1]);
+      // compute coreID of egress router the receiving core is connected to (based on coreID)
+      core_id_t next_coreID = _egress_coreID_list[(head_flit->_receiver/_num_router_ports)]; 
      
-	 //this is router id for next destination
+	   // this is the router id for next destination
       Router::Id router_id(next_coreID, EGRESS_ROUTER); 
       LOG_PRINT("Next destination Router Id [%i,%i]", router_id._core_id, router_id._index);
       
-      //add it to the list
+      // add it to the list
       next_dest_list.push_back(router_id);
       
-      //add corresponding channel endpoint to the vector (will later be added to the head flit object)
+      // add corresponding channel endpoint to the vector (will later be added to the head flit object)
       Channel::Endpoint& output_endpoint = curr_network_node->getOutputEndpointFromRouterId(router_id);
       output_endpoint_vec.push_back(output_endpoint);
    }
    
-   //if at EGRESS_ROUTER
+   // if at EGRESS_ROUTER
    else if (curr_router_index == EGRESS_ROUTER) {  
       LOG_PRINT("At EGRESS_ROUTER with core_id %i. Compute next destination.", curr_core_id);
       // next destination is the correct receiving core
       core_id_t next_coreID = head_flit->_receiver;
       
-      //this is router id for next destination
+      // this is the router id for next destination
       Router::Id  router_id(next_coreID, CORE_INTERFACE);
       LOG_PRINT("Next destination Router Id [%i,%i]", router_id._core_id, router_id._index);
-       //add it to the list
+       // add it to the list
       next_dest_list.push_back(router_id);
       
-      //add corresponding channel endpoint to the vector (will later be added to the head flit object)
+      // add corresponding channel endpoint to the vector (will later be added to the head flit object)
       Channel::Endpoint& output_endpoint = curr_network_node->getOutputEndpointFromRouterId(router_id); 
       output_endpoint_vec.push_back(output_endpoint);
    }
@@ -439,7 +416,7 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 		 for (UInt32 i = 0; i < _num_router_ports; i++){
 			core_id_t coreID = computeInterfaceCoreID(node_coreID, i);
 			Router::Id mux_router(coreID, MUX_ROUTER);		
-			NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, mux_router); //add this core to list of node input connections
+			NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, mux_router); // add this core to list of node input connections
 			num_input_endpoints_list.push_back(1);					
 			
 			// set buffer schemes
@@ -470,7 +447,7 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
       // for each input channel of middle router
 	   // add connections to all ingress routers
 		for (UInt32 i = 0; i < _num_in_routers; i++){
-			core_id_t coreID = computeIngressCoreID((mid_cluster_id*_num_in_routers) + i); 
+			core_id_t coreID = computeIngressCoreID((mid_cluster_id*_num_in_routers) + i);      //use mid_cluster_id because want the cluster in which the middle router resides (not necessarily the same as the cluster of the CORE_INTERFACE with same ID)
 			Router::Id router_id(coreID, INGRESS_ROUTER);
 			NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, router_id); 
 			num_input_endpoints_list.push_back(1);					
@@ -523,7 +500,7 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 			NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, core_interface); //add this core to list of node input connections
 			num_output_endpoints_list.push_back(1);					
          
-			 //make downstream buffer scheme INFINITE since connects to CORE_INTERFACE
+			 // make downstream buffer scheme INFINITE since connects to CORE_INTERFACE
 			 downstream_buffer_management_schemes.push_back(BufferManagementScheme::INFINITE);
 			 downstream_buffer_size_list.push_back(-1);
  
@@ -588,10 +565,10 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 // function used to determine coreIDs the ingress routers connect to
 core_id_t 
 FiniteBufferNetworkModelFlipAtac::computeInterfaceCoreID(core_id_t node_coreID, UInt32 i){
-	// stage_index tells me which ingress router i am at
+	// stage_index tells us which ingress router the head flit is at
 	SInt32 stage_index = node_coreID/_num_router_ports;                    
-	// now that i know which router i'm at, i know which coreID to connect to. 
-	// NOTE*: assume that cores at input/output are labelled 0 to n, where n is the total number of cores
+	// now compute which coreID to connect to. 
+	// NOTE*: assume that cores at input are labelled 0 to n, where n is the total number of cores
 	SInt32 input_core_id = stage_index * _num_router_ports + i;
 	return ((core_id_t) input_core_id); 							
 }
@@ -600,10 +577,9 @@ FiniteBufferNetworkModelFlipAtac::computeInterfaceCoreID(core_id_t node_coreID, 
 // function used to determine coreIDs the egress routers connect to
 core_id_t 
 FiniteBufferNetworkModelFlipAtac::computeEgressInterfaceCoreID(core_id_t node_coreID, UInt32 i){
-	// stage_index tells me which egress router i am at
+	// stage_index tells us which egress router the head flit is at
 	SInt32 stage_index = (node_coreID + 1 - _num_router_ports)/_num_router_ports;               
-	// now that i know which router i'm at, i know which coreID to connect to. 
-	// NOTE*: assume that cores at input/output are labelled 0 to n, where n is the total number of cores
+	// now that compute which coreID to connect to. 
 	SInt32 output_core_id = stage_index * _num_router_ports + i;
 	return ((core_id_t) output_core_id); 								
 }
@@ -616,15 +592,17 @@ FiniteBufferNetworkModelFlipAtac::computeMiddleCoreID(UInt32 i){
 	return _middle_coreID_list[i];
 }
 
+// function used to determine the coreIDs of ingress routers
 core_id_t
 FiniteBufferNetworkModelFlipAtac::computeIngressCoreID(UInt32 i){
 	// use list created in constructor
 	return _ingress_coreID_list[i];
 }
 
+// function used to determine the coreIDs of egress routers
 core_id_t
 FiniteBufferNetworkModelFlipAtac::computeEgressCoreID(UInt32 i){
-	//use list created in constructor
+	// use list created in constructor
 	return _egress_coreID_list[i];
 }
 
@@ -645,12 +623,50 @@ FiniteBufferNetworkModelFlipAtac::getRandNum(UInt32 start, UInt32 end)
    return (SInt32) (start + result * (end - start));
 }
 
-
+// print to sim.out file
 void
 FiniteBufferNetworkModelFlipAtac::outputSummary(ostream& out)
 {
    FiniteBufferNetworkModel::outputSummary(out);
+     outputEventCountSummary(out);
 }
+
+// print event counts to sim.out file
+void
+FiniteBufferNetworkModelFlipAtac::outputEventCountSummary(ostream& out)
+{
+   out << "  Event Counters: " << endl;
+   out << "    Bcast Total Input Buffer Writes: " << _network_node_list[BCAST_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Bcast Total Input Buffer Reads: " << _network_node_list[BCAST_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Bcast Total Switch Allocator Requests: " << _network_node_list[BCAST_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Bcast Total Crossbar Traversals: " << _network_node_list[BCAST_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Bcast Total Link Traversals: " << _network_node_list[BCAST_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Mux Total Input Buffer Writes: " << _network_node_list[MUX_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Mux Total Input Buffer Reads: " << _network_node_list[MUX_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Mux Total Switch Allocator Requests: " << _network_node_list[MUX_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Mux Total Crossbar Traversals: " << _network_node_list[MUX_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Mux Total Link Traversals: " << _network_node_list[MUX_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Ingress Total Input Buffer Writes: " << _network_node_list[INGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Ingress Total Input Buffer Reads: " << _network_node_list[INGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Ingress Total Switch Allocator Requests: " << _network_node_list[INGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Ingress Total Crossbar Traversals: " << _network_node_list[INGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Ingress Total Link Traversals: " << _network_node_list[INGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Middle  Total Input Buffer Writes: " << _network_node_list[MIDDLE_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Middle  Total Input Buffer Reads: " << _network_node_list[MIDDLE_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Middle  Total Switch Allocator Requests: " << _network_node_list[MIDDLE_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Middle  Total Crossbar Traversals: " << _network_node_list[MIDDLE_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Middle  Total Link Traversals: " << _network_node_list[MIDDLE_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   
+   out << "    Egress  Total Input Buffer Writes: " << _network_node_list[EGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Egress  Total Input Buffer Reads: " << _network_node_list[EGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Egress  Total Switch Allocator Requests: " << _network_node_list[EGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Egress  Total Crossbar Traversals: " << _network_node_list[EGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Egress  Total Link Traversals: " << _network_node_list[EGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+}
+
 
 
 pair<bool,UInt32>
@@ -671,7 +687,7 @@ FiniteBufferNetworkModelFlipAtac::computeCoreCountConstraints(SInt32 core_count)
 }
 
 
-//put memory controllers on middle routers (and ingress if not enough middle)
+// put memory controllers on middle routers (and ingress if not enough middle)
 pair<bool,vector<core_id_t> > 
 FiniteBufferNetworkModelFlipAtac::computeMemoryControllerPositions(SInt32 num_memory_controllers)
 {
