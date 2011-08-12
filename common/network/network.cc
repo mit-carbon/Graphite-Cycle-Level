@@ -154,12 +154,6 @@ Network::processPacket(NetPacket* packet)
 void
 Network::receivePacket(NetPacket* packet)
 {
-   if (!Config::getSingleton()->isSimulatingSharedMemory())
-   {
-      LOG_ASSERT_ERROR(packet->type != SHARED_MEM_1 && packet->type != SHARED_MEM_2,
-         "Shared Memory Disabled Currently");
-   }
-
    LOG_PRINT("receivePacket(%p) enter", packet);
 
    NetworkModel* model = getNetworkModelFromPacketType(packet->type);
@@ -486,16 +480,16 @@ Network::netSend(NetPacket& packet)
    // Interface for sending packets on a network
 
    // Convert time from core frequency to network frequency
-   packet.time = convertCycleCount(packet.time, \
-         _core->getPerformanceModel()->getFrequency(), \
+   packet.time = convertCycleCount(packet.time,
+         _core->getPerformanceModel()->getFrequency(),
          getNetworkModelFromPacketType(packet.type)->getFrequency());
 
    // Note the start time
    packet.start_time = packet.time;
 
-   NetPacket* cloned_packet = packet.clone();
+   NetPacket* packet_to_send = packet.clone();
 
-   NetworkModel* model = getNetworkModelFromPacketType(cloned_packet->type);
+   NetworkModel* model = getNetworkModelFromPacketType(packet_to_send->type);
    if (model->isFiniteBuffer())
    {
       // Call FiniteBufferNetworkModel functions
@@ -503,20 +497,33 @@ Network::netSend(NetPacket& packet)
       
       // Divide Packet into flits
       list<NetPacket*> net_packet_list_to_send;
-      finite_buffer_model->sendNetPacket(cloned_packet, net_packet_list_to_send);
-      
-      // FIXME: Verify this works for broadcasted packets
-      // Send Raw Packet on the network
-      sendPacket(cloned_packet, cloned_packet->receiver);
+      finite_buffer_model->sendNetPacket(packet_to_send, net_packet_list_to_send);
+     
+      // Send out raw packets
+      if (packet_to_send->receiver == NetPacket::BROADCAST)
+      {
+         assert(packet_to_send->is_raw);
+         for (SInt32 i = 0; i < (SInt32) Config::getSingleton()->getTotalCores(); i++)
+         {
+            NetPacket* single_packet = packet_to_send->clone();
+            sendPacket(single_packet, i);
+         }
+         packet_to_send->release();
+      }
+      else // (packet_to_send->receiver != NetPacket::BROADCAST)
+      {
+         sendPacket(packet_to_send, packet_to_send->receiver);
+      }
+
       // Send Flits on the network (also free the memory occupied by flits)
       sendPacketList(net_packet_list_to_send);
 
-      return cloned_packet->length;
+      return packet.length;
    }
    else // (!model->isFiniteBuffer())
    {
-      // Call forwardPacket(cloned_packet)
-      return forwardPacket(cloned_packet);
+      // Call forwardPacket(packet_to_send)
+      return forwardPacket(packet_to_send);
    }
 }
 

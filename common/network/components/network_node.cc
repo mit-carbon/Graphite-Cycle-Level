@@ -1,5 +1,9 @@
 #include <sstream>
 using std::ostringstream;
+#include "simulator.h"
+#include "core_manager.h"
+#include "core.h"
+#include "finite_buffer_network_model.h"
 #include "network_node.h"
 #include "utils.h"
 #include "credit_msg.h"
@@ -54,16 +58,14 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
          "Curr Net Packet Time(%llu), Last Net Packet Time(%llu)", input_net_packet->time, _last_net_packet_time);
    _last_net_packet_time = input_net_packet->time;
 
-   LOG_PRINT("#########################################################");
-   // printNetPacket(input_net_packet, true);
-   LOG_PRINT("=========================================================");
-
    NetworkMsg* input_network_msg = (NetworkMsg*) input_net_packet->data;
    vector<NetworkMsg*> output_network_msg_list;
 
    Router::Id sender_router_id(input_net_packet->sender, input_network_msg->_sender_router_index);
    Router::Id receiver_router_id(input_net_packet->receiver, input_network_msg->_receiver_router_index);
-   assert(receiver_router_id == getRouterId());
+   LOG_ASSERT_ERROR(receiver_router_id == _router_id,
+         "Receiver Router ID(%i,%i), Curr Router ID(%i,%i)",
+         receiver_router_id._core_id, receiver_router_id._index, _router_id._core_id, _router_id._index);
    
    switch (input_network_msg->_type)
    {
@@ -76,10 +78,12 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
          
          // input_endpoint (for flits)
          flit->_input_endpoint = getInputEndpointFromRouterId(sender_router_id);
-        
+
          // Normalize Time 
          normalizeTime(flit);
 
+         printNetPacket(input_net_packet, true);
+         
          _router_performance_model->processDataMsg(flit, output_network_msg_list);
       }
 
@@ -89,15 +93,14 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
 
       {
          BufferManagementMsg* buffer_msg = (BufferManagementMsg*) input_network_msg;
- 
+            
          // output_endpoint (for buffer management msgs)
          buffer_msg->_output_endpoint = getOutputEndpointFromRouterId(sender_router_id);
 
          // Normalize Time 
          normalizeTime(buffer_msg);
-
-         // Perform Router and Link Traversal
-         performRouterAndLinkTraversal(buffer_msg);
+         
+         printNetPacket(input_net_packet, true);
 
          _router_performance_model->processBufferManagementMsg(buffer_msg, output_network_msg_list);
 
@@ -120,11 +123,14 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
       
       if (output_network_msg->_type == NetworkMsg::DATA)
       {
-         // Account for router and link delays + update dynamic energy
+         // Account for router(data pipeline) and link delays + update dynamic energy
          performRouterAndLinkTraversal(output_network_msg);
       }
       else if (output_network_msg->_type == NetworkMsg::BUFFER_MANAGEMENT)
       {
+         // Account for router(credit pipeline) and link delays
+         performRouterAndLinkTraversal(output_network_msg);
+
          // Set rate of progress info
          communicateProgressRateInfo((BufferManagementMsg*) output_network_msg);
       }
@@ -275,15 +281,15 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
       
       {
          BufferManagementMsg* buffer_msg = (BufferManagementMsg*) output_network_msg;
-         SInt32 output_channel = buffer_msg->_output_endpoint._channel_id;
+         Channel::Endpoint input_endpoint = buffer_msg->_input_endpoint;
 
+         NetworkNode* remote_network_node = getRemoteNetworkNode(_flow_control_packet_type, input_endpoint);
          // Link Performance Model - Is there a separate channel for buffer management msgs ?
-         if (_link_performance_model_list[output_channel])
-            buffer_msg->_normalized_time += _link_performance_model_list[output_channel]->getDelay();
-      
+         // Add Link Delay
+         buffer_msg->_normalized_time += getRemoteLinkDelay(remote_network_node);
          // Add Credit Pipeline Delay
-         buffer_msg->_normalized_time += _router_performance_model->getCreditPipelineDelay();
-         
+         buffer_msg->_normalized_time += getRemoteRouterCreditPipelineDelay(remote_network_node);
+
          // FIXME: No power modeling for the buffer management messages           
       }
       
@@ -294,6 +300,36 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
       break;
    }
    LOG_PRINT("performRouterAndLinkTraversal(%p) end", output_network_msg)
+}
+
+NetworkNode*
+NetworkNode::getRemoteNetworkNode(PacketType packet_type, Channel::Endpoint& input_endpoint)
+{
+   Router::Id remote_router_id = getRouterIdFromInputEndpoint(input_endpoint);
+   Core* remote_core = Sim()->getCoreManager()->getCoreFromID(remote_router_id._core_id);
+   FiniteBufferNetworkModel* network_model = (FiniteBufferNetworkModel*) (remote_core->getNetwork()->getNetworkModelFromPacketType(packet_type));
+   return network_model->getNetworkNode(remote_router_id._index);
+}
+
+UInt64
+NetworkNode::getRemoteRouterDataPipelineDelay(NetworkNode* remote_network_node)
+{
+   return remote_network_node->getRouterPerformanceModel()->getDataPipelineDelay();
+}
+
+UInt64
+NetworkNode::getRemoteRouterCreditPipelineDelay(NetworkNode* remote_network_node)
+{
+   return remote_network_node->getRouterPerformanceModel()->getCreditPipelineDelay();
+}
+
+UInt64
+NetworkNode::getRemoteLinkDelay(NetworkNode* remote_network_node)
+{
+   // Link that connects remote_network_node and curr_network_node
+   Channel::Endpoint output_endpoint = remote_network_node->getOutputEndpointFromRouterId(_router_id);
+   SInt32 output_channel = output_endpoint._channel_id;
+   return remote_network_node->getLinkPerformanceModel(output_channel)->getDelay();
 }
 
 void
@@ -371,7 +407,7 @@ NetworkNode::communicateProgressRateInfo(BufferManagementMsg* buffer_msg)
 }
 
 void
-NetworkNode::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, \
+NetworkNode::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping,
       Router::Id& router_id)
 {
    vector<Router::Id> router_id_list(1, router_id);
@@ -379,7 +415,7 @@ NetworkNode::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id
 }
 
 void
-NetworkNode::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, \
+NetworkNode::addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping,
       vector<Router::Id>& router_id_list)
 {
    channel_to_router_id_list__mapping.push_back(router_id_list);
@@ -507,31 +543,32 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
       
       {
          Flit* flit = (Flit*) network_msg;
-         LOG_PRINT("Flit [Type(%s), Normalized Time at Entry(%llu), Delay(%llu), Length(%i), Sender(%i), Receiver(%i), Requester(%i), Net Packet(%p), Output Endpoint List(%p)]",
-               flit->getTypeString().c_str(),
-               (long long unsigned int) flit->_normalized_time_at_entry,
-               (long long unsigned int) (flit->_normalized_time - flit->_normalized_time_at_entry),
-               flit->_length,
-               flit->_sender,
-               flit->_receiver,
-               flit->_requester,
-               flit->_net_packet,
-               flit->_output_endpoint_list);
+//         fprintf(stderr, " %s : Type(DATA,%s), Normalized Time(%llu), Sender(%i), Upstream(%i,%i), Downstream(%i,%i)\n",
+//               (is_input_msg) ? "(ENTER)" : "(EXIT)",
+//               flit->getTypeString().c_str(),
+//               (long long unsigned int) flit->_normalized_time,
+//               flit->_sender,
+//               net_packet->sender, network_msg->_sender_router_index,
+//               net_packet->receiver, network_msg->_receiver_router_index);
 
-         if ((flit->_type == Flit::HEAD) && (is_input_msg))
+         if ((flit->_type & Flit::HEAD) && (is_input_msg))
          {
-            ChannelEndpointList* endpoint_list = flit->_output_endpoint_list;
+            vector<Channel::Endpoint>* endpoint_list = flit->_output_endpoint_list;
 
             ostringstream endpoints_str;
             endpoints_str << "Head Flit [Output Endpoint List( ";
-            
-            while (endpoint_list->curr() != endpoint_list->last())
+           
+            if (!endpoint_list->empty())
             {
-               endpoints_str << "(" << endpoint_list->curr()._channel_id << "," << endpoint_list->curr()._index << "), ";
-               endpoint_list->incr();
+               vector<Channel::Endpoint>::iterator endpoint_it = endpoint_list->begin(); 
+               for ( ; endpoint_it != endpoint_list->end(); endpoint_it ++)
+               {
+                  Channel::Endpoint endpoint = *endpoint_it;
+                  endpoints_str << "(" << endpoint._channel_id << "," << endpoint._index << "), ";
+               }
             }
-            endpoints_str <<  "(" << endpoint_list->curr()._channel_id << "," << endpoint_list->curr()._index << ") )]";
-            endpoint_list->incr();
+
+            endpoints_str << ")]";
 
             LOG_PRINT("%s", endpoints_str.str().c_str());
          }
@@ -545,6 +582,12 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
          BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
          LOG_PRINT("Buffer Management Msg [Type(%s)]", buffer_msg->getTypeString().c_str());
 
+//         fprintf(stderr, " %s : Type(CREDIT), Normalized Time(%llu), Upstream(%i,%i), Downstream(%i,%i)\n",
+//               (is_input_msg) ? "(ENTER)" : "(EXIT)",
+//               (long long unsigned int) buffer_msg->_normalized_time,
+//               net_packet->sender, network_msg->_sender_router_index,
+//               net_packet->receiver, network_msg->_receiver_router_index);
+//
          if (buffer_msg->_type == BufferManagementScheme::CREDIT)
          {
             CreditMsg* credit_msg = (CreditMsg*) buffer_msg;

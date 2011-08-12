@@ -8,6 +8,7 @@ public:
    class Id
    {
    public:
+      Id(): _core_id(INVALID_CORE_ID), _index(-1) {}
       Id(core_id_t core_id, SInt32 index):
          _core_id(core_id), _index(index) {}
       ~Id() {}

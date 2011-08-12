@@ -9,7 +9,6 @@ Flit::Flit(Type type, SInt32 length, core_id_t sender, core_id_t receiver, core_
    _type(type),
    _sender(sender),
    _receiver(receiver),
-   _requester(requester),
    _net_packet(NULL),
    _output_endpoint_list(NULL)
 {}
@@ -22,7 +21,6 @@ Flit::Flit(const Flit& rhs):
    _type(rhs._type),
    _sender(rhs._sender),
    _receiver(rhs._receiver),
-   _requester(rhs._requester),
    _net_packet(rhs._net_packet),
    _output_endpoint_list(rhs._output_endpoint_list)
 {}

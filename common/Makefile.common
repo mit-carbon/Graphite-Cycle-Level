@@ -12,8 +12,8 @@ DIRECTORIES = $(SIM_ROOT)/common/core/        									\
 			 $(SIM_ROOT)/common/network/components/router	   				\
 			 $(SIM_ROOT)/common/network/components/router/performance	   \
 			 $(SIM_ROOT)/common/network/components/router/performance/flow_control_schemes	   							\
-			 $(SIM_ROOT)/common/network/components/router/performance/flow_control_schemes/buffer_models	   			\
-			 $(SIM_ROOT)/common/network/components/router/performance/flow_control_schemes/buffer_usage_history	   \
+			 $(SIM_ROOT)/common/network/components/router/performance/buffer_models	   										\
+			 $(SIM_ROOT)/common/network/components/router/performance/buffer_status	   										\
 			 $(SIM_ROOT)/common/network/components/router/performance/network_msg_types									   \
 			 $(SIM_ROOT)/common/network/components/router/performance/network_msg_types/buffer_management_msg_types  \
 			 $(SIM_ROOT)/common/network/components/router/power				\

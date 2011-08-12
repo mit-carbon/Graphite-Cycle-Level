@@ -5,10 +5,9 @@ using namespace std;
 
 #include "fixed_types.h"
 #include "buffer_model.h"
-#include "channel_endpoint_list.h"
 #include "buffer_management_scheme.h"
 #include "buffer_management_msg.h"
-#include "buffer_usage_history.h"
+#include "buffer_status.h"
 #include "flit.h"
 #include "flow_control_scheme.h"
 
@@ -19,7 +18,7 @@ class FlitBufferFlowControlScheme : public FlowControlScheme
       ~FlitBufferFlowControlScheme();
       
       // Dividing and coalescing packet at start and end
-      static void dividePacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list, \
+      static void dividePacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list,
             SInt32 num_flits, core_id_t requester);
       static bool isPacketComplete(NetPacket* net_packet);
    
@@ -30,17 +29,19 @@ class FlitBufferFlowControlScheme : public FlowControlScheme
             BufferModel* _buffer;
 
          public:
-            FlitBuffer(BufferManagementScheme::Type buffer_management_scheme, \
+            FlitBuffer(BufferManagementScheme::Type buffer_management_scheme,
                   SInt32 size_buffer);
             ~FlitBuffer();
 
             // One endpoint list per packet
-            ChannelEndpointList* _output_endpoint_list;
+            vector<Channel::Endpoint>* _output_endpoint_list;
+            // Are Output Channels already allocated
+            bool _output_channels_allocated;
 
             BufferModel* getBufferModel()
             { return _buffer; }
             
-            // FIXME: Dont know if there is a better way to do this
+            // TODO: Find out if there is a better way to do this
             // Just want to call the public functions of BufferModel
             BufferManagementMsg* enqueue(Flit* flit) { return _buffer->enqueue(flit); }
             BufferManagementMsg* dequeue() { return _buffer->dequeue(); }

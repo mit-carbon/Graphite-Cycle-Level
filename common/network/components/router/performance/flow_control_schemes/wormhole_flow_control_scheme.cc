@@ -1,11 +1,13 @@
+#define __STDC_LIMIT_MACROS
+#include <stdint.h>
 #include "wormhole_flow_control_scheme.h"
 #include "log.h"
 
-WormholeFlowControlScheme::WormholeFlowControlScheme( \
-      SInt32 num_input_channels, SInt32 num_output_channels, \
-      vector<SInt32>& num_input_endpoints_list, vector<SInt32>& num_output_endpoints_list, \
-      vector<BufferManagementScheme::Type>& input_buffer_management_scheme_vec, \
-      vector<BufferManagementScheme::Type>& downstream_buffer_management_scheme_vec, \
+WormholeFlowControlScheme::WormholeFlowControlScheme(
+      SInt32 num_input_channels, SInt32 num_output_channels,
+      vector<SInt32>& num_input_endpoints_list, vector<SInt32>& num_output_endpoints_list,
+      vector<BufferManagementScheme::Type>& input_buffer_management_scheme_vec,
+      vector<BufferManagementScheme::Type>& downstream_buffer_management_scheme_vec,
       vector<SInt32>& input_buffer_size_vec, vector<SInt32>& downstream_buffer_size_vec):
    FlitBufferFlowControlScheme(num_input_channels, num_output_channels)
 {
@@ -13,16 +15,15 @@ WormholeFlowControlScheme::WormholeFlowControlScheme( \
    _input_flit_buffer_vec.resize(_num_input_channels);
    for (SInt32 i = 0; i < _num_input_channels; i++)
    {
-      _input_flit_buffer_vec[i] = new FlitBuffer(input_buffer_management_scheme_vec[i], \
+      _input_flit_buffer_vec[i] = new FlitBuffer(input_buffer_management_scheme_vec[i],
             input_buffer_size_vec[i]);
    }
 
    // Create downstream buffer usage histories
-   _list_of_downstream_buffer_usage_histories_vec.resize(_num_output_channels);
+   _vec_downstream_buffer_status_list.resize(_num_output_channels);
    for (SInt32 i = 0; i < _num_output_channels; i++)
    {
-      _list_of_downstream_buffer_usage_histories_vec[i] = new ListOfBufferUsageHistories( \
-            num_output_endpoints_list[i], \
+      _vec_downstream_buffer_status_list[i] = new BufferStatusList(num_output_endpoints_list[i],
             downstream_buffer_management_scheme_vec[i], downstream_buffer_size_vec[i]);
    }
 
@@ -42,7 +43,7 @@ WormholeFlowControlScheme::~WormholeFlowControlScheme()
    }
    for (SInt32 i = 0; i < _num_output_channels; i++)
    {
-      delete _list_of_downstream_buffer_usage_histories_vec[i];
+      delete _vec_downstream_buffer_status_list[i];
    }
 }
 
@@ -71,18 +72,16 @@ WormholeFlowControlScheme::processDataMsg(Flit* flit, vector<NetworkMsg*>& netwo
 }
 
 void
-WormholeFlowControlScheme::processBufferManagementMsg( \
-      BufferManagementMsg* buffer_management_msg, vector<NetworkMsg*>& network_msg_list)
+WormholeFlowControlScheme::processBufferManagementMsg(BufferManagementMsg* buffer_management_msg,
+                                                      vector<NetworkMsg*>& network_msg_list)
 {
    LOG_PRINT("processBufferManagementMsg(%p, %p) enter", this, buffer_management_msg);
 
    _network_msg_list = &network_msg_list;
 
    Channel::Endpoint& output_endpoint = buffer_management_msg->_output_endpoint;
-   ListOfBufferUsageHistories* list_of_buffer_usage_histories = \
-         _list_of_downstream_buffer_usage_histories_vec[output_endpoint._channel_id];
-   list_of_buffer_usage_histories->receiveBufferManagementMsg( \
-         buffer_management_msg, output_endpoint._index);
+   BufferStatusList* buffer_status_list = _vec_downstream_buffer_status_list[output_endpoint._channel_id];
+   buffer_status_list->receiveBufferManagementMsg(buffer_management_msg, output_endpoint._index);
  
    iterate();
    
@@ -148,7 +147,7 @@ WormholeFlowControlScheme::sendFlit(SInt32 input_channel)
 
    Flit* flit = flit_buffer->front();
 
-   LOG_PRINT("Got Flit(%p)", flit);
+   LOG_PRINT("Got Flit(%p): Sender(%i), Receiver(%i)", flit, flit->_sender, flit->_receiver);
 
    if (flit_buffer->_output_endpoint_list == NULL)
    {
@@ -157,166 +156,171 @@ WormholeFlowControlScheme::sendFlit(SInt32 input_channel)
       flit_buffer->_output_endpoint_list = flit->_output_endpoint_list;
    }
 
-   // Check if the Output Endpoint List is an empty vector
-   if (flit_buffer->_output_endpoint_list->empty())
-   {
-      // Update Flit time first
-      LOG_PRINT("Update Flit Time");
-      flit_buffer->updateFlitTime();
-      // Update Buffer Time to account for the size of the flit
-      flit_buffer->updateBufferTime();
-      
-      // Remove flit from queue
-      // Update upstream buffer usage history
-      BufferManagementMsg* upstream_buffer_msg = flit_buffer->dequeue();
-      if (upstream_buffer_msg)
-      {
-         LOG_PRINT("Sending Upstream Buffer Msg (%p)", upstream_buffer_msg);
-
-         upstream_buffer_msg->_input_endpoint = flit->_input_endpoint;
-         _network_msg_list->push_back(upstream_buffer_msg);
-      }
-      
-      // If TAIL flit, delete the output_endpoint_list
-      if (flit->_type & Flit::TAIL)
-      {
-         LOG_PRINT("TAIL flit");
-
-         // Delete _output_endpoint_list
-         delete flit_buffer->_output_endpoint_list;
-         flit_buffer->_output_endpoint_list = NULL;
+   // Update Flit Time First
+   LOG_PRINT("Update Flit Time");
+   flit_buffer->updateFlitTime();
    
-         LOG_PRINT("sendFlit(%i) exit->(true,true)", input_channel);
-         return make_pair<bool,bool>(true,true);
-      }
-      else // A HEAD or BODY flit
-      {
-         LOG_PRINT("sendFlit(%i) exit->(true,false)", input_channel);
-         return make_pair<bool,bool>(true,false);
-      }
-   }
-
-   // Get the curr output_endpoint
-   flit->_output_endpoint = flit_buffer->_output_endpoint_list->curr();
-
-   LOG_PRINT("Output Endpoint(%i,%i)", flit->_output_endpoint._channel_id,
-         flit->_output_endpoint._index);
-
-   if (flit->_output_endpoint == flit_buffer->_output_endpoint_list->first())
+   if (!flit_buffer->_output_channels_allocated)
    {
-      LOG_PRINT("Update Flit Time");
-      flit_buffer->updateFlitTime();
-   }
-
-   SInt32 output_channel = flit->_output_endpoint._channel_id;
-
-   if ( (_input_channels_allocated_vec[output_channel] != Channel::INVALID) &&
-      (_input_channels_allocated_vec[output_channel] != input_channel) )
-   {
-      // Flits of some other flow are occupying the output channel to use
       LOG_ASSERT_ERROR(flit->_type & Flit::HEAD, "flit->_type(%u)", flit->_type);
-      
-      LOG_PRINT("sendFlit(%i) exit->(false,false)", input_channel);
-      return make_pair<bool,bool>(false,false);
-   }
-   else if (_input_channels_allocated_vec[output_channel] == Channel::INVALID)
-   {
-      LOG_PRINT("Channel::INVALID, allocating");
 
-      LOG_ASSERT_ERROR(flit->_type & Flit::HEAD, "flit->_type(%u)", flit->_type);
-      _input_channels_allocated_vec[output_channel] = input_channel;
-   }
-
-   // Model buffer allocation (at downstream router)
-   // Also changes downstream buffer usage history
-   bool allocated = allocateDownstreamBuffer(flit);
-   if (allocated)
-   {
-      LOG_PRINT("Downstream Buffer allocated: Updating Buffer Time");
-
-      // flit_to_send downstream
-      Flit* flit_to_send;
-
-      flit_buffer->updateBufferTime();
-      if (flit->_output_endpoint == flit_buffer->_output_endpoint_list->last())
+      // Iterate through the list of output endpoints and try to allocate channels
+      // all at once - otherwise deadlock results
+      vector<Channel::Endpoint>::iterator endpoint_it = flit_buffer->_output_endpoint_list->begin();
+      for ( ; endpoint_it != flit_buffer->_output_endpoint_list->end(); endpoint_it ++)
       {
-         LOG_PRINT("Last Output Channel");
+         Channel::Endpoint output_endpoint = *endpoint_it;
+         SInt32 output_channel = output_endpoint._channel_id;
 
-         // Remove flit from queue
-         // Update upstream buffer usage history
-         BufferManagementMsg* upstream_buffer_msg = flit_buffer->dequeue();
-         if (upstream_buffer_msg)
-         {
-            LOG_PRINT("Sending Upstream Buffer Msg (%p)", upstream_buffer_msg);
-
-            upstream_buffer_msg->_input_endpoint = flit->_input_endpoint;
-            _network_msg_list->push_back(upstream_buffer_msg);
-         }
-         // Send flit downstream
-         flit_to_send = flit;
-      }
-      else
-      {
-         LOG_PRINT("NOT Last Output Channel -> Duplicate Flit");
-
-         // Duplicate flit and net_packet
-         NetPacket* cloned_net_packet = flit->_net_packet->clone();
-         Flit* cloned_flit = (Flit*) cloned_net_packet->data;
-         cloned_flit->_net_packet = cloned_net_packet;
+         // FIXME: This can occur if multiple output endpoints have same output channels
+         LOG_PRINT("Output Endpoint(%i,%i)", output_endpoint._channel_id, output_endpoint._index);
+         LOG_ASSERT_ERROR(_input_channels_allocated_vec[output_channel] != input_channel,
+               "Output Channel(%i) already allocated for input channel(%i)",
+               output_channel, input_channel);
          
-         // Send cloned_flit downstream
-         flit_to_send = cloned_flit;
+         if (_input_channels_allocated_vec[output_channel] != Channel::INVALID)
+         {
+            // Flits of some other flow are occupying the output channel to use
+            LOG_PRINT("Output Channel(%i) already allocated to input channel(%i)",
+                  output_channel, _input_channels_allocated_vec[output_channel]);
+            
+            LOG_PRINT("sendFlit(%i) exit->(false,false)", input_channel);
+            return make_pair<bool,bool>(false,false);
+         }
       }
-      
-      // Update ptr to _output_endpoint_list
-      flit_buffer->_output_endpoint_list->incr();
 
+      // All output channels are not allocated. Allocate all output channels at once
+      endpoint_it = flit_buffer->_output_endpoint_list->begin();
+      for ( ; endpoint_it != flit_buffer->_output_endpoint_list->end(); endpoint_it ++)
+      {
+         SInt32 output_channel = (*endpoint_it)._channel_id;
+         LOG_PRINT("Allocating Output Channel(%i)", output_channel);
+         _input_channels_allocated_vec[output_channel] = input_channel;
+      }
+
+      // Completed allocating output channels
+      flit_buffer->_output_channels_allocated = true;
+   }
+
+   // All Output Channels are now allocated
+
+   // Now, allocate a downstream buffer
+   UInt64 max_allocated_time = 0;
+
+   vector<Channel::Endpoint>::iterator endpoint_it = flit_buffer->_output_endpoint_list->begin();
+   for ( ; endpoint_it != flit_buffer->_output_endpoint_list->end(); endpoint_it ++)
+   {
+      Channel::Endpoint output_endpoint = *endpoint_it;
+      
+      UInt64 allocated_time = tryAllocateDownstreamBuffer(flit, output_endpoint);
+      if (allocated_time == UINT64_MAX)
+      {
+         LOG_PRINT("Could not allocate a buffer for output endpoint(%i,%i)",
+               output_endpoint._channel_id, output_endpoint._index);
+
+         LOG_PRINT("sendFlit(%i) exit->(false,false)", input_channel);
+         return make_pair<bool,bool>(false,false);
+      }
+
+      // Compute the maximum
+      max_allocated_time = max<UInt64>(max_allocated_time, allocated_time);
+   }
+
+   // All output endpoints have a free buffer
+   LOG_PRINT("Buffer allocated downstream for all output endpoints: Allocated Time(%llu)", max_allocated_time);
+
+   // Update Flit Time to max_allocated_time
+   flit->_normalized_time = max<UInt64>(flit->_normalized_time, max_allocated_time);
+   
+   // Send Flit to all output endpoints
+   endpoint_it = flit_buffer->_output_endpoint_list->begin();
+   for ( ; endpoint_it != flit_buffer->_output_endpoint_list->end(); endpoint_it ++)
+   {
+      Channel::Endpoint output_endpoint = *endpoint_it;
+      LOG_PRINT("Downstream Buffer allocated for Output Endpoint(%i,%i)",
+            output_endpoint._channel_id, output_endpoint._index);
+      
+      allocateDownstreamBuffer(flit, output_endpoint);
+
+      // Duplicate flit and net_packet
+      NetPacket* cloned_net_packet = flit->_net_packet->clone();
+      Flit* cloned_flit = (Flit*) cloned_net_packet->data;
+      cloned_flit->_net_packet = cloned_net_packet;
+      cloned_flit->_output_endpoint = output_endpoint;
+         
       LOG_PRINT("Adding to list of messages to send");
 
       // Send flit to downstream router
-      _network_msg_list->push_back(flit_to_send);
+      _network_msg_list->push_back(cloned_flit);
 
+      // If TAIL Flit, de-allocate output channel
       if (flit->_type & Flit::TAIL)
       {
-         LOG_PRINT("TAIL flit");
+         SInt32 output_channel = output_endpoint._channel_id;
+         
+         LOG_PRINT("TAIL Flit: Releasing Output Channel(%i)", output_channel);
+         LOG_ASSERT_ERROR(_input_channels_allocated_vec[output_channel] == input_channel,
+               "Output Channel(%i) allocated to Input Channel(%i), should be allocated to (%i)",
+               output_channel, _input_channels_allocated_vec[output_channel], input_channel);
 
          _input_channels_allocated_vec[output_channel] = Channel::INVALID;
-         if (flit->_output_endpoint == flit_buffer->_output_endpoint_list->last())
-         {
-            // All flits of packet have been sent on all output channels
-            // Delete _output_endpoint_list
-            delete flit_buffer->_output_endpoint_list;
-            flit_buffer->_output_endpoint_list = NULL;
-      
-            LOG_PRINT("sendFlit(%i) exit->(true,true)", input_channel);
-            return make_pair<bool,bool>(true,true);
-         }
-         else
-         {
-            LOG_PRINT("sendFlit(%i) exit->(true,false)", input_channel);
-            // All flits of packet have been sent on at least one output channel
-            return make_pair<bool,bool>(true,false);
-         }
       }
-      else
-      {
-         LOG_PRINT("sendFlit(%i) exit->(true,false)", input_channel);
-         // There is at least one flit remaining to be sent on all output channels
-         return make_pair<bool,bool>(true,false);
-      }
+   }
+
+   // Update Buffer Time for next flit
+   LOG_PRINT("Updating Buffer Time");
+   flit_buffer->updateBufferTime();
+
+   // Remove flit from queue
+   BufferManagementMsg* upstream_buffer_msg = flit_buffer->dequeue();
+   if (upstream_buffer_msg)
+   {
+      LOG_PRINT("Sending Upstream Buffer Msg (%p)", upstream_buffer_msg);
+
+      upstream_buffer_msg->_input_endpoint = flit->_input_endpoint;
+      _network_msg_list->push_back(upstream_buffer_msg);
+   }
+
+   // Move the flit_type to a local variable
+   Flit::Type flit_type = flit->_type;
+   
+   // Release the Net-packet and hence the flit
+   flit->_net_packet->release();
+
+   // If TAIL Flit, de-allocate the output channels
+   if (flit_type & Flit::TAIL)
+   {
+      LOG_PRINT("TAIL flit");
+
+      // All flits of the packet have been sent on all output channels
+      // Delete _output_endpoint_list
+      delete flit_buffer->_output_endpoint_list;
+      flit_buffer->_output_endpoint_list = NULL;
+
+      // Set Output Channels allocated to false
+      flit_buffer->_output_channels_allocated = false;
+   
+      LOG_PRINT("sendFlit(%i) exit->(true,true)", input_channel);
+      return make_pair<bool,bool>(true,true);
    }
    else
    {
-      LOG_PRINT("sendFlit(%i) exit->(false,false)", input_channel);
-      return make_pair<bool,bool>(false,false);
+      // There is at least one flit remaining to be sent on all output channels
+      LOG_PRINT("sendFlit(%i) exit->(true,false)", input_channel);
+      return make_pair<bool,bool>(true,false);
    }
 }
 
-bool
-WormholeFlowControlScheme::allocateDownstreamBuffer(Flit* flit)
+void
+WormholeFlowControlScheme::allocateDownstreamBuffer(Flit* flit, Channel::Endpoint& output_endpoint)
 {
-   Channel::Endpoint& output_endpoint = flit->_output_endpoint;
-   ListOfBufferUsageHistories* list_of_buffer_usage_histories =
-         _list_of_downstream_buffer_usage_histories_vec[output_endpoint._channel_id];
-   return list_of_buffer_usage_histories->allocateBuffer(flit, output_endpoint._index);
+   BufferStatusList* buffer_status_list = _vec_downstream_buffer_status_list[output_endpoint._channel_id];
+   buffer_status_list->allocateBuffer(flit, output_endpoint._index);
+}
+
+UInt64
+WormholeFlowControlScheme::tryAllocateDownstreamBuffer(Flit* flit, Channel::Endpoint& output_endpoint)
+{
+   BufferStatusList* buffer_status_list = _vec_downstream_buffer_status_list[output_endpoint._channel_id];
+   return buffer_status_list->tryAllocateBuffer(flit, output_endpoint._index);
 }

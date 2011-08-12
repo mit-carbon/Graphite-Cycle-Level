@@ -3,7 +3,7 @@
 #include "electrical_link_performance_model_equalized.h"
 #include "log.h"
 
-ElectricalLinkPerformanceModel::ElectricalLinkPerformanceModel(volatile float link_frequency, \
+ElectricalLinkPerformanceModel::ElectricalLinkPerformanceModel(volatile float link_frequency,
       volatile double link_length, UInt32 link_width, SInt32 num_receiver_endpoints):
    ElectricalLinkModel(link_frequency, link_length, link_width, num_receiver_endpoints),
    LinkPerformanceModel()
@@ -13,7 +13,7 @@ ElectricalLinkPerformanceModel::~ElectricalLinkPerformanceModel()
 {}
 
 ElectricalLinkPerformanceModel*
-ElectricalLinkPerformanceModel::create(std::string link_type_str, volatile float link_frequency, \
+ElectricalLinkPerformanceModel::create(std::string link_type_str, volatile float link_frequency,
       volatile double link_length, UInt32 link_width, SInt32 num_receiver_endpoints)
 {
    ElectricalLinkModel::Type link_type = ElectricalLinkModel::parse(link_type_str);
@@ -21,11 +21,11 @@ ElectricalLinkPerformanceModel::create(std::string link_type_str, volatile float
    switch (link_type)
    {
       case ElectricalLinkModel::REPEATED:
-         return new ElectricalLinkPerformanceModelRepeated(link_frequency, \
+         return new ElectricalLinkPerformanceModelRepeated(link_frequency,
                link_length, link_width, num_receiver_endpoints);
 
       case ElectricalLinkModel::EQUALIZED:
-         return new ElectricalLinkPerformanceModelEqualized(link_frequency, \
+         return new ElectricalLinkPerformanceModelEqualized(link_frequency,
                link_length, link_width, num_receiver_endpoints);
 
       default:

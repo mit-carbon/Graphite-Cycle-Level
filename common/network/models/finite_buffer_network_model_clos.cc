@@ -213,7 +213,7 @@ FiniteBufferNetworkModelClos::computeOutputEndpointList(Flit* head_flit, Network
    LOG_PRINT("Initialize head flit's channel endpoint list...");
    // In all cases...
    // Initialize the output channel struct inside head_flit
-   head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_vec);
+   head_flit->_output_endpoint_list = new vector<Channel::Endpoint>(output_endpoint_vec);
    
    LOG_PRINT("computeOutputEndpointList(%p, %p) end", head_flit, curr_network_node);
 

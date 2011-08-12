@@ -19,35 +19,46 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
    private:
       ////// Private Enumerators
       
-      enum GlobalRoute
-      {
-         GLOBAL_ENET = 0,
-         GLOBAL_ONET,
-         NUM_GLOBAL_ROUTES
-      };
-      enum LocalRoute
-      {
-         LOCAL_ENET = 0,
-         LOCAL_BNET,
-         NUM_LOCAL_ROUTES
-      };
       enum GlobalRoutingStrategy
       {
          DISTANCE_BASED = 0,
-         CLUSTER_BASED,
-         NUM_GLOBAL_ROUTING_STRATEGIES
+         CLUSTER_BASED
+      };
+      enum GlobalRoute
+      {
+         GLOBAL_ENET = 0,
+         GLOBAL_ONET
+      };
+      enum ReceiveNetType
+      {
+         HTREE = 0,
+         STAR
       };
       enum NodeType
       {
          EMESH = 0,
-         SENDING_HUB = 1,
-         RECEIVING_HUB = 2
+         SEND_HUB = 1,
+         RECEIVE_HUB = 2,
+         STAR_NET_ROUTER_BASE = 3
       };
 
       ////// Private Variables
      
+      //// Non-Static
+      
+      volatile float _frequency;
+
+      // Cluster ID
+      SInt32 _cluster_id;
+      
+      // Buffer Management Scheme
+      BufferManagementScheme::Type _buffer_management_scheme;
+
       //// Static 
+      
       static bool _initialized;
+      // Tile Width
+      static double _tile_width;
       // Topology Related
       static SInt32 _enet_width;
       static SInt32 _enet_height;
@@ -66,7 +77,7 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       static SInt32 _sub_cluster_width;
       static SInt32 _sub_cluster_height;
       // BNets
-      static SInt32 _num_bnets_per_cluster;
+      static SInt32 _num_receive_nets_per_cluster;
       
       // Cluster Info
       class ClusterInfo
@@ -87,18 +98,11 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       };
       static vector<ClusterInfo> _cluster_info_list;
 
-      //// Non-Static
-      volatile float _frequency;
-
-      // Cluster ID
-      SInt32 _cluster_id;
-
       // Global Routing Strategy
-      GlobalRoutingStrategy _global_routing_strategy;
-      SInt32 _unicast_distance_threshold;
-      // Local Route variables
-      LocalRoute _local_broadcast_route;
-      LocalRoute _local_unicast_route;
+      static GlobalRoutingStrategy _global_routing_strategy;
+      static SInt32 _unicast_distance_threshold;
+      // Type of Network on Receiver Cluster
+      static ReceiveNetType _receive_net_type;
 
       //// Utilities
       static void initializeClusters();
@@ -114,38 +118,44 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       static bool isAccessPoint(Router::Id router_id);
       static core_id_t computeCoreIDWithOpticalHub(SInt32 cluster_id);
       static bool isHub(Router::Id router_id);
+      static double computeOpticalLinkLength();
 
       ////// Non-Static Private Functions
 
       //// Utilities
       //// Initialization
       static void initializeANetTopologyParameters();
+      static void initializeANetRoutingParameters();
       
       // Creating router object
       NetworkNode* createNetworkNode(NodeType node_type);
 
       //// Routing Functions
       // Compute the Global route taken by a packet (ENet / ONet)
-      GlobalRoute computeGlobalRoute(core_id_t sender, core_id_t receiver);
-      // Compute the Local route taken by a packet at its receiving cluster (ENet / BNet)
-      LocalRoute computeLocalRoute(core_id_t receiver);
+      static GlobalRoute computeGlobalRoute(core_id_t sender, core_id_t receiver);
       // BNet link/channel to send the packet on
-      SInt32 getBNetChannelId(core_id_t sender);
+      static SInt32 computeReceiveNetID(core_id_t sender);
       // Parsing Functions
-      GlobalRoutingStrategy parseGlobalRoutingStrategy(string str);
-      LocalRoute parseLocalRoute(string str);
+      static GlobalRoutingStrategy parseGlobalRoutingStrategy(string str);
+      static ReceiveNetType parseReceiveNetType(string str);
 
-      // Compute Next Hops
+      // Compute Next Hops on ENet, ONet, (HTree or StarNet)
       void computeNextHopsOnENet(NetworkNode* curr_network_node,
             core_id_t sender, core_id_t receiver,
-            vector<Channel::Endpoint>& output_endpoint_list);
+            vector<Channel::Endpoint>& output_endpoint_vec);
       void computeNextHopsOnONet(NetworkNode* curr_network_node,
             core_id_t sender, core_id_t receiver,
-            vector<Channel::Endpoint>& output_endpoint_list);
-      void computeNextHopsOnBNet(NetworkNode* curr_network_node,
+            vector<Channel::Endpoint>& output_endpoint_vec);
+      void computeNextHopsOnHTree(NetworkNode* curr_network_node,
             core_id_t sender, core_id_t receiver,
-            vector<Channel::Endpoint>& output_endpoint_list);
-      
+            vector<Channel::Endpoint>& output_endpoint_vec);
+      void computeNextHopsOnStarNet(NetworkNode* curr_network_node,
+            core_id_t sender, core_id_t receiver,
+            vector<Channel::Endpoint>& output_endpoint_vec);
+    
+      // Event Counters Summary 
+      void outputEventCountSummary(ostream& out);
+
       // Virtual Function in FiniteBufferNetworkModel
       void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
       // Compute Ingress Router Id

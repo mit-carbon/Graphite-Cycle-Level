@@ -193,9 +193,9 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Networ
             next_dest_list.push_back(computeCoreId(cx+1,cy));
          if (cx <= sx)
             next_dest_list.push_back(computeCoreId(cx-1,cy));
-         if (cx == sx)
-            next_dest_list.push_back(_core_id);
       }
+      // Always send to myself
+      next_dest_list.push_back(_core_id);
 
       // Eliminate cores that are not reachable
       list<core_id_t>::iterator it = next_dest_list.begin();
@@ -212,7 +212,7 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Networ
          }
       }
    }
-   else
+   else // (head_flit->_receiver != NetPacket::BROADCAST)
    {
       SInt32 dx, dy;
       computeEMeshPosition(head_flit->_receiver, dx, dy);
@@ -252,13 +252,17 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, Networ
       Channel::Endpoint& output_endpoint = curr_network_node->getOutputEndpointFromRouterId(router_id);
       output_endpoint_vec.push_back(output_endpoint);
       
+      LOG_PRINT("Sender(%i), Receiver(%i), Curr Router(%i,%i), Next Router(%i,%i), Output Endpoint(%i,%i)",
+            head_flit->_sender, head_flit->_receiver, curr_core_id, curr_router_id._index,
+            router_id._core_id, router_id._index,
+            output_endpoint._channel_id, output_endpoint._index);
       LOG_PRINT("Next Router(%i,%i), Output Endpoint(%i,%i)",
             router_id._core_id, router_id._index,
             output_endpoint._channel_id, output_endpoint._index);
    }
 
    // Initialize the output channel struct inside head_flit
-   head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_vec);
+   head_flit->_output_endpoint_list = new vector<Channel::Endpoint>(output_endpoint_vec);
    
    LOG_PRINT("computeOutputEndpointList(%p,%p) exit, channel_endpoint_list.size(%u)",
          head_flit, curr_network_node, head_flit->_output_endpoint_list->size());

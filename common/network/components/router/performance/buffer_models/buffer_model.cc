@@ -1,7 +1,7 @@
 #include "buffer_model.h"
 #include "infinite_buffer_model.h"
-#include "finite_buffer_model_with_credit_signaling.h"
-#include "finite_buffer_model_with_on_off_signaling.h"
+#include "credit_buffer_model.h"
+#include "on_off_buffer_model.h"
 #include "log.h"
 
 BufferModel::BufferModel()
@@ -47,13 +47,14 @@ BufferModel::updateBufferTime()
 {
    Flit* flit = _queue.front();
    
-   LOG_PRINT("updateBufferTime() enter: Flit Time(%llu), Flit Length(%i), Buffer Time(%llu)", \
+   LOG_PRINT("updateBufferTime() enter: Flit Time(%llu), Flit Length(%i), Buffer Time(%llu)",
          flit->_normalized_time, flit->_length, _queue_time);
 
-   // Synchronize the buffer time to the flit time
-   _queue_time = max<UInt64>(_queue_time, flit->_normalized_time + flit->_length);
+   LOG_ASSERT_ERROR(flit->_normalized_time >= _queue_time,
+         "Flit Time(%llu) < Queue Time(%llu)", flit->_normalized_time, _queue_time);
+   _queue_time = flit->_normalized_time + flit->_length;
    
-   LOG_PRINT("updateBufferTime() enter: Buffer Time(%llu)", _queue_time);
+   LOG_PRINT("updateBufferTime() exit: Buffer Time(%llu)", _queue_time);
 }
 
 UInt64
@@ -72,10 +73,10 @@ BufferModel::create(BufferManagementScheme::Type buffer_management_scheme, SInt3
          return new InfiniteBufferModel();
 
       case BufferManagementScheme::CREDIT:
-         return new FiniteBufferModelWithCreditSignaling(buffer_size);
+         return new CreditBufferModel(buffer_size);
 
       case BufferManagementScheme::ON_OFF:
-         return new FiniteBufferModelWithOnOffSignaling(buffer_size, 1 /* on_off_threshold */);
+         return new OnOffBufferModel(buffer_size, 4 /* on_off_threshold */);
 
       default:
          LOG_PRINT_ERROR("Unrecognized Buffer Management Scheme(%u)", buffer_management_scheme);

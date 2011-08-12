@@ -1,9 +1,12 @@
 #pragma once
 
+#include <vector>
 #include <string>
+using std::vector;
+using std::string;
 
+#include "channel.h"
 #include "network_msg.h"
-#include "channel_endpoint_list.h"
 #include "network.h"
 
 class Flit : public NetworkMsg
@@ -24,7 +27,7 @@ class Flit : public NetworkMsg
        
       NetworkMsg* clone() { return new Flit(*this); }
       UInt32 size() { return sizeof(*this); }
-      std::string getTypeString();
+      string getTypeString();
       
       // Data Fields
       UInt64 _normalized_time_at_entry;
@@ -35,5 +38,5 @@ class Flit : public NetworkMsg
       core_id_t _receiver;
       core_id_t _requester;
       NetPacket* _net_packet;
-      ChannelEndpointList* _output_endpoint_list;
+      vector<Channel::Endpoint>* _output_endpoint_list;
 };

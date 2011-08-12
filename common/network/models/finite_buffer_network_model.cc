@@ -32,9 +32,6 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
 {
    ScopedLock sl(_lock);
 
-   LOG_ASSERT_ERROR(net_packet->receiver != NetPacket::BROADCAST,
-         "Does not work yet for broadcast");
-
    LOG_PRINT("sendNetPacket(%p) enter", net_packet);
    assert(net_packet->is_raw);
 
@@ -51,16 +48,16 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* net_packet, list<NetPacket*>&
 
    // Split the packet into multiple flits 
    SInt32 packet_length = getNetwork()->getModeledLength(*net_packet);
-   SInt32 num_flits = computeNumFlits(packet_length);
+   SInt32 serialization_latency = computeSerializationLatency(packet_length);
    
    // Account for the Sender Contention Delay
-   UInt64 contention_delay = _sender_contention_model->computeQueueDelay(net_packet->time, num_flits);
+   UInt64 contention_delay = _sender_contention_model->computeQueueDelay(net_packet->time, serialization_latency);
    net_packet->time += contention_delay;
    
    // Divide Packet into Constituent Flits
    FlowControlScheme::dividePacket(_flow_control_scheme,
          net_packet, net_packet_list_to_send,
-         num_flits, requester);
+         serialization_latency, requester);
 
    // Get the ingress router id
    Router::Id ingress_router_id = computeIngressRouterId(_core_id);
@@ -133,7 +130,7 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
          {
             LOG_PRINT("Flit");
             Flit* flit = (Flit*) network_msg; 
-            if (flit->_type == Flit::HEAD)
+            if (flit->_type & Flit::HEAD)
             {
                LOG_PRINT("Head Flit");
                Flit* head_flit = flit;
@@ -272,7 +269,9 @@ FiniteBufferNetworkModel::receiveModelingPacket(NetPacket* modeling_packet)
          _received_raw_packet_map.erase(raw_it);
 
          // Update the NetPacket time information
-         raw_packet->time = modeling_packet->time;
+         Flit* modeling_flit = (Flit*) modeling_packet->data;
+         assert(modeling_flit->_normalized_time == modeling_packet->time); 
+         raw_packet->time = modeling_packet->time + modeling_flit->_length - 1;
 
          // Update Packet Receive Statistics
          Flit* flit = (Flit*) modeling_packet->data;
@@ -297,14 +296,16 @@ FiniteBufferNetworkModel::updatePacketStatistics(NetPacket& packet, UInt64 zero_
    assert(getNetwork()->isModeled(packet));
 
    UInt32 packet_length = getNetwork()->getModeledLength(packet);
-   SInt32 num_flits = computeNumFlits(packet_length);
+   SInt32 serialization_latency = computeSerializationLatency(packet_length);
 
    UInt64 packet_latency = packet.time - packet.start_time;
    
    // Add Serialization Delay
    if (zero_load_delay > 0)
-      zero_load_delay += (num_flits - 1);
-   assert(zero_load_delay <= packet_latency);
+      zero_load_delay += (serialization_latency - 1);
+   LOG_ASSERT_ERROR(zero_load_delay <= packet_latency,
+                    "[Sender(%i), Receiver(%i), Curr Core(%i)] : Zero Load Delay(%llu) > Packet Latency(%llu)",
+                    packet.sender, packet.receiver, _core_id, zero_load_delay, packet_latency);
    
    UInt64 contention_delay = packet_latency - zero_load_delay;
 
@@ -317,8 +318,8 @@ FiniteBufferNetworkModel::updatePacketStatistics(NetPacket& packet, UInt64 zero_
 void
 FiniteBufferNetworkModel::outputSummary(ostream& out)
 {
-   out << "    bytes received: " << _total_bytes_received << endl;
-   out << "    packets received: " << _total_packets_received << endl;
+   out << "    Bytes Received: " << _total_bytes_received << endl;
+   out << "    Packets Received: " << _total_packets_received << endl;
    if (_total_packets_received > 0)
    {
       UInt64 total_contention_delay_in_ns = convertCycleCount(_total_contention_delay, getFrequency(), 1.0);
@@ -360,7 +361,7 @@ FiniteBufferNetworkModel::outputSummary(ostream& out)
 }
 
 SInt32
-FiniteBufferNetworkModel::computeNumFlits(SInt32 packet_length)
+FiniteBufferNetworkModel::computeSerializationLatency(SInt32 packet_length)
 {
    return (SInt32) ceil((float) (packet_length * 8) / _flit_width);
 }

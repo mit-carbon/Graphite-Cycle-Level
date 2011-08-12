@@ -73,6 +73,12 @@ EventManager::isReady(UInt64 event_time)
    return ( (event_time == global_time) && (event_time != UINT64_MAX) );
 }
 
+bool
+EventManager::hasEventsPending()
+{
+   return (_global_meta_event_heap->getFirstEventTime() != UINT64_MAX);
+}
+
 void
 EventManager::wakeUpWaiters()
 {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <vector>
 using namespace std;
 
@@ -30,7 +31,9 @@ public:
          PacketType flow_control_packet_type);
    ~NetworkNode();
 
-   Router::Id getRouterId() { return _router_id; }
+   Router::Id getRouterId()      { return _router_id; }
+   SInt32 getNumInputChannels()  { return _num_input_channels; }
+   SInt32 getNumOutputChannels() { return _num_output_channels; }
 
    static void addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, \
          Router::Id& router_id);
@@ -61,6 +64,11 @@ public:
    // RouterPerformanceModel
    RouterPerformanceModel* getRouterPerformanceModel()
    { return _router_performance_model; }
+   LinkPerformanceModel* getLinkPerformanceModel(SInt32 output_channel)
+   { 
+      assert(output_channel >= 0 && output_channel < _num_output_channels);
+      return _link_performance_model_list[output_channel];
+   }
 
    // Time Normalizer
    // TimeNormalizer* getTimeNormalizer()
@@ -120,6 +128,12 @@ private:
    
    // Initialize Event Counters
    void initializeEventCounters();
+
+   // Remote Network Node
+   NetworkNode* getRemoteNetworkNode(PacketType packet_type, Channel::Endpoint& input_endpoint);
+   UInt64 getRemoteRouterDataPipelineDelay(NetworkNode* remote_network_node);
+   UInt64 getRemoteRouterCreditPipelineDelay(NetworkNode* remote_network_node);
+   UInt64 getRemoteLinkDelay(NetworkNode* remote_network_node);
 
    // Print Router
    void printNode();

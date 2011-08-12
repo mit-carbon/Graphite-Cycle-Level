@@ -241,7 +241,7 @@ FiniteBufferNetworkModelFlipAtac::computeOutputEndpointList(Flit* head_flit, Net
       if (!core_in_cluster){ //if receiver core not in this cluster  --> should never be the case in this version of the code, since only send packet to receiving cluster
          // drop the packet!!!
          LOG_PRINT("Drop packet at MUX_ROUTER with core id %i because receiver core %i is not in this cluster %i.", curr_core_id, head_flit->_receiver, _cluster_id);
-         head_flit->_output_endpoint_list = new ChannelEndpointList(vector<Channel::Endpoint>());
+         head_flit->_output_endpoint_list = new vector<Channel::Endpoint>(vector<Channel::Endpoint>());
          return; 
       }
       
@@ -321,7 +321,7 @@ FiniteBufferNetworkModelFlipAtac::computeOutputEndpointList(Flit* head_flit, Net
    LOG_PRINT("Initialize head flit's channel endpoint list...");
    // In all cases...
    // Initialize the output channel struct inside head_flit
-   head_flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_vec);
+   head_flit->_output_endpoint_list = new vector<Channel::Endpoint>(output_endpoint_vec);
    
    LOG_PRINT("computeOutputEndpointList(%p, %p) end", head_flit, curr_network_node);
 }

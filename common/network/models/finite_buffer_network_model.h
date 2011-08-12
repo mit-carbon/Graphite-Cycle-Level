@@ -84,7 +84,7 @@ class FiniteBufferNetworkModel : public NetworkModel
       NetPacket* receiveModelingPacket(NetPacket* modeling_packet);
 
       // Utils
-      SInt32 computeNumFlits(SInt32 packet_length);
+      SInt32 computeSerializationLatency(SInt32 packet_length);
       UInt64 computePacketId(core_id_t sender, UInt64 sequence_num);
 
       // Initialization

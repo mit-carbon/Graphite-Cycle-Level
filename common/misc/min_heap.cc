@@ -1,7 +1,7 @@
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <cassert>
-#include <stdio.h>
+#include <cstdio>
 
 #include "min_heap.h"
 #include "log.h"
