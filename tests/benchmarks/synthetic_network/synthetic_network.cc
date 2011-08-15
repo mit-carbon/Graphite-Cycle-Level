@@ -33,7 +33,7 @@ PacketType _packet_type = USER_2;
 SInt32 _flit_width = 64;
 
 vector<SyntheticCore*> _synthetic_core_list;
-UInt64 _quantum = 1000;
+UInt64 _quantum = 100;
 
 UInt32 EVENT_NET_SEND = 100;
 UInt32 EVENT_START_SIMULATION = 102;
