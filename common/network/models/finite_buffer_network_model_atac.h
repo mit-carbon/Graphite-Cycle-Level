@@ -128,7 +128,7 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       static void initializeANetRoutingParameters();
       
       // Creating router object
-      NetworkNode* createNetworkNode(NodeType node_type);
+      NetworkNode* createNetworkNode(SInt32 node_type);
 
       //// Routing Functions
       // Compute the Global route taken by a packet (ENet / ONet)
