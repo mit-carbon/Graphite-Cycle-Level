@@ -19,7 +19,7 @@ machines = [
     "cagnode4",
     "cagnode8",
     "cagnode8",
-    "cagnode9"
+    "cagnode9",
     "cagnode9"
     ]
 
@@ -39,17 +39,16 @@ hardware_sharer_count = 4
 
 jobs = []
 
-jobs.append(LocalJob(1, "echo Starting"))
+jobs.append(LocalJob(12, "echo Starting"))
 
 for benchmark, command in zip(benchmarks, commands):
    for protocol in protocols:
       for network in networks:
          sim_flags = "-c %s/%s --general/total_cores=64 --general/enable_shared_mem=true --network/memory_model_1=finite_buffer_%s --perf_model/dram_directory/directory_type=%s --perf_model/dram_directory/max_hw_sharers=%i" % (results_dir, cfg_file, network, protocol, hardware_sharer_count)
          sub_dir = "%s-%s-%s" % (benchmark, protocol, network)
-         job = MakeJob(1, command, results_dir, sub_dir, sim_flags, "pin")
-         jobs.append(job)
+         jobs.append(MakeJob(1, command, results_dir, sub_dir, sim_flags, "pin"))
 
-jobs.append(LocalJob(1, "echo Finished"))
+jobs.append(LocalJob(12, "echo Finished"))
 
 # jobs = [
 #     LocalJob(1, "echo Starting..."),
@@ -71,7 +70,5 @@ except OSError:
 
 shutil.copy(cfg_file, results_dir)
 
-print jobs
-
 # go!
-# schedule(machines, jobs)
+schedule(machines, jobs)

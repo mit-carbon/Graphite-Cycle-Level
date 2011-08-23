@@ -70,7 +70,7 @@ class MakeJob(SpawnJob):
         self.mode = mode
 
     def make_pin_command(self):
-        self.sim_flags += " --general/output_dir=\"%s\" --general/num_processes=%d %s" % (self.sub_dir, len(self.machines), self.sim_flags)
+        self.sim_flags += " --general/output_dir=\"%s\" --general/num_processes=%d" % (self.sub_dir, len(self.machines))
         for i in range(0,len(self.machines)):
             self.sim_flags += " --process_map/process%i=\"%s\"" % (i, self.machines[i])
 
