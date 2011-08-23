@@ -14,12 +14,12 @@ class BufferStatusList
 {
    public:
       BufferStatusList(SInt32 num_output_endpoints, 
-            BufferManagementScheme::Type buffer_management_scheme,
-            SInt32 size_buffer);
+                       BufferManagementScheme::Type buffer_management_scheme,
+                       SInt32 size_buffer);
       ~BufferStatusList();
 
-      void allocateBuffer(Flit* flit, SInt32 endpoint_index);
-      UInt64 tryAllocateBuffer(Flit* flit, SInt32 endpoint_index);
+      void allocateBuffer(Flit* flit, SInt32 endpoint_index, SInt32 num_buffers);
+      UInt64 tryAllocateBuffer(Flit* flit, SInt32 endpoint_index, SInt32 num_buffers);
       void receiveBufferManagementMsg(BufferManagementMsg* buffer_msg, SInt32 endpoint_index);
 
    private:

@@ -25,7 +25,7 @@ BufferStatusList::~BufferStatusList()
 }
 
 void
-BufferStatusList::allocateBuffer(Flit* flit, SInt32 endpoint_index)
+BufferStatusList::allocateBuffer(Flit* flit, SInt32 endpoint_index, SInt32 num_buffers)
 {
    // We can surely allocate buffers here
    if (endpoint_index == Channel::Endpoint::ALL)
@@ -33,22 +33,22 @@ BufferStatusList::allocateBuffer(Flit* flit, SInt32 endpoint_index)
       // Broadcasted flit
       for (SInt32 i = 0; i < _num_output_endpoints; i++)
       {
-         _buffer_status_vec[i]->allocate(flit);
+         _buffer_status_vec[i]->allocate(flit, num_buffers);
       }
    }
    else
    {
       // Before allocating buffer, always update the buffer with the _channel_time
-      _buffer_status_vec[endpoint_index]->allocate(flit);
+      _buffer_status_vec[endpoint_index]->allocate(flit, num_buffers);
    }
 
    // Update Channel Free Time
-   _channel_free_time = flit->_normalized_time + flit->_length;
+   _channel_free_time = flit->_normalized_time + num_buffers;
    LOG_PRINT("Updated Channel Free Time to %llu", _channel_free_time);
 }
 
 UInt64
-BufferStatusList::tryAllocateBuffer(Flit* flit, SInt32 endpoint_index)
+BufferStatusList::tryAllocateBuffer(Flit* flit, SInt32 endpoint_index, SInt32 num_buffers)
 {
    // Check if buffers can be allocated at the downstream router
    LOG_ASSERT_ERROR((endpoint_index == Channel::Endpoint::ALL) ||
@@ -61,15 +61,16 @@ BufferStatusList::tryAllocateBuffer(Flit* flit, SInt32 endpoint_index)
 
    if (endpoint_index == Channel::Endpoint::ALL)
    {
-      // Broadcasted flit
+      // Flit broadcasted to all endpoints of a channel
       for (SInt32 i = 0; (i < _num_output_endpoints) && (allocated_time != UINT64_MAX); i++)
       {
-         allocated_time = max<UInt64>(allocated_time, _buffer_status_vec[i]->tryAllocate(flit));
+         allocated_time = max<UInt64>(allocated_time, _buffer_status_vec[i]->tryAllocate(flit, num_buffers));
       }
    }
    else
    {
-      allocated_time = max<UInt64>(allocated_time, _buffer_status_vec[endpoint_index]->tryAllocate(flit));
+      // Flit sent to only one endpoint of a channel
+      allocated_time = max<UInt64>(allocated_time, _buffer_status_vec[endpoint_index]->tryAllocate(flit, num_buffers));
    }
   
    LOG_PRINT("Allocated Time(%llu)", allocated_time); 

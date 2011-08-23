@@ -253,7 +253,7 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
          
          // Router Power Model
          if (_router_power_model)
-            _router_power_model->updateDynamicEnergy(_flit_width/2, flit->_length);
+            _router_power_model->updateDynamicEnergy(_flit_width/2, flit->_num_phits);
          
          // Link Performance Model (Link delay)
          if (_link_performance_model_list[output_channel])
@@ -261,18 +261,18 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
          
          // Link Power Model
          if (_link_power_model_list[output_channel])
-            _link_power_model_list[output_channel]->updateDynamicEnergy(_flit_width/2, flit->_length);
+            _link_power_model_list[output_channel]->updateDynamicEnergy(_flit_width/2, flit->_num_phits);
 
          // Increment Zero Load Delay
          flit->_zero_load_delay += (_router_performance_model->getDataPipelineDelay() +
                                     _link_performance_model_list[output_channel]->getDelay());
 
          // Increment Event Counters
-         _total_input_buffer_writes += flit->_length;
-         _total_input_buffer_reads += flit->_length;
+         _total_input_buffer_writes += flit->_num_phits;
+         _total_input_buffer_reads += flit->_num_phits;
          _total_switch_allocator_requests += ((flit->_type & Flit::HEAD) ? 1 : 0);
-         _total_crossbar_traversals += flit->_length;
-         _total_link_traversals[output_channel] += flit->_length;
+         _total_crossbar_traversals += flit->_num_phits;
+         _total_link_traversals[output_channel] += flit->_num_phits;
       }
       
       break;
@@ -284,6 +284,7 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
          Channel::Endpoint input_endpoint = buffer_msg->_input_endpoint;
 
          NetworkNode* remote_network_node = getRemoteNetworkNode(_flow_control_packet_type, input_endpoint);
+         assert(remote_network_node);
          // Link Performance Model - Is there a separate channel for buffer management msgs ?
          // Add Link Delay
          buffer_msg->_normalized_time += getRemoteLinkDelay(remote_network_node);
@@ -553,7 +554,8 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
 
          if ((flit->_type & Flit::HEAD) && (is_input_msg))
          {
-            vector<Channel::Endpoint>* endpoint_list = flit->_output_endpoint_list;
+            HeadFlit* head_flit = (HeadFlit*) flit;
+            vector<Channel::Endpoint>* endpoint_list = head_flit->_output_endpoint_list;
 
             ostringstream endpoints_str;
             endpoints_str << "Head Flit [Output Endpoint List( ";

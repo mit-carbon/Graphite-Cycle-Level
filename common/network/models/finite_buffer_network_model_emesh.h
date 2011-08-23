@@ -33,7 +33,7 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
       static void computeEMeshTopologyParameters(SInt32& emesh_width, SInt32& emesh_height);
 
       // Main Routing Function
-      void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
+      void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node);
       // Compute Ingress Router Id
       Router::Id computeIngressRouterId(core_id_t core_id);
 

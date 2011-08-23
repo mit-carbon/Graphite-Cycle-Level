@@ -13,16 +13,16 @@ OnOffStatus::~OnOffStatus()
 {}
 
 void
-OnOffStatus::allocate(Flit* flit)
+OnOffStatus::allocate(Flit* flit, SInt32 num_buffers)
 {
    LOG_ASSERT_ERROR(_on_off_status, "On Off Status(FALSE)");
 }
 
 UInt64
-OnOffStatus::tryAllocate(Flit* flit)
+OnOffStatus::tryAllocate(Flit* flit, SInt32 num_buffers)
 {
    // Only possible with flit-buffer flow control
-   LOG_ASSERT_ERROR(flit->_length == 1, "Only Flit Buffer Flow Control Schemes work with On-Off Buffer Management Scheme");
+   LOG_ASSERT_ERROR(num_buffers == 1, "Num Buffers Requested must be 1 to work with On-Off Buffer Management Scheme");
    
    return (_on_off_status) ? _last_msg_time : UINT64_MAX;
 }

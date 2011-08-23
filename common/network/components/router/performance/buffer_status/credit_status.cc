@@ -14,19 +14,19 @@ CreditStatus::~CreditStatus()
 {}
 
 void
-CreditStatus::allocate(Flit* flit)
+CreditStatus::allocate(Flit* flit, SInt32 num_buffers)
 {
-   LOG_ASSERT_ERROR(flit->_length <= _credit_count,
-         "Flit Length(%i) > Credit Count(%i)", flit->_length, _credit_count);
+   LOG_ASSERT_ERROR(num_buffers <= _credit_count,
+         "Num Buffers Requested(%i) > Credit Count(%i)", num_buffers, _credit_count);
    
    // Update Credits
-   _credit_count -= flit->_length;
+   _credit_count -= num_buffers;
 }
 
 UInt64
-CreditStatus::tryAllocate(Flit* flit)
+CreditStatus::tryAllocate(Flit* flit, SInt32 num_buffers)
 {
-   return (flit->_length <= _credit_count) ? _last_msg_time : UINT64_MAX;
+   return (num_buffers <= _credit_count) ? _last_msg_time : UINT64_MAX;
 }
 
 void

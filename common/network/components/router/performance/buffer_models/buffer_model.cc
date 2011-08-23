@@ -6,38 +6,38 @@
 
 BufferModel::BufferModel()
 {
-   _queue_time = 0;
+   _buffer_time = 0;
 }
 
 BufferModel::~BufferModel()
 {
-   assert(_queue.empty());
+   assert(_buffer.empty());
 }
 
 BufferManagementMsg*
 BufferModel::enqueue(Flit* flit)
 {
-   _queue.push(flit);
+   _buffer.push(flit);
    return NULL;
 }
 
 BufferManagementMsg*
 BufferModel::dequeue()
 {
-   _queue.pop();
+   _buffer.pop();
    return NULL;
 }
 
 void
 BufferModel::updateFlitTime()
 {
-   Flit* flit = _queue.front();
+   Flit* flit = _buffer.front();
    
    LOG_PRINT("updateFlitTime() enter: Flit Time(%llu), Buffer Time(%llu)",
-         flit->_normalized_time, _queue_time);
+         flit->_normalized_time, _buffer_time);
 
    // Synchronize the flit time to the buffer time
-   flit->_normalized_time = max<UInt64>(_queue_time, flit->_normalized_time);
+   flit->_normalized_time = max<UInt64>(_buffer_time, flit->_normalized_time);
    
    LOG_PRINT("updateFlitTime() exit: Flit Time(%llu)", flit->_normalized_time);
 }
@@ -45,23 +45,23 @@ BufferModel::updateFlitTime()
 void
 BufferModel::updateBufferTime()
 {
-   Flit* flit = _queue.front();
+   Flit* flit = _buffer.front();
    
-   LOG_PRINT("updateBufferTime() enter: Flit Time(%llu), Flit Length(%i), Buffer Time(%llu)",
-         flit->_normalized_time, flit->_length, _queue_time);
+   LOG_PRINT("updateBufferTime() enter: Flit Time(%llu), Num Phits(%i), Buffer Time(%llu)",
+         flit->_normalized_time, flit->_num_phits, _buffer_time);
 
-   LOG_ASSERT_ERROR(flit->_normalized_time >= _queue_time,
-         "Flit Time(%llu) < Queue Time(%llu)", flit->_normalized_time, _queue_time);
-   _queue_time = flit->_normalized_time + flit->_length;
+   LOG_ASSERT_ERROR(flit->_normalized_time >= _buffer_time,
+         "Flit Time(%llu) < Buffer Time(%llu)", flit->_normalized_time, _buffer_time);
+   _buffer_time = flit->_normalized_time + flit->_num_phits;
    
-   LOG_PRINT("updateBufferTime() exit: Buffer Time(%llu)", _queue_time);
+   LOG_PRINT("updateBufferTime() exit: Buffer Time(%llu)", _buffer_time);
 }
 
 UInt64
 BufferModel::getBufferTime()
 {
-   LOG_PRINT("getBufferTime(): Buffer Time(%llu)", _queue_time);
-   return _queue_time;
+   LOG_PRINT("getBufferTime(): Buffer Time(%llu)", _buffer_time);
+   return _buffer_time;
 }
 
 BufferModel*

@@ -1,5 +1,6 @@
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#include "head_flit.h"
 #include "wormhole_flow_control_scheme.h"
 #include "log.h"
 
@@ -153,7 +154,8 @@ WormholeFlowControlScheme::sendFlit(SInt32 input_channel)
    {
       LOG_PRINT("Head Flit");
       LOG_ASSERT_ERROR(flit->_type & Flit::HEAD, "flit->_type(%u)", flit->_type);
-      flit_buffer->_output_endpoint_list = flit->_output_endpoint_list;
+      HeadFlit* head_flit = (HeadFlit*) flit;
+      flit_buffer->_output_endpoint_list = head_flit->_output_endpoint_list;
    }
 
    // Update Flit Time First
@@ -314,13 +316,15 @@ WormholeFlowControlScheme::sendFlit(SInt32 input_channel)
 void
 WormholeFlowControlScheme::allocateDownstreamBuffer(Flit* flit, Channel::Endpoint& output_endpoint)
 {
+   LOG_ASSERT_ERROR(flit->_num_phits == 1, "Num Phits(%i)", flit->_num_phits);
    BufferStatusList* buffer_status_list = _vec_downstream_buffer_status_list[output_endpoint._channel_id];
-   buffer_status_list->allocateBuffer(flit, output_endpoint._index);
+   buffer_status_list->allocateBuffer(flit, output_endpoint._index, flit->_num_phits);
 }
 
 UInt64
 WormholeFlowControlScheme::tryAllocateDownstreamBuffer(Flit* flit, Channel::Endpoint& output_endpoint)
 {
+   LOG_ASSERT_ERROR(flit->_num_phits == 1, "Num Phits(%i), Flit(%s)", flit->_num_phits, flit->getTypeString().c_str());
    BufferStatusList* buffer_status_list = _vec_downstream_buffer_status_list[output_endpoint._channel_id];
-   return buffer_status_list->tryAllocateBuffer(flit, output_endpoint._index);
+   return buffer_status_list->tryAllocateBuffer(flit, output_endpoint._index, flit->_num_phits);
 }

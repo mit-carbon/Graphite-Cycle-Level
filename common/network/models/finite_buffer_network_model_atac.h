@@ -157,7 +157,7 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       void outputEventCountSummary(ostream& out);
 
       // Virtual Function in FiniteBufferNetworkModel
-      void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
+      void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node);
       // Compute Ingress Router Id
       Router::Id computeIngressRouterId(core_id_t core_id);
 };

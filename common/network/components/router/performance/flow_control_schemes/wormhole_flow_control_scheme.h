@@ -26,17 +26,16 @@ class WormholeFlowControlScheme : public FlitBufferFlowControlScheme
 
       BufferModel* getBufferModel(SInt32 input_channel_id)
       { return _input_flit_buffer_vec[input_channel_id]->getBufferModel(); }
-   
-   private:
-      // Private Fields
+  
+   protected:
       vector<FlitBuffer*> _input_flit_buffer_vec;
       vector<BufferStatusList*> _vec_downstream_buffer_status_list;
       vector<SInt32> _input_channels_allocated_vec;
       vector<NetworkMsg*>* _network_msg_list;
 
-      // Private Functions
+   private:
       void iterate();
-      pair<bool,bool> sendFlit(SInt32 input_channel);
+      virtual pair<bool,bool> sendFlit(SInt32 input_channel);
       void allocateDownstreamBuffer(Flit* flit, Channel::Endpoint& output_endpoint);
       UInt64 tryAllocateDownstreamBuffer(Flit* flit, Channel::Endpoint& output_endpoint);
 };

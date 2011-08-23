@@ -19,8 +19,8 @@ class FlitBufferFlowControlScheme : public FlowControlScheme
       
       // Dividing and coalescing packet at start and end
       static void dividePacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list,
-            SInt32 num_flits, core_id_t requester);
-      static bool isPacketComplete(NetPacket* net_packet);
+                               SInt32 num_flits);
+      static bool isPacketComplete(Flit::Type flit_type);
    
    protected:
       class FlitBuffer

@@ -11,7 +11,7 @@ class InfiniteBufferStatus : public BufferStatus
       InfiniteBufferStatus() : BufferStatus() {}
       ~InfiniteBufferStatus() {}
 
-      void allocate(Flit* flit) {}
-      UInt64 tryAllocate(Flit* flit) { return 0; }
+      void allocate(Flit* flit, SInt32 num_buffers) {}
+      UInt64 tryAllocate(Flit* flit, SInt32 num_buffers) { return 0; }
       void receive(BufferManagementMsg* msg) { assert(false); }
 };

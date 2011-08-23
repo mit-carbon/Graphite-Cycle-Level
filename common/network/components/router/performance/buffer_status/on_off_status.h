@@ -12,8 +12,8 @@ class OnOffStatus : public FiniteBufferStatus
       OnOffStatus(SInt32 size_buffer);
       ~OnOffStatus();
 
-      void allocate(Flit* flit);
-      UInt64 tryAllocate(Flit* flit);
+      void allocate(Flit* flit, SInt32 num_buffers);
+      UInt64 tryAllocate(Flit* flit, SInt32 num_buffers);
       void receive(BufferManagementMsg* buffer_mangement_msg);
    
    private:

@@ -114,7 +114,7 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
       return false;
    }
 
-   Flit* head_flit = packet_buffer->front();
+   HeadFlit* head_flit = (HeadFlit*) packet_buffer->front();
    
    // Update Flit Time
    packet_buffer->updateFlitTime();
@@ -157,7 +157,7 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
       // Send Packet Downstream
       // Duplicate head_flit and net_packet
       NetPacket* cloned_net_packet = head_flit->_net_packet->clone();
-      Flit* cloned_head_flit = (Flit*) cloned_net_packet->data;
+      HeadFlit* cloned_head_flit = (HeadFlit*) cloned_net_packet->data;
       cloned_head_flit->_net_packet = cloned_net_packet;
       cloned_head_flit->_output_endpoint = output_endpoint;
      
@@ -187,38 +187,35 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
 }
 
 void
-PacketBufferFlowControlScheme::allocateDownstreamBuffer(Flit* head_flit, Channel::Endpoint& output_endpoint)
+PacketBufferFlowControlScheme::allocateDownstreamBuffer(HeadFlit* head_flit, Channel::Endpoint& output_endpoint)
 {
    BufferStatusList* buffer_status_list = _vec_downstream_buffer_status_list[output_endpoint._channel_id];
-   buffer_status_list->allocateBuffer(head_flit, output_endpoint._index);
+   buffer_status_list->allocateBuffer(head_flit, output_endpoint._index, head_flit->_num_phits);
 }
 
 UInt64
-PacketBufferFlowControlScheme::tryAllocateDownstreamBuffer(Flit* head_flit, Channel::Endpoint& output_endpoint)
+PacketBufferFlowControlScheme::tryAllocateDownstreamBuffer(HeadFlit* head_flit, Channel::Endpoint& output_endpoint)
 {
    BufferStatusList* buffer_status_list = _vec_downstream_buffer_status_list[output_endpoint._channel_id];
-   return buffer_status_list->tryAllocateBuffer(head_flit, output_endpoint._index);
+   return buffer_status_list->tryAllocateBuffer(head_flit, output_endpoint._index, head_flit->_num_phits);
 }
 
 void
-PacketBufferFlowControlScheme::dividePacket(NetPacket* net_packet,
-      list<NetPacket*>& net_packet_list,
-      SInt32 num_flits, core_id_t requester)
+PacketBufferFlowControlScheme::dividePacket(NetPacket* net_packet, list<NetPacket*>& net_packet_list,
+                                            SInt32 serialization_latency)
 {
-   Flit* head_flit = new Flit(Flit::HEAD, num_flits, net_packet->sender, net_packet->receiver, requester);
+   LOG_PRINT("PACKET_BUFFER: dividePacket(%p,%i) enter", net_packet, serialization_latency);
+   Flit* head_flit = new HeadFlit(1, serialization_latency, net_packet->sender, net_packet->receiver);
    NetPacket* head_flit_packet = new NetPacket(net_packet->time, net_packet->type,
          head_flit->size(), (void*) head_flit,
          false /* is_raw */, net_packet->sequence_num);
    net_packet_list.push_back(head_flit_packet);
+   LOG_PRINT("PACKET_BUFFER: dividePacket(%p,%i) exit", net_packet, serialization_latency);
 }
 
 bool
-PacketBufferFlowControlScheme::isPacketComplete(NetPacket* net_packet)
+PacketBufferFlowControlScheme::isPacketComplete(Flit::Type flit_type)
 {
-   assert(!net_packet->is_raw);
-   NetworkMsg* network_msg = (NetworkMsg*) net_packet->data;
-   assert(network_msg->_type == NetworkMsg::DATA);
-   Flit* flit = (Flit*) network_msg;
-   assert(flit->_type == Flit::HEAD);
+   assert(flit_type == Flit::HEAD);
    return true;
 }

@@ -9,8 +9,8 @@ class CreditStatus : public FiniteBufferStatus
       CreditStatus(SInt32 size_buffer);
       ~CreditStatus();
 
-      void allocate(Flit* flit);
-      UInt64 tryAllocate(Flit* flit);
+      void allocate(Flit* flit, SInt32 num_buffers);
+      UInt64 tryAllocate(Flit* flit, SInt32 num_buffers);
       void receive(BufferManagementMsg* buffer_mangement_msg);
    
    private:

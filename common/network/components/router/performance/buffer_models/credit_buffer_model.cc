@@ -13,7 +13,7 @@ BufferManagementMsg*
 CreditBufferModel::dequeue()
 {
    Flit* flit = BufferModel::front();
-   CreditMsg* credit_msg = new CreditMsg(flit->_normalized_time, flit->_length);
+   CreditMsg* credit_msg = new CreditMsg(flit->_normalized_time, flit->_num_phits);
 
    LOG_PRINT("Data: allocate(%p)", credit_msg);
 

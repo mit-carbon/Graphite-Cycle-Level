@@ -11,8 +11,8 @@ using namespace std;
 class BufferModel
 {
    private:
-      queue<Flit*> _queue;
-      UInt64 _queue_time;
+      queue<Flit*> _buffer;
+      UInt64 _buffer_time;
 
    public:
       BufferModel();
@@ -23,9 +23,9 @@ class BufferModel
 
       virtual BufferManagementMsg* enqueue(Flit* flit);
       virtual BufferManagementMsg* dequeue();
-      Flit* front() { return _queue.front(); }
-      bool empty() { return _queue.empty(); }
-      size_t size() { return _queue.size(); }
+      Flit* front() { return _buffer.front(); }
+      bool empty() { return _buffer.empty(); }
+      size_t size() { return _buffer.size(); }
      
       void updateFlitTime(); 
       void updateBufferTime();

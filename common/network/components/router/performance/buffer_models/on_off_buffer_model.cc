@@ -15,7 +15,7 @@ OnOffBufferModel::~OnOffBufferModel()
 BufferManagementMsg*
 OnOffBufferModel::enqueue(Flit* flit)
 {
-   LOG_ASSERT_ERROR(flit->_length == 1, "On Off Buffer Management Scheme only works with Flit Buffer Flow Control Schemes");
+   LOG_ASSERT_ERROR(flit->_num_phits == 1, "On Off Buffer Management Scheme only works with Flit Buffer Flow Control Schemes");
    
    // Enqueue the flit to buffer
    BufferModel::enqueue(flit);
@@ -39,7 +39,7 @@ OnOffBufferModel::dequeue()
    // Get the flit at the front of buffer
    Flit* flit = BufferModel::front();
 
-   LOG_ASSERT_ERROR(flit->_length == 1, "On Off Buffer Management Scheme only works with Flit Buffer Flow Control Schemes");
+   LOG_ASSERT_ERROR(flit->_num_phits == 1, "On Off Buffer Management Scheme only works with Flit Buffer Flow Control Schemes");
    
    OnOffMsg* on_off_msg = (OnOffMsg*) NULL;
    

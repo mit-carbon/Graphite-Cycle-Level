@@ -19,6 +19,7 @@ class FlowControlScheme
          STORE_AND_FORWARD = 0,
          VIRTUAL_CUT_THROUGH,
          WORMHOLE,
+         WORMHOLE_UNICAST__VIRTUAL_CUT_THROUGH_BROADCAST,
          NUM_SCHEMES
       };
 
@@ -35,14 +36,12 @@ class FlowControlScheme
             vector<SInt32>& num_input_endpoints_list, vector<SInt32>& num_output_endpoints_list,
             vector<BufferManagementScheme::Type>& input_buffer_management_schemes,
             vector<BufferManagementScheme::Type>& downstream_buffer_management_schemes,
-            vector<SInt32>& input_buffer_size_list,
-            vector<SInt32>& downstream_buffer_size_list);
+            vector<SInt32>& input_buffer_size_list, vector<SInt32>& downstream_buffer_size_list);
 
       static void dividePacket(Type flow_control_scheme,
-            NetPacket* net_packet, list<NetPacket*>& net_packet_list,
-            SInt32 num_flits, core_id_t requester);
-      static bool isPacketComplete(Type flow_control_scheme, NetPacket* net_packet);
-      static SInt32 computeNumFlits(SInt32 packet_length, SInt32 flit_width);
+                               NetPacket* net_packet, list<NetPacket*>& net_packet_list,
+                               SInt32 serialization_latency);
+      static bool isPacketComplete(Type flow_control_scheme, Flit::Type flit_type);
 
       // Public Member Functions
       virtual void processDataMsg(Flit* flit, vector<NetworkMsg*>& network_msg_list) = 0;

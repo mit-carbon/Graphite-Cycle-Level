@@ -17,11 +17,10 @@ StoreAndForwardFlowControlScheme::~StoreAndForwardFlowControlScheme()
 {}
 
 void
-StoreAndForwardFlowControlScheme::processDataMsg(Flit* flit, \
-      vector<NetworkMsg*>& network_msg_list)
+StoreAndForwardFlowControlScheme::processDataMsg(Flit* flit, vector<NetworkMsg*>& network_msg_list)
 {
    assert(flit->_type == Flit::HEAD);
-   flit->_normalized_time += (flit->_length - 1);
+   flit->_normalized_time += (flit->_num_phits - 1);
    
    PacketBufferFlowControlScheme::processDataMsg(flit, network_msg_list);
 }

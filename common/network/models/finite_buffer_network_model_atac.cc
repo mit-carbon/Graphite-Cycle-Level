@@ -219,7 +219,6 @@ FiniteBufferNetworkModelAtac::initializeANetRoutingParameters()
    {
       LOG_PRINT_ERROR("Error reading ATAC routing parameters from cfg file");
    }
-
 }
 
 NetworkNode*
@@ -594,7 +593,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
 }
 
 void
-FiniteBufferNetworkModelAtac::computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node)
+FiniteBufferNetworkModelAtac::computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node)
 {
    LOG_PRINT("computeOutputEndpointList(%p, %p) start", head_flit, curr_network_node);
    Router::Id curr_router_id = curr_network_node->getRouterId();
