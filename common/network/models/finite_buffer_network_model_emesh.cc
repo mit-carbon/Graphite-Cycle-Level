@@ -30,13 +30,15 @@ FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net, SInt3
       LOG_PRINT_ERROR("Could not read Electrical Mesh parameters from the cfg file");
    }
 
-   // Instantiate the routers 
-   NetworkNode* network_node = createNetworkNode();
-   _network_node_list.push_back(network_node);
+   // Instantiate the routers and links 
+   _network_node_map[EMESH] = createNetworkNode();
 }
 
 FiniteBufferNetworkModelEMesh::~FiniteBufferNetworkModelEMesh()
-{}
+{
+   // Delete the network node
+   delete _network_node_map[EMESH];
+}
 
 NetworkNode*
 FiniteBufferNetworkModelEMesh::createNetworkNode()
@@ -166,7 +168,7 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
 }
 
 void
-FiniteBufferNetworkModelEMesh::computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node)
+FiniteBufferNetworkModelEMesh::computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node)
 {
    LOG_PRINT("computeOutputEndpointList(%p,%p) enter", head_flit, curr_network_node);
 
@@ -382,9 +384,9 @@ void
 FiniteBufferNetworkModelEMesh::outputEventCountSummary(ostream& out)
 {
    out << "  Event Counters: " << endl;
-   out << "    Total Input Buffer Writes: " << _network_node_list[EMESH]->getTotalInputBufferWrites() << endl;
-   out << "    Total Input Buffer Reads: " << _network_node_list[EMESH]->getTotalInputBufferReads() << endl;
-   out << "    Total Switch Allocator Requests: " << _network_node_list[EMESH]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Total Crossbar Traversals: " << _network_node_list[EMESH]->getTotalCrossbarTraversals() << endl;
-   out << "    Total Link Traversals: " << _network_node_list[EMESH]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Total Input Buffer Writes: " << _network_node_map[EMESH]->getTotalInputBufferWrites() << endl;
+   out << "    Total Input Buffer Reads: " << _network_node_map[EMESH]->getTotalInputBufferReads() << endl;
+   out << "    Total Switch Allocator Requests: " << _network_node_map[EMESH]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Total Crossbar Traversals: " << _network_node_map[EMESH]->getTotalCrossbarTraversals() << endl;
+   out << "    Total Link Traversals: " << _network_node_map[EMESH]->getTotalLinkTraversals(Channel::ALL) << endl;
 }

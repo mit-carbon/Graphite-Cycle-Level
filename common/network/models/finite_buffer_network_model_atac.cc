@@ -73,18 +73,18 @@ FiniteBufferNetworkModelAtac::FiniteBufferNetworkModelAtac(Network* network, SIn
    _cluster_id = computeClusterID(_core_id);
 
    // Create the routers
-   _network_node_list.push_back(createNetworkNode(EMESH));
+   _network_node_map[EMESH] = createNetworkNode(EMESH);
    if (_core_id == computeCoreIDWithOpticalHub(_cluster_id))
    {
-      _network_node_list.push_back(createNetworkNode(SEND_HUB));
-      _network_node_list.push_back(createNetworkNode(RECEIVE_HUB));
+      _network_node_map[SEND_HUB] = createNetworkNode(SEND_HUB);
+      _network_node_map[RECEIVE_HUB] = createNetworkNode(RECEIVE_HUB);
 
       if (_receive_net_type == STAR)
       {
          for (SInt32 i = 0; i < _num_receive_nets_per_cluster; i++)
          {
             SInt32 node_type = STAR_NET_ROUTER_BASE + i;
-            _network_node_list.push_back(createNetworkNode(node_type));
+            _network_node_map[node_type] = createNetworkNode(node_type);
          }
       }
    }
@@ -93,9 +93,9 @@ FiniteBufferNetworkModelAtac::FiniteBufferNetworkModelAtac(Network* network, SIn
 FiniteBufferNetworkModelAtac::~FiniteBufferNetworkModelAtac()
 {
    // Delete the router objects
-   vector<NetworkNode*>::iterator it = _network_node_list.begin();
-   for ( ; it != _network_node_list.end(); it ++)
-      delete (*it);
+   map<SInt32, NetworkNode*>::iterator it = _network_node_map.begin();
+   for ( ; it != _network_node_map.end(); it ++)
+      delete (*it).second;
 }
 
 FiniteBufferNetworkModelAtac::GlobalRoutingStrategy
@@ -1023,34 +1023,34 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
    out << "  Event Counters:" << endl;
   
    // ENet Router 
-   out << "   ENet Router:" << endl;
-   out << "    Input Buffer Writes: " << _network_node_list[EMESH]->getTotalInputBufferWrites() << endl;
-   out << "    Input Buffer Reads: " << _network_node_list[EMESH]->getTotalInputBufferReads() << endl;
-   out << "    Switch Allocator Requests: " << _network_node_list[EMESH]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Crossbar Traversals: " << _network_node_list[EMESH]->getTotalCrossbarTraversals() << endl;
+   out << "   EMesh Router:" << endl;
+   out << "    Input Buffer Writes: " << _network_node_map[EMESH]->getTotalInputBufferWrites() << endl;
+   out << "    Input Buffer Reads: " << _network_node_map[EMESH]->getTotalInputBufferReads() << endl;
+   out << "    Switch Allocator Requests: " << _network_node_map[EMESH]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Crossbar Traversals: " << _network_node_map[EMESH]->getTotalCrossbarTraversals() << endl;
    
    if (_core_id == computeCoreIDWithOpticalHub(computeClusterID(_core_id)))
    {
       // Send Hub Router
       out << "   Send-Hub Router:" << endl;
-      out << "    Input Buffer Writes: " << _network_node_list[SEND_HUB]->getTotalInputBufferWrites() << endl;
-      out << "    Input Buffer Reads: " << _network_node_list[SEND_HUB]->getTotalInputBufferReads() << endl;
-      out << "    Switch Allocator Requests: " << _network_node_list[SEND_HUB]->getTotalSwitchAllocatorRequests() << endl;
-      out << "    Crossbar Traversals: " << _network_node_list[SEND_HUB]->getTotalCrossbarTraversals() << endl;
+      out << "    Input Buffer Writes: " << _network_node_map[SEND_HUB]->getTotalInputBufferWrites() << endl;
+      out << "    Input Buffer Reads: " << _network_node_map[SEND_HUB]->getTotalInputBufferReads() << endl;
+      out << "    Switch Allocator Requests: " << _network_node_map[SEND_HUB]->getTotalSwitchAllocatorRequests() << endl;
+      out << "    Crossbar Traversals: " << _network_node_map[SEND_HUB]->getTotalCrossbarTraversals() << endl;
 
       // Receive Hub Router
       out << "   Receive-Hub Router:" << endl;
-      out << "    Input Buffer Writes: " << _network_node_list[RECEIVE_HUB]->getTotalInputBufferWrites() << endl;
-      out << "    Input Buffer Reads: " << _network_node_list[RECEIVE_HUB]->getTotalInputBufferReads() << endl;
-      out << "    Switch Allocator Requests: " << _network_node_list[RECEIVE_HUB]->getTotalSwitchAllocatorRequests() << endl;
-      out << "    Crossbar Traversals: " << _network_node_list[RECEIVE_HUB]->getTotalCrossbarTraversals() << endl;
+      out << "    Input Buffer Writes: " << _network_node_map[RECEIVE_HUB]->getTotalInputBufferWrites() << endl;
+      out << "    Input Buffer Reads: " << _network_node_map[RECEIVE_HUB]->getTotalInputBufferReads() << endl;
+      out << "    Switch Allocator Requests: " << _network_node_map[RECEIVE_HUB]->getTotalSwitchAllocatorRequests() << endl;
+      out << "    Crossbar Traversals: " << _network_node_map[RECEIVE_HUB]->getTotalCrossbarTraversals() << endl;
 
       // Star Net Routers
       if (_receive_net_type == STAR)
       {
          for (SInt32 router_id = 0; router_id < _num_receive_nets_per_cluster; router_id ++)
          {
-            NetworkNode* network_node = _network_node_list[STAR_NET_ROUTER_BASE + router_id];
+            NetworkNode* network_node = _network_node_map[STAR_NET_ROUTER_BASE + router_id];
             out << "   Star-Net Router (" << router_id << "):" << endl;
             out << "    Input Buffer Writes: " << network_node->getTotalInputBufferWrites() << endl;
             out << "    Input Buffer Reads: " << network_node->getTotalInputBufferReads() << endl;
@@ -1089,12 +1089,13 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
       }
    }
 
+   out << "   Link Traversals:" << endl;
    // Link Traversals
    if (isAccessPoint(Router::Id(_core_id, EMESH)))
    {
-      SInt32 num_output_channels = _network_node_list[EMESH]->getNumOutputChannels();
-      UInt64 eMeshRouterToSendHubLinkTraversals = _network_node_list[EMESH]->getTotalLinkTraversals(num_output_channels-1);
-      UInt64 eMeshRouterToEMeshRouterLinkTraversals = _network_node_list[EMESH]->getTotalLinkTraversals(Channel::ALL) - eMeshRouterToSendHubLinkTraversals;
+      SInt32 num_output_channels = _network_node_map[EMESH]->getNumOutputChannels();
+      UInt64 eMeshRouterToSendHubLinkTraversals = _network_node_map[EMESH]->getTotalLinkTraversals(num_output_channels-1);
+      UInt64 eMeshRouterToEMeshRouterLinkTraversals = _network_node_map[EMESH]->getTotalLinkTraversals(Channel::ALL) - eMeshRouterToSendHubLinkTraversals;
    
       // EMeshRouter-To-EMeshRouter Link
       out << "    EMesh-Router To EMesh-Router Link Traversals: " << eMeshRouterToEMeshRouterLinkTraversals << endl;
@@ -1104,7 +1105,7 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
    }
    else // Not Access Point
    {
-      UInt64 eMeshRouterToEMeshRouterLinkTraversals = _network_node_list[EMESH]->getTotalLinkTraversals(Channel::ALL);
+      UInt64 eMeshRouterToEMeshRouterLinkTraversals = _network_node_map[EMESH]->getTotalLinkTraversals(Channel::ALL);
    
       // EMeshRouter-To-EMeshRouter Link
       out << "    EMesh-Router To EMesh-Router Link Traversals: " << eMeshRouterToEMeshRouterLinkTraversals << endl;
@@ -1116,26 +1117,26 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
    if (_core_id == computeCoreIDWithOpticalHub(computeClusterID(_core_id)))
    {
       // SendHub-To-ReceiveHub Link
-      out << "    Send-Hub To Receive-Hub Link Traversals: " << _network_node_list[SEND_HUB]->getTotalLinkTraversals(0) << endl;
+      out << "    Send-Hub To Receive-Hub Link Traversals: " << _network_node_map[SEND_HUB]->getTotalLinkTraversals(0) << endl;
 
       for (SInt32 receive_net = 0; receive_net < _num_receive_nets_per_cluster; receive_net ++)
       {
          if (_receive_net_type == STAR)
          {
             // ReceiveHub-To-StarNetRouter Link
-            out << "    Receive-Hub To Star-Net Router (" << receive_net << ") Link Traversals: " << _network_node_list[RECEIVE_HUB]->getTotalLinkTraversals(receive_net) << endl;
+            out << "    Receive-Hub To Star-Net Router (" << receive_net << ") Link Traversals: " << _network_node_map[RECEIVE_HUB]->getTotalLinkTraversals(receive_net) << endl;
             
             // StarNetRouter-To-Core Link
             for (SInt32 channel_id = 0; channel_id < _cluster_size; channel_id ++)
             {
-               out << "    Star-Net Router (" << receive_net << ") To Core Link Traversals (Channel " << channel_id << "): " << _network_node_list[STAR_NET_ROUTER_BASE + receive_net]->getTotalLinkTraversals(channel_id) << endl;
+               out << "    Star-Net Router (" << receive_net << ") To Core Link Traversals (Channel " << channel_id << "): " << _network_node_map[STAR_NET_ROUTER_BASE + receive_net]->getTotalLinkTraversals(channel_id) << endl;
             }
          }
 
          else // (_receive_net_type == HTREE) - HTREE Receive Net
          {
             // ReceiveHub-To-Cluster-HTree Links
-            out << "    Receive-Hub To Cluster HTree (" << receive_net << ") Traversals: " << _network_node_list[RECEIVE_HUB]->getTotalLinkTraversals(receive_net) << endl;
+            out << "    Receive-Hub To Cluster HTree (" << receive_net << ") Traversals: " << _network_node_map[RECEIVE_HUB]->getTotalLinkTraversals(receive_net) << endl;
          }
       }
    }
