@@ -9,7 +9,6 @@ class FiniteBufferNetworkModelFlipAtac : public FiniteBufferNetworkModel
    public:
       enum Stage 
       {
-         CORE_INTERFACE = -1,	   	//hard-coded
          BCAST_ROUTER,				   //=0
          MUX_ROUTER,				      //=1
          INGRESS_ROUTER,          	//=2
@@ -59,7 +58,7 @@ class FiniteBufferNetworkModelFlipAtac : public FiniteBufferNetworkModel
       // Virtual function in FiniteBufferNetworkModel 
       // Main Routing Function ************************
       // Compute the next router to send the head packet to
-      void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);    	  
+      void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node);    	  
       // Function to compute the first router that the sender core is connected to (for flip_atac, this is the BCAST router)
       Router::Id computeIngressRouterId(core_id_t core_id);             
             

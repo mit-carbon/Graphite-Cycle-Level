@@ -9,7 +9,6 @@ class FiniteBufferNetworkModelClos : public FiniteBufferNetworkModel
    public:
       enum Stage 
       {
-         CORE_INTERFACE = -1,	     // hard-coded
          INGRESS_ROUTER,           //=0
          MIDDLE_ROUTER,		        //=1
          EGRESS_ROUTER,		        //=2
@@ -52,7 +51,7 @@ class FiniteBufferNetworkModelClos : public FiniteBufferNetworkModel
       // Virtual function in FiniteBufferNetworkModel
       // Main Routing Function ************************
       // Compute the next router to send the head packet to
-      void computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node);
+      void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node);
       
       // Compute which ingress router the sender core is connected to
       Router::Id computeIngressRouterId(core_id_t core_id);
@@ -74,7 +73,4 @@ class FiniteBufferNetworkModelClos : public FiniteBufferNetworkModel
       core_id_t computeIngressCoreID(core_id_t node_coreID, UInt32 i);
       core_id_t computeMiddleCoreID(core_id_t node_coreID, UInt32 i);
       core_id_t computeEgressCoreID(core_id_t node_coreID, UInt32 i);
-      
 };
-
-

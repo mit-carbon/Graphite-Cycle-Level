@@ -26,32 +26,13 @@ FiniteBufferNetworkModelFlipAtac::FiniteBufferNetworkModelFlipAtac(Network* netw
    _num_cores = _num_cores_per_cluster * _num_clusters;
    
    // Router, Link Params
-   SInt32 num_flits_per_output_port = 0;
-   string link_type;
-   UInt64 link_delay;
-   UInt64 router_delay;
-   
-   volatile double link_length;
-
-   // Contention Model Params
-   bool contention_model_enabled = false;
-   string contention_model_type;
    
    // Get Network Parameters
    try
    {
       _frequency = Sim()->getCfg()->getFloat("network/flip_atac/frequency");
-
-      num_flits_per_output_port = Sim()->getCfg()->getInt("network/flip_atac/router/num_flits_per_port_buffer");
-      router_delay = Sim()->getCfg()->getInt("network/flip_atac/router/delay");
-      link_delay = Sim()->getCfg()->getInt("network/flip_atac/link/delay");
-      link_type = Sim()->getCfg()->getString("network/flip_atac/link/type");
-      link_length = Sim()->getCfg()->getFloat("network/flip_atac/link/length");
-      _flit_width = Sim()->getCfg()->getInt("network/flip_atac/link/width");    //variable inherited from finite_buffer_network_model
-
-      // Contention Model parameters
-      contention_model_enabled = Sim()->getCfg()->getBool("network/flip_atac/queue_model/enabled");
-      contention_model_type = Sim()->getCfg()->getString("network/flip_atac/queue_model/type");
+      _flit_width = Sim()->getCfg()->getInt("network/flip_atac/flit_width");    //variable inherited from finite_buffer_network_model
+      _flow_control_scheme = FlowControlScheme::parse(Sim()->getCfg()->getString("network/flip_atac/flow_control_scheme")); //variable inherited from finite buff model
    }
    catch (...)
    {
@@ -105,27 +86,27 @@ FiniteBufferNetworkModelFlipAtac::FiniteBufferNetworkModelFlipAtac(Network* netw
    }
    
    // Always create all types of nodes (BCAST, MUX, INGRESS, MIDDLE, EGRESS) for each core. 
-   // Note: this is to comply with the finite buffer model framework (indexing in _network_node_list vector)
+   // Note: this is to comply with the finite buffer model framework (indexing in _network_node_map vector)
    LOG_PRINT("Create BCAST_ROUTER for core_id %i", core_id);
 	NetworkNode* bcast_router = createNetworkNode(core_id, BCAST_ROUTER, _mid_cluster_id);
 	// add this node to the list of network nodes associated with this core (list is declared protected in "finite_buffer_network_model.h")
-	_network_node_list.push_back(bcast_router);
+	_network_node_map[BCAST_ROUTER] = bcast_router;
    
    LOG_PRINT("Create MUX_ROUTER for core_id %i", core_id);
 	NetworkNode* mux_router = createNetworkNode(core_id, MUX_ROUTER, _mid_cluster_id);
-	_network_node_list.push_back(mux_router);          // add this node to the list of network nodes associated with this core
+	_network_node_map[MUX_ROUTER] = mux_router;          // add this node to the list of network nodes associated with this core
    
    LOG_PRINT("Create INGRESS_ROUTER for core_id %i", core_id);
 	NetworkNode* ingress_router = createNetworkNode(core_id, INGRESS_ROUTER, _mid_cluster_id);
-	_network_node_list.push_back(ingress_router);      // add this node to the list of network nodes associated with this core
+	_network_node_map[INGRESS_ROUTER] = ingress_router;      // add this node to the list of network nodes associated with this core
          
    LOG_PRINT("Create MIDDLE_ROUTER for core_id %i", core_id);
 	NetworkNode* middle_router = createNetworkNode(core_id, MIDDLE_ROUTER, _mid_cluster_id);
-	_network_node_list.push_back(middle_router);       // add this node to the list of network nodes associated with this core
+	_network_node_map[MIDDLE_ROUTER] = middle_router;       // add this node to the list of network nodes associated with this core
 	
    LOG_PRINT("Create EGRESS_ROUTER for core_id %i", core_id);
 	NetworkNode* egress_router = createNetworkNode(core_id, EGRESS_ROUTER, _mid_cluster_id);
-	_network_node_list.push_back(egress_router);       // add this node to the list of network nodes associated with this core
+	_network_node_map[EGRESS_ROUTER] = egress_router;       // add this node to the list of network nodes associated with this core
    
    // Seed the buffer for random number generation --> will be used for MIDDLE_ROUTER stage in Clos
    srand48_r(core_id, &_rand_data_buffer);
@@ -135,9 +116,9 @@ FiniteBufferNetworkModelFlipAtac::FiniteBufferNetworkModelFlipAtac(Network* netw
 
 FiniteBufferNetworkModelFlipAtac::~FiniteBufferNetworkModelFlipAtac()
 {
-   vector<NetworkNode*>::iterator it = _network_node_list.begin();
-   for ( ; it != _network_node_list.end(); it ++)
-      delete (*it);
+   map<SInt32, NetworkNode*>::iterator it = _network_node_map.begin();
+   for ( ; it != _network_node_map.end(); it ++)
+      delete (*it).second;
 }
 
 
@@ -161,7 +142,7 @@ FiniteBufferNetworkModelFlipAtac::readTopologyParams(UInt32& num_router_ports, U
 // Function makes ChannelEndpointList in head flit object which contains all the next destinations of the flit
 // This is the main routing function.
 void
-FiniteBufferNetworkModelFlipAtac::computeOutputEndpointList(Flit* head_flit, NetworkNode* curr_network_node)
+FiniteBufferNetworkModelFlipAtac::computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node)
 {
    LOG_PRINT("computeOutputEndpointList: head_flit, curr_network _node =(%p,%p) enter", head_flit, curr_network_node);
    LOG_PRINT("head_flit->_sender %i, head_flit->_receiver %i", head_flit->_sender, head_flit->_receiver);
@@ -320,7 +301,6 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
    try
    {
       buffer_management_scheme_str = Sim()->getCfg()->getString("network/flip_atac/buffer_management_scheme"); 
-      _flow_control_scheme = FlowControlScheme::parse(Sim()->getCfg()->getString("network/atac/flow_control_scheme")); //variable inherited from finite buff model
       data_pipeline_delay = Sim()->getCfg()->getInt("network/flip_atac/router/data_pipeline_delay"); 
       credit_pipeline_delay = Sim()->getCfg()->getInt("network/flip_atac/router/credit_pipeline_delay"); 
       router_input_buffer_size = Sim()->getCfg()->getInt("network/flip_atac/router/input_buffer_size");
@@ -636,35 +616,35 @@ void
 FiniteBufferNetworkModelFlipAtac::outputEventCountSummary(ostream& out)
 {
    out << "  Event Counters: " << endl;
-   out << "    Bcast Total Input Buffer Writes: " << _network_node_list[BCAST_ROUTER]->getTotalInputBufferWrites() << endl;
-   out << "    Bcast Total Input Buffer Reads: " << _network_node_list[BCAST_ROUTER]->getTotalInputBufferReads() << endl;
-   out << "    Bcast Total Switch Allocator Requests: " << _network_node_list[BCAST_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Bcast Total Crossbar Traversals: " << _network_node_list[BCAST_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Bcast Total Link Traversals: " << _network_node_list[BCAST_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Bcast Total Input Buffer Writes: " << _network_node_map[BCAST_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Bcast Total Input Buffer Reads: " << _network_node_map[BCAST_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Bcast Total Switch Allocator Requests: " << _network_node_map[BCAST_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Bcast Total Crossbar Traversals: " << _network_node_map[BCAST_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Bcast Total Link Traversals: " << _network_node_map[BCAST_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
    
-   out << "    Mux Total Input Buffer Writes: " << _network_node_list[MUX_ROUTER]->getTotalInputBufferWrites() << endl;
-   out << "    Mux Total Input Buffer Reads: " << _network_node_list[MUX_ROUTER]->getTotalInputBufferReads() << endl;
-   out << "    Mux Total Switch Allocator Requests: " << _network_node_list[MUX_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Mux Total Crossbar Traversals: " << _network_node_list[MUX_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Mux Total Link Traversals: " << _network_node_list[MUX_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Mux Total Input Buffer Writes: " << _network_node_map[MUX_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Mux Total Input Buffer Reads: " << _network_node_map[MUX_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Mux Total Switch Allocator Requests: " << _network_node_map[MUX_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Mux Total Crossbar Traversals: " << _network_node_map[MUX_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Mux Total Link Traversals: " << _network_node_map[MUX_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
    
-   out << "    Ingress Total Input Buffer Writes: " << _network_node_list[INGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
-   out << "    Ingress Total Input Buffer Reads: " << _network_node_list[INGRESS_ROUTER]->getTotalInputBufferReads() << endl;
-   out << "    Ingress Total Switch Allocator Requests: " << _network_node_list[INGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Ingress Total Crossbar Traversals: " << _network_node_list[INGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Ingress Total Link Traversals: " << _network_node_list[INGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Ingress Total Input Buffer Writes: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Ingress Total Input Buffer Reads: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Ingress Total Switch Allocator Requests: " << _network_node_map[INGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Ingress Total Crossbar Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Ingress Total Link Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
    
-   out << "    Middle  Total Input Buffer Writes: " << _network_node_list[MIDDLE_ROUTER]->getTotalInputBufferWrites() << endl;
-   out << "    Middle  Total Input Buffer Reads: " << _network_node_list[MIDDLE_ROUTER]->getTotalInputBufferReads() << endl;
-   out << "    Middle  Total Switch Allocator Requests: " << _network_node_list[MIDDLE_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Middle  Total Crossbar Traversals: " << _network_node_list[MIDDLE_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Middle  Total Link Traversals: " << _network_node_list[MIDDLE_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Middle  Total Input Buffer Writes: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Middle  Total Input Buffer Reads: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Middle  Total Switch Allocator Requests: " << _network_node_map[MIDDLE_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Middle  Total Crossbar Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Middle  Total Link Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
    
-   out << "    Egress  Total Input Buffer Writes: " << _network_node_list[EGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
-   out << "    Egress  Total Input Buffer Reads: " << _network_node_list[EGRESS_ROUTER]->getTotalInputBufferReads() << endl;
-   out << "    Egress  Total Switch Allocator Requests: " << _network_node_list[EGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Egress  Total Crossbar Traversals: " << _network_node_list[EGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Egress  Total Link Traversals: " << _network_node_list[EGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Egress  Total Input Buffer Writes: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+   out << "    Egress  Total Input Buffer Reads: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+   out << "    Egress  Total Switch Allocator Requests: " << _network_node_map[EGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+   out << "    Egress  Total Crossbar Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
+   out << "    Egress  Total Link Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
 }
 
 
