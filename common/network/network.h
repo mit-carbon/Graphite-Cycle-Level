@@ -32,7 +32,7 @@ public:
    // Is Raw/Modeling Packet
    bool is_raw;
    // Sequence Number
-   UInt64 sequence_num;
+   UInt32 sequence_num;
 
    // This field may be used by specific network models in whatever way they please
    UInt32 specific;
@@ -42,11 +42,11 @@ public:
    explicit NetPacket(Byte*);
    NetPacket(UInt64 time, PacketType type,
              UInt32 length, const void *data,
-             bool is_raw = true, UInt64 sequence_num = 0);
+             bool is_raw = true, UInt32 sequence_num = 0);
    NetPacket(UInt64 time, PacketType type,
              core_id_t sender, core_id_t receiver,
              UInt32 length, const void *data,
-             bool is_raw = true, UInt64 sequence_num = 0);
+             bool is_raw = true, UInt32 sequence_num = 0);
 
    UInt32 bufferSize() const;
    Byte* makeBuffer() const;

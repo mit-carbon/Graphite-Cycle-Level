@@ -617,7 +617,7 @@ NetPacket::NetPacket()
 
 NetPacket::NetPacket(UInt64 t, PacketType ty,
                      UInt32 l, const void *d, 
-                     bool raw, UInt64 seq_num)
+                     bool raw, UInt32 seq_num)
    : start_time(0)
    , time(t)
    , type(ty)
@@ -634,7 +634,7 @@ NetPacket::NetPacket(UInt64 t, PacketType ty,
 NetPacket::NetPacket(UInt64 t, PacketType ty,
                      core_id_t s, core_id_t r,
                      UInt32 l, const void *d, 
-                     bool raw, UInt64 seq_num)
+                     bool raw, UInt32 seq_num)
    : start_time(0)
    , time(t)
    , type(ty)
