@@ -142,17 +142,13 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
    for (list<NetPacket*>::iterator it = output_net_packet_list.begin();
          it != output_net_packet_list.end(); it ++)
    {
-      if (it != output_net_packet_list.begin())
-         LOG_PRINT("_________________________________________________________");
       printNetPacket(*it);
    }
-   LOG_PRINT("#########################################################");
 }
 
 void
 NetworkNode::constructNetPackets(NetworkMsg* network_msg, list<NetPacket*>& net_packet_list)
 {
-   LOG_PRINT("constructNetPackets(%p) start", network_msg);
    switch (network_msg->_type)
    {
 
@@ -221,7 +217,6 @@ NetworkNode::constructNetPackets(NetworkMsg* network_msg, list<NetPacket*>& net_
       break;
 
    }
-   LOG_PRINT("constructNetPackets(%p) end", network_msg);
 }
 
 void
@@ -239,7 +234,6 @@ NetworkNode::addNetPacketEndpoints(NetPacket* net_packet,
 void
 NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
 {
-   LOG_PRINT("performRouterAndLinkTraversal(%p) start", output_network_msg)
    switch (output_network_msg->_type)
    {
    case NetworkMsg::DATA:
@@ -300,7 +294,6 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
       LOG_PRINT_ERROR("Unrecognized NetworkMsg Type(%u)", output_network_msg->_type);
       break;
    }
-   LOG_PRINT("performRouterAndLinkTraversal(%p) end", output_network_msg)
 }
 
 NetworkNode*
@@ -528,14 +521,13 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
 {
    NetworkMsg* network_msg = (NetworkMsg*) net_packet->data;
 
-   LOG_PRINT("Network Msg [Type(%s), Time(%llu), Normalized Time(%llu), Sender Router(%i,%i), Receiver Router(%i,%i), Input Endpoint(%i,%i), Output Endpoint(%i,%i)]",
-         network_msg->getTypeString().c_str(),
-         (long long unsigned int) net_packet->time,
-         (long long unsigned int) network_msg->_normalized_time,
-         net_packet->sender, network_msg->_sender_router_index,
-         net_packet->receiver, network_msg->_receiver_router_index,
-         network_msg->_input_endpoint._channel_id, network_msg->_input_endpoint._index,
-         network_msg->_output_endpoint._channel_id, network_msg->_output_endpoint._index);
+   char output_str[1000] = "";
+   sstrcat(output_str, "%s: Type(%s), Time(%lu), Upstream(%i,%i), Downstream(%i,%i)",
+                       is_input_msg ? "INPUT" : "OUTPUT",
+                       network_msg->getTypeString().c_str(),
+                       network_msg->_normalized_time,
+                       net_packet->sender, network_msg->_sender_router_index,
+                       net_packet->receiver, network_msg->_receiver_router_index);
 
    switch (network_msg->_type)
    {
@@ -544,13 +536,8 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
       
       {
          Flit* flit = (Flit*) network_msg;
-//         fprintf(stderr, " %s : Type(DATA,%s), Normalized Time(%llu), Sender(%i), Upstream(%i,%i), Downstream(%i,%i)\n",
-//               (is_input_msg) ? "(ENTER)" : "(EXIT)",
-//               flit->getTypeString().c_str(),
-//               (long long unsigned int) flit->_normalized_time,
-//               flit->_sender,
-//               net_packet->sender, network_msg->_sender_router_index,
-//               net_packet->receiver, network_msg->_receiver_router_index);
+
+         sstrcat(output_str, ", sender(%i), receiver(%i)", flit->_sender, flit->_receiver);
 
          if ((flit->_type & Flit::HEAD) && (is_input_msg))
          {
@@ -558,7 +545,7 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
             vector<Channel::Endpoint>* endpoint_list = head_flit->_output_endpoint_list;
 
             ostringstream endpoints_str;
-            endpoints_str << "Head Flit [Output Endpoint List( ";
+            sstrcat(output_str, ", HEAD-Flit[");
            
             if (!endpoint_list->empty())
             {
@@ -566,13 +553,16 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
                for ( ; endpoint_it != endpoint_list->end(); endpoint_it ++)
                {
                   Channel::Endpoint endpoint = *endpoint_it;
-                  endpoints_str << "(" << endpoint._channel_id << "," << endpoint._index << "), ";
+                  sstrcat(output_str, "(%i,%i),", endpoint._channel_id, endpoint._index);
                }
             }
 
-            endpoints_str << ")]";
+            sstrcat(output_str, "]");
+         }
 
-            LOG_PRINT("%s", endpoints_str.str().c_str());
+         if (!is_input_msg)
+         {
+            sstrcat(output_str, ", Delay(%lu)", flit->_normalized_time - flit->_normalized_time_at_entry);
          }
       }
 
@@ -582,23 +572,16 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
             
       {
          BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
-         LOG_PRINT("Buffer Management Msg [Type(%s)]", buffer_msg->getTypeString().c_str());
 
-//         fprintf(stderr, " %s : Type(CREDIT), Normalized Time(%llu), Upstream(%i,%i), Downstream(%i,%i)\n",
-//               (is_input_msg) ? "(ENTER)" : "(EXIT)",
-//               (long long unsigned int) buffer_msg->_normalized_time,
-//               net_packet->sender, network_msg->_sender_router_index,
-//               net_packet->receiver, network_msg->_receiver_router_index);
-//
          if (buffer_msg->_type == BufferManagementScheme::CREDIT)
          {
             CreditMsg* credit_msg = (CreditMsg*) buffer_msg;
-            LOG_PRINT("Credit Msg [Num Credits(%i)]", credit_msg->_num_credits);            
+            sstrcat(output_str, ", Credit(%i)", credit_msg->_num_credits);            
          }
          else if (buffer_msg->_type == BufferManagementScheme::ON_OFF)
          {
             OnOffMsg* on_off_msg = (OnOffMsg*) buffer_msg;
-            LOG_PRINT("On Off Msg [Status(%s)]", on_off_msg->_on_off_status ? "TRUE" : "FALSE");
+            sstrcat(output_str, ", On-Off(%s)", on_off_msg->_on_off_status ? "true" : "false");
          }
       }
 
@@ -608,4 +591,6 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
       LOG_PRINT_ERROR("Unrecognized Network Msg Type(%u)", network_msg->_type);
       break;
    }
+
+   LOG_PRINT("%s", output_str);
 }

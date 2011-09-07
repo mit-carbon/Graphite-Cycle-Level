@@ -524,6 +524,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
          double link_length = _tile_width;
          link_performance_model = ElectricalLinkPerformanceModel::create(electrical_link_type,
                _frequency, link_length, _flit_width, 1);
+         assert(link_performance_model->getDelay() == 1);
          link_power_model = ElectricalLinkPowerModel::create(electrical_link_type,
                _frequency, link_length, _flit_width, 1);
       }
@@ -533,6 +534,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
          double link_length = computeOpticalLinkLength();
          link_performance_model = new OpticalLinkPerformanceModel(_frequency,
                link_length, _flit_width, _num_clusters - 1);
+         assert(link_performance_model->getDelay() == 3);
          link_power_model = new OpticalLinkPowerModel(_frequency,
                link_length, _flit_width, _num_clusters - 1);
       }
@@ -544,6 +546,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
             double link_length = _tile_width * _cluster_size;
             link_performance_model = ElectricalLinkPerformanceModel::create(electrical_link_type,
                   _frequency, link_length, _flit_width, _cluster_size);
+            assert(link_performance_model->getDelay() == 1);
             link_power_model = ElectricalLinkPowerModel::create(electrical_link_type,
                   _frequency, link_length, _flit_width, _cluster_size);
          }
@@ -552,6 +555,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
             double link_length = 0.1; // (in mm) - Really small length
             link_performance_model = ElectricalLinkPerformanceModel::create(electrical_link_type,
                   _frequency, link_length, _flit_width, 1);
+            assert(link_performance_model->getDelay() == 1);
             link_power_model = ElectricalLinkPowerModel::create(electrical_link_type,
                   _frequency, link_length, _flit_width, 1);
          }
@@ -568,6 +572,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
             link_length = 0.1;      // Some small length
          link_performance_model = ElectricalLinkPerformanceModel::create(electrical_link_type,
                _frequency, link_length, _flit_width, 1);
+         assert(link_performance_model->getDelay() == 1);
          link_power_model = ElectricalLinkPowerModel::create(electrical_link_type,
                _frequency, link_length, _flit_width, 1);
       }

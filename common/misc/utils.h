@@ -100,4 +100,8 @@ string trimSpaces(string& str);
 
 void parseList(string& list, vector<string>& vec, string delim);
 
+// Concatenate strings
+
+char* sstrcat(char* str, const char* fmt, ...);
+
 #endif

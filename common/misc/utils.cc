@@ -1,4 +1,6 @@
 #include <cmath>
+#include <stdarg.h>
+#include <string.h>
 #include "utils.h"
 
 /* ================================================================ */
@@ -142,4 +144,19 @@ void parseList(string& list, vector<string>& vec, string delim)
       fprintf(stderr, "Unsupported Number of delimiters(%s)\n", delim.c_str());
       exit(EXIT_FAILURE);
    }
+}
+
+char* sstrcat(char* str, const char* fmt, ...)
+{
+   va_list ap;
+   va_start(ap, fmt);
+
+   // Get Next Str
+   char next_str[1000] = "";
+   vsprintf(next_str, fmt, ap);
+   va_end(ap);
+
+   // Concatenate the strings
+   strcat(str, next_str);
+   return str;
 }
