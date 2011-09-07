@@ -38,13 +38,22 @@ NetworkTrafficType parseTrafficPattern(string traffic_pattern)
 void uniformRandomTrafficGenerator(int core_id, vector<int>& send_vec, vector<int>& receive_vec)
 {
    // Generate Random Numbers using Linear Congruential Generator
-   int send_matrix[_num_cores][_num_cores];
-   int receive_matrix[_num_cores][_num_cores];
+   int** send_matrix;
+   int** receive_matrix;
+   
+   send_matrix = new int*[_num_cores];
+   receive_matrix = new int*[_num_cores];
+   for (SInt32 i = 0; i < _num_cores; i++)
+   {
+      send_matrix[i] = new int[_num_cores];
+      receive_matrix[i] = new int[_num_cores];
+   }
 
    send_matrix[0][0] = _num_cores / 2; // Initial seed
    receive_matrix[0][send_matrix[0][0]] = 0;
    for (int i = 0; i < _num_cores; i++) // Time Slot
    {
+
       if (i != 0)
       {
          send_matrix[i][0] = send_matrix[i-1][1];
@@ -89,6 +98,14 @@ void uniformRandomTrafficGenerator(int core_id, vector<int>& send_vec, vector<in
       send_vec.push_back(send_matrix[i][core_id]);
       receive_vec.push_back(receive_matrix[i][core_id]);
    }
+   
+   for (SInt32 i = 0; i < _num_cores; i++)
+   {
+      delete send_matrix[i];
+      delete receive_matrix[i];
+   }
+   delete send_matrix;
+   delete receive_matrix;
 }
 
 void bitComplementTrafficGenerator(int core_id, vector<core_id_t>& send_vec, vector<core_id_t>& receive_vec)
