@@ -29,8 +29,6 @@ SInt32 _num_cores;
 
 // Type of each packet (so as to send on USER_2 network)
 PacketType _packet_type = USER_2;
-// FIXME: Hard-coded for now (in bits), Change Later
-SInt32 _flit_width = 64;
 
 vector<SyntheticCore*> _synthetic_core_list;
 UInt64 _quantum = 100;
@@ -83,12 +81,13 @@ int main(int argc, char* argv[])
    _num_cores = (SInt32) Config::getSingleton()->getTotalCores();
    debug_printf("Num Application Cores(%i)\n", _num_cores);
 
-   // Initialize Core Specific Variables
+   // Initialize Synthetic Core Objs
    initializeSyntheticCores();
 
-   // Register (NetSend, NetRecv, PushFirstEvents) Events
+   // Register (PacketSent, PacketRecv, StartSimulation) Events
+   registerNetPacketInjectorExitHandler();
    Event::registerHandler(EVENT_NET_SEND, processNetSendEvent);
-   registerNetRecvHandler();
+   registerAsyncNetRecvHandler();
    Event::registerHandler(EVENT_START_SIMULATION, processStartSimulationEvent);
    
    // Push First Event
@@ -100,11 +99,12 @@ int main(int argc, char* argv[])
    
    // Unregister events
    Event::unregisterHandler(EVENT_START_SIMULATION);
-   unregisterNetRecvHandler();
+   unregisterAsyncNetRecvHandler();
    Event::unregisterHandler(EVENT_NET_SEND);
+   unregisterNetPacketInjectorExitHandler();
 
-   // Delete Core Specific Variables
-   deinitializeSyntheticCores();
+   // Delete Synthetic Core Objs
+   // deinitializeSyntheticCores();
 
    Simulator::__disablePerformanceModels();
    
@@ -113,6 +113,12 @@ int main(int argc, char* argv[])
    CarbonStopSim();
  
    return 0;
+}
+
+void outputSummary(void* callback_obj, ostream& out)
+{
+   SyntheticCore* synthetic_core = (SyntheticCore*) callback_obj;
+   synthetic_core->outputSummary(out);
 }
 
 void initializeSyntheticCores()
@@ -168,45 +174,76 @@ void processStartSimulationEvent(Event* event)
    for (SInt32 i = 0; i < _num_cores; i++)
    {
       // Push the first events
-      _synthetic_core_list[i]->pushNetSendEvent(0 /* time */);
+      _synthetic_core_list[i]->netSend(0 /* time */);
    }
+}
+
+void netPacketInjectorExitCallback(void* obj, UInt64 time)
+{
+   // Push NetSend Event
+   // Get the synthetic core ptr
+   SyntheticCore* synthetic_core = (SyntheticCore*) obj;
+
+   // Construct the event buffer
+   UnstructuredBuffer* event_args = new UnstructuredBuffer();
+   (*event_args) <<synthetic_core;
+   
+   // Push the event on the event queue
+   Event* net_send_event = new Event((Event::Type) EVENT_NET_SEND, time /* time */, event_args /* arguments */);
+   Event::processInOrder(net_send_event, synthetic_core->getCore()->getId() /* core_id */, EventQueue::ORDERED);
 }
 
 void processNetSendEvent(Event* event)
 {
-   assert(event->getType() == (Event::Type) EVENT_NET_SEND);
-   
-   Core* core;
+   SyntheticCore* synthetic_core;
    UnstructuredBuffer* event_args = event->getArgs();
-   (*event_args) >> core;
+   (*event_args) >> synthetic_core;
 
-   _synthetic_core_list[core->getId()]->processNetSendEvent(event);
+   // Process the net send event
+   synthetic_core->netSend(event->getTime());
 }
 
-void processNetRecvEvent(void* obj, NetPacket net_packet)
+void asyncNetRecvCallback(void* obj, NetPacket net_packet)
 {
-   Core* recv_core = (Core*) obj;
-   core_id_t receiver = recv_core->getId();
-   assert((receiver >= 0) && (receiver < _num_cores));
-
-   _synthetic_core_list[receiver]->processNetRecvEvent(net_packet);
+   SyntheticCore* synthetic_core = (SyntheticCore*) obj;
+   synthetic_core->netRecv(net_packet);
 }
 
-void registerNetRecvHandler()
+void registerNetPacketInjectorExitHandler()
 {
    for (SInt32 i = 0; i < _num_cores; i++)
    {
       Core* core = Sim()->getCoreManager()->getCoreFromID(i);
-      core->getNetwork()->registerCallback(_packet_type, processNetRecvEvent, core);
+      FiniteBufferNetworkModel* model = (FiniteBufferNetworkModel*) core->getNetwork()->getNetworkModelFromPacketType(_packet_type);
+      model->registerNetPacketInjectorExitCallback(netPacketInjectorExitCallback, _synthetic_core_list[i]);
    }
 }
 
-void unregisterNetRecvHandler()
+void registerAsyncNetRecvHandler()
 {
    for (SInt32 i = 0; i < _num_cores; i++)
    {
       Core* core = Sim()->getCoreManager()->getCoreFromID(i);
-      core->getNetwork()->unregisterCallback(_packet_type);
+      core->getNetwork()->registerAsyncRecvCallback(_packet_type, asyncNetRecvCallback, _synthetic_core_list[i]);
+   }
+}
+
+void unregisterNetPacketInjectorExitHandler()
+{
+   for (SInt32 i = 0; i < _num_cores; i++)
+   {
+      Core* core = Sim()->getCoreManager()->getCoreFromID(i);
+      FiniteBufferNetworkModel* model = (FiniteBufferNetworkModel*) core->getNetwork()->getNetworkModelFromPacketType(_packet_type);
+      model->unregisterNetPacketInjectorExitCallback();
+   }
+}
+
+void unregisterAsyncNetRecvHandler()
+{
+   for (SInt32 i = 0; i < _num_cores; i++)
+   {
+      Core* core = Sim()->getCoreManager()->getCoreFromID(i);
+      core->getNetwork()->unregisterAsyncRecvCallback(_packet_type);
    }
 }
 
@@ -227,7 +264,7 @@ void printHelpMessage()
    fprintf(stderr, "where <arg1> = Network Traffic Pattern Type (uniform_random, bit_complement, shuffle, transpose, tornado, nearest_neighbor) (default uniform_random)\n");
    fprintf(stderr, " and  <arg2> = Number of Packets injected into the Network per Core per Cycle (default 0.1)\n");
    fprintf(stderr, " and  <arg3> = Fraction of Broadcasts among Packets sent (default 0.0)\n");
-   fprintf(stderr, " and  <arg4> = Size of each Packet in Bytes (default 8)\n");
+   fprintf(stderr, " and  <arg4> = Payload Size of each Packet in Bytes (default 8)\n");
    fprintf(stderr, " and  <arg5> = Total Number of Packets injected into the Network per Core (default 10000)\n");
 }
 
@@ -247,63 +284,87 @@ SyntheticCore::SyntheticCore(Core* core, const vector<int>& send_vec, const vect
    , _send_vec(send_vec)
    , _receive_vec(receive_vec)
    , _total_packets_sent(0)
+   , _total_flits_sent(0)
    , _total_packets_received(0)
-   , _last_packet_time(0)
+   , _total_flits_received(0)
+   , _last_packet_send_time(0)
+   , _last_packet_recv_time(0)
 {
    _inject_packet_rand_num = new RandNum(0, 1, _core->getId() /* seed */);
    _broadcast_packet_rand_num = new RandNum(0, 1, _core->getId() /* seed */);
+
+   NetworkModel* network_model = _core->getNetwork()->getNetworkModelFromPacketType(_packet_type);
+   LOG_ASSERT_ERROR(network_model->isFiniteBuffer(), "Only Finite Buffer Network Models can be used in the [network/user_model_2] configuration option for running this benchmarks");
+   _network_model = (FiniteBufferNetworkModel*) network_model;
+
+   // Output Summary
+   _core->registerExternalOutputSummaryCallback(::outputSummary, this);
 }
 
 SyntheticCore::~SyntheticCore()
 {
    delete _inject_packet_rand_num;
    delete _broadcast_packet_rand_num;
+
+   // Output Summary
+   _core->unregisterExternalOutputSummaryCallback(::outputSummary);
 }
 
-void SyntheticCore::processNetSendEvent(Event* event)
+void SyntheticCore::netSend(UInt64 net_packet_injector_exit_time)
 {
-   for (UInt64 time = event->getTime(); time < (event->getTime() + _quantum); time++)
-   {
-      if (_total_packets_sent >= _total_packets)
-         break;
+   LOG_PRINT("Synthetic Core(%i): netSend(%llu)", _core->getId(), net_packet_injector_exit_time);
+   LOG_PRINT("Total Packets Sent(%llu), Total Packets(%llu), Last Packet Send Time(%llu)",
+         _total_packets_sent, _total_packets, _last_packet_send_time);
 
+   if (_total_packets_sent == _total_packets)
+   {
+      LOG_PRINT("Synthetic Core(%i): All packet sent", _core->getId());
+      return;
+   }
+
+   assert(net_packet_injector_exit_time >= _last_packet_send_time);
+
+   for (UInt64 time = _last_packet_send_time + 1 ; ; time ++)
+   {
       if (canInjectPacket())
       {
          logNetSend(time);
-
+         
+         // Send a packet to its destination core
          SInt32 receiver = (isBroadcastPacket()) ? NetPacket::BROADCAST :
                                                    _send_vec[_total_packets_sent % _send_vec.size()];
-         // Send a packet to its destination core
-         Byte data[_packet_size];
+         _last_packet_send_time = time;
          
-         _last_packet_time = getMax<UInt64>(_last_packet_time, time);
-         NetPacket net_packet(_last_packet_time, _packet_type, _core->getId(), receiver, _packet_size, data);
-         _core->getNetwork()->netSend(net_packet);
-        
-         _last_packet_time += computeNumFlits(_core->getNetwork()->getModeledLength(net_packet)); 
+         // Construct packet
+         Byte data[_packet_size];
+         UInt64 send_time = max<UInt64>(_last_packet_send_time, net_packet_injector_exit_time);
+         NetPacket net_packet(send_time, _packet_type, _core->getId(), receiver, _packet_size, data);
+
+         // Event Counters
          _total_packets_sent ++;
+         _total_flits_sent += _network_model->computeSerializationLatency(&net_packet);
+
+         // Send out packet
+         LOG_PRINT("Sending Out Packet: Time(%llu)", _last_packet_send_time);
+         _core->getNetwork()->netSend(net_packet, _last_packet_send_time);
+
+         break;
       }
    }
-
-   if (_total_packets_sent < _total_packets)
-   {
-      pushNetSendEvent(event->getTime() + _quantum);
-   }
 }
 
-void SyntheticCore::processNetRecvEvent(const NetPacket& net_packet)
+void SyntheticCore::netRecv(const NetPacket& net_packet)
 {
+   LOG_PRINT("Synthetic Core(%i): netRecv(%llu)", _core->getId(), net_packet.time);
+
    logNetRecv(net_packet.time);
 
+   // Event Counters
+   LOG_ASSERT_ERROR(_last_packet_recv_time <= net_packet.time, "Last Recv Packet Time(%llu), Curr Packet Time(%llu)",
+                    _last_packet_recv_time, net_packet.time);
+   _last_packet_recv_time = net_packet.time;
    _total_packets_received ++;
-}
-
-void SyntheticCore::pushNetSendEvent(UInt64 time)
-{
-   UnstructuredBuffer* event_args = new UnstructuredBuffer();
-   (*event_args) << _core;
-   Event* event = new Event((Event::Type) EVENT_NET_SEND, time, event_args);
-   Event::processInOrder(event, _core->getId(), EventQueue::ORDERED);
+   _total_flits_received += _network_model->computeSerializationLatency(&net_packet);
 }
 
 bool SyntheticCore::canInjectPacket()
@@ -334,8 +395,15 @@ void SyntheticCore::logNetRecv(UInt64 time)
    }
 }
 
-SInt32 SyntheticCore::computeNumFlits(SInt32 length)
+void SyntheticCore::outputSummary(ostream& out)
 {
-   SInt32 num_flits = (SInt32) ceil((float) (length * 8) / _flit_width);
-   return num_flits;
+   out << "Synthetic Core Summary: " << endl;
+   out << "    Total Flits Sent: " << _total_flits_sent << endl;
+   out << "    Send Completion Time: " << _last_packet_send_time << endl;
+   out << "    Total Flits Received: " << _total_flits_received << endl;
+   out << "    Recv Completion Time: " << _last_packet_recv_time << endl;
+   float offered_throughput = ((float) _total_flits_sent) / _last_packet_send_time;
+   out << "    Offered Throughput: " << offered_throughput << endl;
+   float sustained_throughput = ((float) _total_flits_received) / _last_packet_recv_time;
+   out << "    Sustained Throughput: " << sustained_throughput << endl;
 }
