@@ -869,15 +869,23 @@ FiniteBufferNetworkModelAtac::initializeAccessPointList(SInt32 cluster_id)
    ClusterInfo::Boundary& boundary = _cluster_info_list[cluster_id]._boundary;
    // Access Points
    // _access_point_list
+
+   SInt32 disp_x, disp_y;
+   disp_x = disp_y = 0;
+
    for (SInt32 y = 0; y < _numY_sub_clusters; y++)
    {
       for (SInt32 x = 0; x < _numX_sub_clusters; x++)
       {
-         SInt32 access_point_x = boundary.minX + (x * _sub_cluster_width) + (_sub_cluster_width/2);
-         SInt32 access_point_y = boundary.minY + (y * _sub_cluster_height) + (_sub_cluster_height/2);
+         SInt32 access_point_x = boundary.minX + (x * _sub_cluster_width) + ((_sub_cluster_width - disp_x) / 2);
+         SInt32 access_point_y = boundary.minY + (y * _sub_cluster_height) + ((_sub_cluster_height - disp_y) / 2);
          SInt32 access_point_id = access_point_y * _enet_width + access_point_x;
          _cluster_info_list[cluster_id]._access_point_list.push_back(Router::Id(access_point_id, EMESH));
+
+         disp_x = (disp_x == 0) ? 1 : 0;
       }
+
+      disp_y = (disp_y == 0) ? 1 : 0;
    }
 }
 
