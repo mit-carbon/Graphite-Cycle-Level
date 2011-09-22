@@ -1,5 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
 #include "buffer_status_list.h"
 #include "log.h"
 
@@ -62,7 +60,7 @@ BufferStatusList::tryAllocateBuffer(Flit* flit, SInt32 endpoint_index, SInt32 nu
    if (endpoint_index == Channel::Endpoint::ALL)
    {
       // Flit broadcasted to all endpoints of a channel
-      for (SInt32 i = 0; (i < _num_output_endpoints) && (allocated_time != UINT64_MAX); i++)
+      for (SInt32 i = 0; (i < _num_output_endpoints) && (allocated_time != UINT64_MAX_); i++)
       {
          allocated_time = max<UInt64>(allocated_time, _buffer_status_vec[i]->tryAllocate(flit, num_buffers));
       }

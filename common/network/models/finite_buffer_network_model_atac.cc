@@ -18,8 +18,6 @@ using namespace std;
 //// Static Variables
 // Is Initialized?
 bool FiniteBufferNetworkModelAtac::_initialized = false;
-// Tile Width
-double FiniteBufferNetworkModelAtac::_tile_width;
 // ENet
 SInt32 FiniteBufferNetworkModelAtac::_enet_width;
 SInt32 FiniteBufferNetworkModelAtac::_enet_height;
@@ -61,8 +59,6 @@ FiniteBufferNetworkModelAtac::FiniteBufferNetworkModelAtac(Network* network, SIn
       _flit_width = Sim()->getCfg()->getInt("network/atac/flit_width");
       _flow_control_scheme = FlowControlScheme::parse(
             Sim()->getCfg()->getString("network/atac/flow_control_scheme"));
-      _buffer_management_scheme = BufferManagementScheme::parse(
-            Sim()->getCfg()->getString("network/atac/buffer_management_scheme"));
    }
    catch (...)
    {
@@ -73,6 +69,10 @@ FiniteBufferNetworkModelAtac::FiniteBufferNetworkModelAtac(Network* network, SIn
    _cluster_id = computeClusterID(_core_id);
 
    // Create the routers
+   _network_node_map[NET_PACKET_INJECTOR] = createNetPacketInjectorNode(Router::Id(_core_id, EMESH),
+         BufferManagementScheme::parse(Sim()->getCfg()->getString("network/atac/buffer_management_scheme")),
+         Sim()->getCfg()->getInt("network/atac/enet/router/input_buffer_size") );
+
    _network_node_map[EMESH] = createNetworkNode(EMESH);
    if (_core_id == computeCoreIDWithOpticalHub(_cluster_id))
    {
@@ -169,7 +169,6 @@ FiniteBufferNetworkModelAtac::initializeANetTopologyParameters()
 
    try
    {
-      _tile_width = Sim()->getCfg()->getFloat("general/tile_width");
       _cluster_size = Sim()->getCfg()->getInt("network/atac/cluster_size");
       _num_optical_access_points = Sim()->getCfg()->getInt("network/atac/num_optical_access_points_per_cluster");
       _receive_net_type = parseReceiveNetType(Sim()->getCfg()->getString("network/atac/receive_net_type"));
@@ -225,6 +224,8 @@ NetworkNode*
 FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
 {
    // Router Parameters
+   BufferManagementScheme::Type buffer_management_scheme;
+
    SInt32 enet_router_input_buffer_size = 0;
    SInt32 enet_router_data_pipeline_delay = 0;
    SInt32 enet_router_credit_pipeline_delay = 0;
@@ -251,6 +252,11 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
 
    try
    {
+      // Buffer Management Scheme
+      buffer_management_scheme = BufferManagementScheme::parse(
+            Sim()->getCfg()->getString("network/atac/buffer_management_scheme"));
+
+      // ENet Router
       enet_router_input_buffer_size = Sim()->getCfg()->getInt(
             "network/atac/enet/router/input_buffer_size");
       enet_router_data_pipeline_delay = Sim()->getCfg()->getInt(
@@ -258,6 +264,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
       enet_router_credit_pipeline_delay = Sim()->getCfg()->getInt(
             "network/atac/enet/router/credit_pipeline_delay");
       
+      // Send Hub Router
       send_hub_router_input_buffer_size = Sim()->getCfg()->getInt(
             "network/atac/onet/send_hub/router/input_buffer_size");
       send_hub_router_data_pipeline_delay = Sim()->getCfg()->getInt(
@@ -265,6 +272,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
       send_hub_router_credit_pipeline_delay = Sim()->getCfg()->getInt(
             "network/atac/onet/send_hub/router/credit_pipeline_delay");
 
+      // Receive Hub Router
       receive_hub_router_input_buffer_size = Sim()->getCfg()->getInt(
             "network/atac/onet/receive_hub/router/input_buffer_size");
       receive_hub_router_data_pipeline_delay = Sim()->getCfg()->getInt(
@@ -272,6 +280,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
       receive_hub_router_credit_pipeline_delay = Sim()->getCfg()->getInt(
             "network/atac/onet/receive_hub/router/credit_pipeline_delay");
 
+      // Star Net Router
       star_net_router_input_buffer_size = Sim()->getCfg()->getInt(
             "network/atac/star_net/router/input_buffer_size");
       star_net_router_data_pipeline_delay = Sim()->getCfg()->getInt(
@@ -305,11 +314,12 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
    {
       // Add the core interface
       Router::Id core_interface(_core_id, CORE_INTERFACE);
+      Router::Id net_packet_injector_node(_core_id, NET_PACKET_INJECTOR);
 
-      NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, core_interface);
+      NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, net_packet_injector_node);
       num_input_endpoints_list.push_back(1);
-      input_buffer_management_schemes.push_back(BufferManagementScheme::INFINITE);
-      input_buffer_size_list.push_back(-1);
+      input_buffer_management_schemes.push_back(buffer_management_scheme);
+      input_buffer_size_list.push_back(enet_router_input_buffer_size);
 
       NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, core_interface);
       num_output_endpoints_list.push_back(1);
@@ -331,12 +341,12 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
 
             NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, router_id);
             num_input_endpoints_list.push_back(1);
-            input_buffer_management_schemes.push_back(_buffer_management_scheme);
+            input_buffer_management_schemes.push_back(buffer_management_scheme);
             input_buffer_size_list.push_back(enet_router_input_buffer_size);
 
             NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, router_id);
             num_output_endpoints_list.push_back(1);
-            downstream_buffer_management_schemes.push_back(_buffer_management_scheme);
+            downstream_buffer_management_schemes.push_back(buffer_management_scheme);
             downstream_buffer_size_list.push_back(enet_router_input_buffer_size);
          }
       }
@@ -348,7 +358,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
         
          NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, send_hub_router); 
          num_output_endpoints_list.push_back(1);
-         downstream_buffer_management_schemes.push_back(_buffer_management_scheme);
+         downstream_buffer_management_schemes.push_back(buffer_management_scheme);
          downstream_buffer_size_list.push_back(send_hub_router_input_buffer_size);
       }
 
@@ -369,7 +379,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
       {
          NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, *router_it);
          num_input_endpoints_list.push_back(1);
-         input_buffer_management_schemes.push_back(_buffer_management_scheme);
+         input_buffer_management_schemes.push_back(buffer_management_scheme);
          input_buffer_size_list.push_back(send_hub_router_input_buffer_size);
       }
       
@@ -378,27 +388,26 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
       vector<Router::Id> receive_hub_router_list;
       for (SInt32 i = 0; i < _num_clusters; i++)
       {
-         if (i != _cluster_id)
-         {
-            Router::Id receive_hub_router(computeCoreIDWithOpticalHub(i), RECEIVE_HUB);
-            receive_hub_router_list.push_back(receive_hub_router);
-         }
+         Router::Id receive_hub_router(computeCoreIDWithOpticalHub(i), RECEIVE_HUB);
+         receive_hub_router_list.push_back(receive_hub_router);
       }
       NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, receive_hub_router_list);
-      num_output_endpoints_list.push_back(_num_clusters-1);
-      downstream_buffer_management_schemes.push_back(_buffer_management_scheme);
-      downstream_buffer_size_list.push_back(receive_hub_router_input_buffer_size);
-      // Second, to receive hub on same cluster
-      Router::Id receive_hub_router(computeCoreIDWithOpticalHub(_cluster_id), RECEIVE_HUB);
-      NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, receive_hub_router);
-      num_output_endpoints_list.push_back(1);
-      downstream_buffer_management_schemes.push_back(_buffer_management_scheme);
+      num_output_endpoints_list.push_back(_num_clusters);
+      downstream_buffer_management_schemes.push_back(buffer_management_scheme);
       downstream_buffer_size_list.push_back(receive_hub_router_input_buffer_size);
      
       // Other parameters 
       router_input_buffer_size = send_hub_router_input_buffer_size;
-      router_data_pipeline_delay = send_hub_router_data_pipeline_delay;
-      router_credit_pipeline_delay = send_hub_router_credit_pipeline_delay;
+      if (_num_optical_access_points == 1)
+      {
+         router_data_pipeline_delay = 0;
+         router_credit_pipeline_delay = 0;
+      }
+      else // (_num_optical_access_points > 1)
+      {
+         router_data_pipeline_delay = send_hub_router_data_pipeline_delay;
+         router_credit_pipeline_delay = send_hub_router_credit_pipeline_delay;
+      }
    }
 
    else if (node_type == RECEIVE_HUB)
@@ -415,7 +424,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
             Router::Id star_net_router_id(computeCoreIDWithOpticalHub(_cluster_id), STAR_NET_ROUTER_BASE + i);
             NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, star_net_router_id);
             num_output_endpoints_list.push_back(1);
-            downstream_buffer_management_schemes.push_back(_buffer_management_scheme);
+            downstream_buffer_management_schemes.push_back(buffer_management_scheme);
             downstream_buffer_size_list.push_back(star_net_router_input_buffer_size);
          }
       }
@@ -446,7 +455,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
          Router::Id send_hub_router(computeCoreIDWithOpticalHub(i), SEND_HUB);
          NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, send_hub_router);
          num_input_endpoints_list.push_back(1);
-         input_buffer_management_schemes.push_back(_buffer_management_scheme);
+         input_buffer_management_schemes.push_back(buffer_management_scheme);
          input_buffer_size_list.push_back(receive_hub_router_input_buffer_size);
       }
       
@@ -478,7 +487,7 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
       Router::Id receive_hub_router(computeCoreIDWithOpticalHub(_cluster_id), RECEIVE_HUB);
       NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, receive_hub_router);
       num_input_endpoints_list.push_back(1);
-      input_buffer_management_schemes.push_back(_buffer_management_scheme);
+      input_buffer_management_schemes.push_back(buffer_management_scheme);
       input_buffer_size_list.push_back(star_net_router_input_buffer_size);
 
       // Other Parameters
@@ -521,22 +530,31 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
 
       if (node_type == EMESH)
       {
-         double link_length = _tile_width;
-         link_performance_model = ElectricalLinkPerformanceModel::create(electrical_link_type,
-               _frequency, link_length, _flit_width, 1);
-         assert(link_performance_model->getDelay() == 1);
-         link_power_model = ElectricalLinkPowerModel::create(electrical_link_type,
-               _frequency, link_length, _flit_width, 1);
+         if ( (_num_optical_access_points == 1) && isAccessPoint(Router::Id(_core_id,node_type)) && (channel_id == (num_output_channels-1)) )
+         {
+            link_performance_model = NULL;
+            link_power_model = NULL;
+         }
+         else
+         {
+            double link_length = _tile_width;
+            link_performance_model = ElectricalLinkPerformanceModel::create(electrical_link_type,
+                  _frequency, link_length, _flit_width, 1);
+            assert(link_performance_model->getDelay() == 1);
+            link_power_model = ElectricalLinkPowerModel::create(electrical_link_type,
+                  _frequency, link_length, _flit_width, 1);
+         }
       }
 
       else if (node_type == SEND_HUB)
       {
-         double link_length = computeOpticalLinkLength();
+         double link_length = 10; // computeOpticalLinkLength();
          link_performance_model = new OpticalLinkPerformanceModel(_frequency,
-               link_length, _flit_width, _num_clusters - 1);
-         assert(link_performance_model->getDelay() == 3);
+               link_length, _flit_width, _num_clusters);
+         LOG_ASSERT_ERROR(link_performance_model->getDelay() == 3,
+                          "Expected Link Delay(3), Got(%llu)", link_performance_model->getDelay());
          link_power_model = new OpticalLinkPowerModel(_frequency,
-               link_length, _flit_width, _num_clusters - 1);
+               link_length, _flit_width, _num_clusters);
       }
 
       else if (node_type == RECEIVE_HUB)
@@ -552,12 +570,8 @@ FiniteBufferNetworkModelAtac::createNetworkNode(SInt32 node_type)
          }
          else // (_receive_net_type == STAR) - STAR Receive Net
          {
-            double link_length = 0.1; // (in mm) - Really small length
-            link_performance_model = ElectricalLinkPerformanceModel::create(electrical_link_type,
-                  _frequency, link_length, _flit_width, 1);
-            assert(link_performance_model->getDelay() == 1);
-            link_power_model = ElectricalLinkPowerModel::create(electrical_link_type,
-                  _frequency, link_length, _flit_width, 1);
+            link_performance_model = NULL;
+            link_power_model = NULL;
          }
       }
 
@@ -631,13 +645,6 @@ FiniteBufferNetworkModelAtac::computeOutputEndpointList(HeadFlit* head_flit, Net
    LOG_PRINT("computeOutputEndpointList(%p, %p) end", head_flit, curr_network_node);
 }
 
-Router::Id
-FiniteBufferNetworkModelAtac::computeIngressRouterId(core_id_t core_id)
-{
-   assert(core_id == _core_id);
-   return Router::Id(core_id, EMESH);
-}
-
 void
 FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_node,
       core_id_t sender, core_id_t receiver,
@@ -657,8 +664,6 @@ FiniteBufferNetworkModelAtac::computeNextHopsOnONet(NetworkNode* curr_network_no
          // Channel - 0 is optical, Channel - 1 goes to the receive hub of same cluster
          // One channel -> 0, Broadcast -> Channel::Endpoint::ALL
          output_endpoint_vec.push_back(Channel::Endpoint(0, Channel::Endpoint::ALL));
-         // Send to myself also
-         output_endpoint_vec.push_back(Channel::Endpoint(1, 0));
       }
       else // (receiver != NetPacket::BROADCAST)
       {
@@ -1032,7 +1037,7 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
    out << "    Input Buffer Writes: " << _network_node_map[EMESH]->getTotalInputBufferWrites() << endl;
    out << "    Input Buffer Reads: " << _network_node_map[EMESH]->getTotalInputBufferReads() << endl;
    out << "    Switch Allocator Requests: " << _network_node_map[EMESH]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Crossbar Traversals: " << _network_node_map[EMESH]->getTotalCrossbarTraversals() << endl;
+   out << "    Crossbar Traversals: " << _network_node_map[EMESH]->getTotalCrossbarTraversals(1) << endl;
    
    if (_core_id == computeCoreIDWithOpticalHub(computeClusterID(_core_id)))
    {
@@ -1041,14 +1046,14 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
       out << "    Input Buffer Writes: " << _network_node_map[SEND_HUB]->getTotalInputBufferWrites() << endl;
       out << "    Input Buffer Reads: " << _network_node_map[SEND_HUB]->getTotalInputBufferReads() << endl;
       out << "    Switch Allocator Requests: " << _network_node_map[SEND_HUB]->getTotalSwitchAllocatorRequests() << endl;
-      out << "    Crossbar Traversals: " << _network_node_map[SEND_HUB]->getTotalCrossbarTraversals() << endl;
+      out << "    Crossbar Traversals: " << _network_node_map[SEND_HUB]->getTotalCrossbarTraversals(1) << endl;
 
       // Receive Hub Router
       out << "   Receive-Hub Router:" << endl;
       out << "    Input Buffer Writes: " << _network_node_map[RECEIVE_HUB]->getTotalInputBufferWrites() << endl;
       out << "    Input Buffer Reads: " << _network_node_map[RECEIVE_HUB]->getTotalInputBufferReads() << endl;
       out << "    Switch Allocator Requests: " << _network_node_map[RECEIVE_HUB]->getTotalSwitchAllocatorRequests() << endl;
-      out << "    Crossbar Traversals: " << _network_node_map[RECEIVE_HUB]->getTotalCrossbarTraversals() << endl;
+      out << "    Crossbar Traversals: " << _network_node_map[RECEIVE_HUB]->getTotalCrossbarTraversals(1) << endl;
 
       // Star Net Routers
       if (_receive_net_type == STAR)
@@ -1060,7 +1065,8 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
             out << "    Input Buffer Writes: " << network_node->getTotalInputBufferWrites() << endl;
             out << "    Input Buffer Reads: " << network_node->getTotalInputBufferReads() << endl;
             out << "    Switch Allocator Requests: " << network_node->getTotalSwitchAllocatorRequests() << endl;
-            out << "    Crossbar Traversals: " << network_node->getTotalCrossbarTraversals() << endl;
+            out << "    Crossbar Unicasts: " << network_node->getTotalCrossbarTraversals(1) << endl;
+            out << "    Crossbar Broadcasts: " << network_node->getTotalCrossbarTraversals(_cluster_size) << endl;
          }
       }
    }
@@ -1068,17 +1074,17 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
    {
       // Send Hub Router
       out << "   Send-Hub Router:" << endl;
-      out << "    Input Buffer Writes: NA" << endl;
-      out << "    Input Buffer Reads: NA" << endl;
-      out << "    Switch Allocator Requests: NA" << endl;
-      out << "    Crossbar Traversals: NA" << endl;
+      out << "    Input Buffer Writes:" << endl;
+      out << "    Input Buffer Reads:" << endl;
+      out << "    Switch Allocator Requests:" << endl;
+      out << "    Crossbar Traversals:" << endl;
 
       // Receive Hub Router
       out << "   Receive-Hub Router:" << endl; 
-      out << "    Input Buffer Writes: NA" << endl;
-      out << "    Input Buffer Reads: NA" << endl;
-      out << "    Switch Allocator Requests: NA" << endl;
-      out << "    Crossbar Traversals: NA" << endl;
+      out << "    Input Buffer Writes:" << endl;
+      out << "    Input Buffer Reads:" << endl;
+      out << "    Switch Allocator Requests:" << endl;
+      out << "    Crossbar Traversals:" << endl;
 
       // Star Net Routers
       if (_receive_net_type == STAR)
@@ -1086,10 +1092,11 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
          for (SInt32 router_id = 0; router_id < _num_receive_nets_per_cluster; router_id ++)
          {
             out << "   Star-Net Router (" << router_id << "):" << endl;
-            out << "    Input Buffer Writes: NA" << endl;
-            out << "    Input Buffer Reads: NA" << endl;
-            out << "    Switch Allocator Requests: NA" << endl;
-            out << "    Crossbar Traversals: NA" << endl;
+            out << "    Input Buffer Writes:" << endl;
+            out << "    Input Buffer Reads:" << endl;
+            out << "    Switch Allocator Requests:" << endl;
+            out << "    Crossbar Unicasts:" << endl;
+            out << "    Crossbar Broadcasts:" << endl;
          }
       }
    }
@@ -1099,8 +1106,8 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
    if (isAccessPoint(Router::Id(_core_id, EMESH)))
    {
       SInt32 num_output_channels = _network_node_map[EMESH]->getNumOutputChannels();
-      UInt64 eMeshRouterToSendHubLinkTraversals = _network_node_map[EMESH]->getTotalLinkTraversals(num_output_channels-1);
-      UInt64 eMeshRouterToEMeshRouterLinkTraversals = _network_node_map[EMESH]->getTotalLinkTraversals(Channel::ALL) - eMeshRouterToSendHubLinkTraversals;
+      UInt64 eMeshRouterToSendHubLinkTraversals = _network_node_map[EMESH]->getTotalOutputLinkUnicasts(num_output_channels-1);
+      UInt64 eMeshRouterToEMeshRouterLinkTraversals = _network_node_map[EMESH]->getTotalOutputLinkUnicasts(Channel::ALL) - eMeshRouterToSendHubLinkTraversals;
    
       // EMeshRouter-To-EMeshRouter Link
       out << "    EMesh-Router To EMesh-Router Link Traversals: " << eMeshRouterToEMeshRouterLinkTraversals << endl;
@@ -1110,38 +1117,38 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
    }
    else // Not Access Point
    {
-      UInt64 eMeshRouterToEMeshRouterLinkTraversals = _network_node_map[EMESH]->getTotalLinkTraversals(Channel::ALL);
+      UInt64 eMeshRouterToEMeshRouterLinkTraversals = _network_node_map[EMESH]->getTotalOutputLinkUnicasts(Channel::ALL);
    
       // EMeshRouter-To-EMeshRouter Link
       out << "    EMesh-Router To EMesh-Router Link Traversals: " << eMeshRouterToEMeshRouterLinkTraversals << endl;
    
       // EMeshRouter-To-SendHub Link
-      out << "    EMesh-Router To Send-Hub Link Traversals: NA" << endl;
+      out << "    EMesh-Router To Send-Hub Link Traversals:" << endl;
    }
 
    if (_core_id == computeCoreIDWithOpticalHub(computeClusterID(_core_id)))
    {
       // SendHub-To-ReceiveHub Link
-      out << "    Send-Hub To Receive-Hub Link Traversals: " << _network_node_map[SEND_HUB]->getTotalLinkTraversals(0) << endl;
+      out << "    Send-Hub To Receive-Hub Link Unicasts: " << _network_node_map[SEND_HUB]->getTotalOutputLinkUnicasts(0) << endl;
+      out << "    Send-Hub To Receive-Hub Link Broadcasts: " << _network_node_map[SEND_HUB]->getTotalOutputLinkBroadcasts(0) << endl;
 
       for (SInt32 receive_net = 0; receive_net < _num_receive_nets_per_cluster; receive_net ++)
       {
          if (_receive_net_type == STAR)
          {
             // ReceiveHub-To-StarNetRouter Link
-            out << "    Receive-Hub To Star-Net Router (" << receive_net << ") Link Traversals: " << _network_node_map[RECEIVE_HUB]->getTotalLinkTraversals(receive_net) << endl;
+            out << "    Receive-Hub To Star-Net Router (" << receive_net << ") Link Traversals: " << _network_node_map[RECEIVE_HUB]->getTotalOutputLinkUnicasts(receive_net) << endl;
             
             // StarNetRouter-To-Core Link
-            for (SInt32 channel_id = 0; channel_id < _cluster_size; channel_id ++)
-            {
-               out << "    Star-Net Router (" << receive_net << ") To Core Link Traversals (Channel " << channel_id << "): " << _network_node_map[STAR_NET_ROUTER_BASE + receive_net]->getTotalLinkTraversals(channel_id) << endl;
-            }
+            out << "    Star-Net Router (" << receive_net << ") To Core Link Traversals: " << _network_node_map[STAR_NET_ROUTER_BASE + receive_net]->getTotalOutputLinkUnicasts(Channel::ALL) << endl;
          }
 
          else // (_receive_net_type == HTREE) - HTREE Receive Net
          {
             // ReceiveHub-To-Cluster-HTree Links
-            out << "    Receive-Hub To Cluster HTree (" << receive_net << ") Traversals: " << _network_node_map[RECEIVE_HUB]->getTotalLinkTraversals(receive_net) << endl;
+            UInt64 htree_traversals = _network_node_map[RECEIVE_HUB]->getTotalOutputLinkUnicasts(receive_net) +
+                                      _network_node_map[RECEIVE_HUB]->getTotalOutputLinkBroadcasts(receive_net);
+            out << "    Receive-Hub To Cluster HTree (" << receive_net << ") Traversals: " << htree_traversals << endl;
          }
       }
    }
@@ -1149,26 +1156,24 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
    else // No Optical Hub
    {
       // SendHub-To-ReceiveHub Link
-      out << "    Send-Hub To Receive-Hub Link Traversals: NA" << endl;
+      out << "    Send-Hub To Receive-Hub Link Unicasts:" << endl;
+      out << "    Send-Hub To Receive-Hub Link Broadcasts:" << endl;
 
       for (SInt32 receive_net = 0; receive_net < _num_receive_nets_per_cluster; receive_net ++)
       {
          if (_receive_net_type == STAR)
          {
             // ReceiveHub-To-StarNetRouter Link
-            out << "    Receive-Hub To Star-Net Router (" << receive_net << ") Link Traversals: NA" << endl;
+            out << "    Receive-Hub To Star-Net Router (" << receive_net << ") Link Traversals:" << endl;
 
             // StarNetRouter-To-Core Link
-            for (SInt32 channel_id = 0; channel_id < _cluster_size; channel_id ++)
-            {
-               out << "    Star-Net Router (" << receive_net << ") To Core Link Traversals (Channel " << channel_id << "): NA" << endl;
-            }
+            out << "    Star-Net Router (" << receive_net << ") To Core Link Traversals:" << endl;
          }
 
          else // (_receive_net_type == HTREE) - HTREE Receive Net
          {
             // ReceiveHub-To-Cluster-HTree Links
-            out << "    Receive-Hub To Cluster HTree (" << receive_net << ") Traversals: NA" << endl;
+            out << "    Receive-Hub To Cluster HTree (" << receive_net << ") Traversals:" << endl;
          }
       }
    }

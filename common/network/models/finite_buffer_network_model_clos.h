@@ -9,9 +9,9 @@ class FiniteBufferNetworkModelClos : public FiniteBufferNetworkModel
    public:
       enum Stage 
       {
-         INGRESS_ROUTER,           //=0
-         MIDDLE_ROUTER,		        //=1
-         EGRESS_ROUTER,		        //=2
+         INGRESS_ROUTER = 1,  // Always starts at 1
+         MIDDLE_ROUTER = 2,
+         EGRESS_ROUTER = 3
       };
 
       // Initialize network topology & create network nodes for this core

@@ -1,10 +1,11 @@
 #include <cassert>
 using namespace std;
 
+#include "simulator.h"
+#include "core_manager.h"
 #include "network_types.h"
 #include "network_model_magic.h"
 #include "network_model_emesh_hop_counter.h"
-#include "network_model_emesh_hop_by_hop.h"
 #include "finite_buffer_network_model_emesh.h"
 #include "finite_buffer_network_model_clos.h"
 #include "finite_buffer_network_model_atac.h"
@@ -30,6 +31,8 @@ NetworkModel::NetworkModel(Network *network, SInt32 network_id, bool is_finite_b
       _network_name = "SYSTEM";
    else
       LOG_PRINT_ERROR("Unrecognized Network Num(%u)", network_id);
+
+   _tile_width = Sim()->getCfg()->getFloat("general/tile_width");
 }
 
 NetworkModel*
@@ -42,9 +45,6 @@ NetworkModel::createModel(Network *net, SInt32 network_id, UInt32 model_type)
 
    case NETWORK_EMESH_HOP_COUNTER:
       return new NetworkModelEMeshHopCounter(net, network_id);
-
-   case NETWORK_EMESH_HOP_BY_HOP:
-      return new NetworkModelEMeshHopByHop(net, network_id);
 
    case FINITE_BUFFER_NETWORK_EMESH:
       return new FiniteBufferNetworkModelEMesh(net, network_id);
@@ -71,8 +71,6 @@ NetworkModel::parseNetworkType(string str)
       return NETWORK_MAGIC;
    else if (str == "emesh_hop_counter")
       return NETWORK_EMESH_HOP_COUNTER;
-   else if (str == "emesh_hop_by_hop")
-      return NETWORK_EMESH_HOP_BY_HOP;
    else if (str == "finite_buffer_emesh")
       return FINITE_BUFFER_NETWORK_EMESH;
    else if (str == "finite_buffer_atac")
@@ -96,9 +94,6 @@ NetworkModel::computeCoreCountConstraints(UInt32 network_type, SInt32 core_count
       case NETWORK_MAGIC:
       case NETWORK_EMESH_HOP_COUNTER:
          return make_pair(false,core_count);
-
-      case NETWORK_EMESH_HOP_BY_HOP:
-         return NetworkModelEMeshHopByHop::computeCoreCountConstraints(core_count);
 
       case FINITE_BUFFER_NETWORK_EMESH:
          return FiniteBufferNetworkModelEMesh::computeCoreCountConstraints(core_count);
@@ -138,9 +133,6 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
             
             return make_pair(false, core_list_with_memory_controllers);
          }
-
-      case NETWORK_EMESH_HOP_BY_HOP:
-         return NetworkModelEMeshHopByHop::computeMemoryControllerPositions(num_memory_controllers);
 
       case FINITE_BUFFER_NETWORK_EMESH:
          return FiniteBufferNetworkModelEMesh::computeMemoryControllerPositions(num_memory_controllers);

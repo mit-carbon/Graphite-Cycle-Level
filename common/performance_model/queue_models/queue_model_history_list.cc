@@ -1,6 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
-
 #include "simulator.h"
 #include "core_manager.h"
 #include "config.h"
@@ -24,7 +21,7 @@ QueueModelHistoryList::QueueModelHistoryList(UInt64 min_processing_time):
       LOG_PRINT_ERROR("Could not read parameters from cfg");
    }
    
-   _free_interval_list.push_back(std::make_pair<UInt64,UInt64>(0, UINT64_MAX));
+   _free_interval_list.push_back(std::make_pair<UInt64,UInt64>(0, UINT64_MAX_));
    _queue_model_m_g_1 = new QueueModelMG1();
 
    initializeQueueCounters();

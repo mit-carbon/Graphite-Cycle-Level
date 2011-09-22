@@ -42,9 +42,9 @@ void SimThread::run()
    bool cont = true;
    // Turn off cont when we receive a quit message
    Network* net = network_list.front();
-   net->registerCallback(SIM_THREAD_TERMINATE_THREADS,
-                         terminateFunc,
-                         &cont);
+   net->registerAsyncRecvCallback(SIM_THREAD_TERMINATE_THREADS,
+                                  terminateFunc,
+                                  &cont);
 
    // One EventQueueManager per SimThread
    EventQueueManager* event_queue_manager = Sim()->getEventManager()->getEventQueueManager(sim_thread_id);

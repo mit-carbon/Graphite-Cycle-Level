@@ -21,7 +21,7 @@ NetworkModelEMeshHopCounter::NetworkModelEMeshHopCounter(Network *net, SInt32 ne
 
    try
    {
-      _frequency = Sim()->getCfg()->getFloat("network/emesh_hop_counter/frequency");
+      _frequency = Sim()->getCfg()->getFloat("network/emesh/frequency");
    }
    catch (...)
    {
@@ -58,15 +58,14 @@ NetworkModelEMeshHopCounter::createRouterAndLinkModels()
 {
    UInt64 router_delay = 0;
    UInt32 num_flits_per_output_buffer = 1;   // Here, contention is not modeled
-   volatile double link_length;
+   double link_length = _tile_width;
    try
    {
-      _link_type = Sim()->getCfg()->getString("network/emesh_hop_counter/link/type");
-      _link_width = Sim()->getCfg()->getInt("network/emesh_hop_counter/link/width");
-      link_length = Sim()->getCfg()->getFloat("network/emesh_hop_counter/link/length");
+      _link_type = Sim()->getCfg()->getString("network/emesh/link_type");
+      _link_width = Sim()->getCfg()->getInt("network/emesh/flit_width");
 
       // Pipeline delay of the router in clock cycles
-      router_delay = (UInt64) Sim()->getCfg()->getInt("network/emesh_hop_counter/router/delay");
+      router_delay = (UInt64) Sim()->getCfg()->getInt("network/emesh/router/data_pipeline_delay");
    }
    catch (...)
    {

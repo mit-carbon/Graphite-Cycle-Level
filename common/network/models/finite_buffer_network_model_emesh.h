@@ -19,7 +19,7 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
    private:
       enum NodeType
       {
-         EMESH = 0
+         EMESH = 1 // Always start at 1
       };
 
       // Private Functions
@@ -34,8 +34,6 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
 
       // Main Routing Function
       void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node);
-      // Compute Ingress Router Id
-      Router::Id computeIngressRouterId(core_id_t core_id);
 
       // Event Count Summary
       void outputEventCountSummary(ostream& out);

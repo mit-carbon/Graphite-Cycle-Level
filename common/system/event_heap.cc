@@ -1,5 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <climits>
 #include <cassert>
 
 #include "simulator.h"
@@ -13,18 +11,18 @@ using std::make_pair;
 EventHeap::EventHeap(EventQueueManager* event_queue_manager,
       MetaEventHeap* parent_event_heap, SInt32 event_heap_index_in_parent):
    EventQueue(event_queue_manager),
-   _first_event_time(UINT64_MAX),
+   _first_event_time(UINT64_MAX_),
    _parent_event_heap(parent_event_heap),
    _event_heap_index_in_parent(event_heap_index_in_parent)
 {
    // At initialization, leaf_event_heap has no events
-   _heap.insert(UINT64_MAX, NULL);
+   _heap.insert(UINT64_MAX_, NULL);
 }
 
 EventHeap::~EventHeap()
 {
    assert(_heap.size() == 1);
-   assert( _heap.min() == (make_pair<UInt64,void*>(UINT64_MAX,NULL)) );
+   assert( _heap.min() == (make_pair<UInt64,void*>(UINT64_MAX_,NULL)) );
 }
 
 void
@@ -91,7 +89,7 @@ EventHeap::processEvents()
       
       // Get next event in order of time
       Event* next_event = (Event*) ((_heap.min()).second);
-      UInt64 next_event_time = (next_event) ? next_event->getTime() : UINT64_MAX;
+      UInt64 next_event_time = (next_event) ? next_event->getTime() : UINT64_MAX_;
       Event::Type next_event_type = (next_event) ? next_event->getType() : Event::INVALID;
 
       LOG_PRINT("EventHeap(%i): After extractMin(), Next Event (Type[%u],Time[%llu])", \

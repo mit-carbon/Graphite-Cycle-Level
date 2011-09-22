@@ -37,6 +37,10 @@ Core::Core(core_id_t id)
    }
 
    m_syscall_client = new SyscallClient();
+
+   // Output Summary Callback
+   m_external_output_summary_callback = (OutputSummaryCallback) NULL;
+   m_external_callback_obj = (void*) NULL;
 }
 
 Core::~Core()
@@ -61,7 +65,8 @@ Core::~Core()
    LOG_PRINT("Core dtor end");
 }
 
-void Core::outputSummary(std::ostream &os)
+void
+Core::outputSummary(std::ostream &os)
 {
    LOG_PRINT("outputSummary() start");
    if (Config::getSingleton()->getEnablePerformanceModeling())
@@ -76,7 +81,27 @@ void Core::outputSummary(std::ostream &os)
       getShmemPerfModel()->outputSummary(os, Config::getSingleton()->getCoreFrequency(getId()));
       getMemoryManager()->outputSummary(os);
    }
+
+   // Call external callback function for output summary
+   if (m_external_output_summary_callback)
+      m_external_output_summary_callback(m_external_callback_obj, os);
+   
    LOG_PRINT("outputSummary() end");
+}
+
+void
+Core::registerExternalOutputSummaryCallback(OutputSummaryCallback callback, void* callback_obj)
+{
+   m_external_output_summary_callback = callback;
+   m_external_callback_obj = callback_obj;
+}
+
+void
+Core::unregisterExternalOutputSummaryCallback(OutputSummaryCallback callback)
+{
+   assert(m_external_output_summary_callback == callback);
+   m_external_output_summary_callback = (OutputSummaryCallback) NULL;
+   m_external_callback_obj = (void*) NULL;
 }
 
 void

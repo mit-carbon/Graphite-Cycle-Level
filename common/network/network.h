@@ -62,15 +62,15 @@ typedef list<NetPacket*> NetQueue;
 
 class NetMatch
 {
-   public:
-      NetMatch();
-      NetMatch(core_id_t sender, PacketType pkt_type);
-      NetMatch(core_id_t sender);
-      NetMatch(PacketType pkt_type);
-      NetMatch(const vector<core_id_t>& senders_, const vector<PacketType>& types_);
+public:
+   NetMatch();
+   NetMatch(core_id_t sender, PacketType pkt_type);
+   NetMatch(core_id_t sender);
+   NetMatch(PacketType pkt_type);
+   NetMatch(const vector<core_id_t>& senders_, const vector<PacketType>& types_);
 
-      vector<core_id_t> senders;
-      vector<PacketType> types;
+   vector<core_id_t> senders;
+   vector<PacketType> types;
 };
 
 // -- Network -- //
@@ -80,80 +80,79 @@ class NetMatch
 
 class Network
 {
-   public:
-      // -- Ctor, housekeeping, etc. -- //
-      Network(Core *core);
-      ~Network();
+public:
+   // -- Ctor, housekeeping, etc. -- //
+   Network(Core *core);
+   ~Network();
 
-      Core *getCore() const { return _core; }
+   Core *getCore() const { return _core; }
 
-      typedef void (*NetworkCallback)(void*, NetPacket);
+   typedef void (*NetRecvCallback)(void*, NetPacket);
 
-      // Register and Unregister Callbacks
-      void registerCallback(PacketType type,
-                            NetworkCallback callback,
-                            void* obj);
-      void unregisterCallback(PacketType type);
+   // Register and Unregister Callbacks
+   void registerAsyncRecvCallback(PacketType type,
+                                  NetRecvCallback callback,
+                                  void* obj);
+   void unregisterAsyncRecvCallback(PacketType type);
 
-      void outputSummary(ostream &out) const;
+   void outputSummary(ostream &out) const;
 
-      void processPacket(NetPacket* packet);
+   void processPacket(NetPacket* packet);
 
-      // -- Main interface -- //
+   // -- Main interface -- //
 
-      SInt32 netSend(NetPacket& packet);
-      void netRecv(const NetMatch &match, NetworkCallback callback, void* callbackObj);
+   SInt32 netSend(NetPacket& packet, UInt64 start_time = UINT64_MAX_);
+   void netRecv(const NetMatch &match, NetRecvCallback callback, void* callbackObj);
 
-      // -- Wrappers -- //
+   // -- Wrappers -- //
 
-      SInt32 netSend(SInt32 dest, PacketType type, const void *buf, UInt32 len);
-      SInt32 netBroadcast(PacketType type, const void *buf, UInt32 len);
+   SInt32 netSend(SInt32 dest, PacketType type, const void *buf, UInt32 len);
+   SInt32 netBroadcast(PacketType type, const void *buf, UInt32 len);
 
-      // -- Enable/Disable Models -- //
+   // -- Enable/Disable Models -- //
 
-      void enableModels();
-      void disableModels();
+   void enableModels();
+   void disableModels();
 
-      // -- Network Models -- //
+   // -- Network Models -- //
 
-      NetworkModel* getNetworkModelFromPacketType(PacketType packet_type);
-      PacketType getPacketTypeFromNetworkId(SInt32 network_id);
+   NetworkModel* getNetworkModelFromPacketType(PacketType packet_type);
+   PacketType getPacketTypeFromNetworkId(SInt32 network_id);
 
-      // -- Utilities -- //
-      
-      UInt32 getModeledLength(const NetPacket& pkt);
-      bool isModeled(const NetPacket& packet);
-      core_id_t getRequester(const NetPacket& packet);
+   // -- Utilities -- //
+   
+   UInt32 getModeledLength(const NetPacket& pkt);
+   bool isModeled(const NetPacket& packet);
+   core_id_t getRequester(const NetPacket& packet);
 
-   private:
-      NetworkModel * _models[NUM_STATIC_NETWORKS];
+private:
+   NetworkModel * _models[NUM_STATIC_NETWORKS];
 
-      // For General callbacks
-      NetworkCallback *_callbacks;
-      void **_callbackObjs;
-      
-      // For Sync Recvs
-      NetworkCallback _syncRecvCallback;
-      void* _syncRecvCallbackObj;
-      NetMatch _syncRecvMatch;
+   // For Asynchronous Recvs'
+   NetRecvCallback *_asyncRecvCallbacks;
+   void **_asyncRecvCallbackObjs;
+   
+   // For Synchronous Recvs'
+   NetRecvCallback _syncRecvCallback;
+   void* _syncRecvCallbackObj;
+   NetMatch _syncRecvMatch;
 
-      Core *_core;
+   Core *_core;
+   SInt32 _numMod;
 
-      SInt32 _numMod;
+   NetQueue _netQueue;
 
-      NetQueue _netQueue;
+   bool _enabled;
 
-      bool _enabled;
+   // Processing Packets
+   SInt32 forwardPacket(const NetPacket* packet);
+   void sendPacket(const NetPacket* packet, SInt32 receiver);
+   void sendPacketList(const list<NetPacket*>& net_packet_list_to_send);
+   void receivePacket(NetPacket* packet);
+   void receivePacketList(const list<NetPacket*>& net_packet_list_to_receive);
 
-      // Processing Packets
-      SInt32 forwardPacket(const NetPacket* packet);
-      void sendPacket(const NetPacket* packet, SInt32 receiver);
-      void sendPacketList(const list<NetPacket*>& net_packet_list_to_send);
-      void receivePacket(NetPacket* packet);
-      void receivePacketList(const list<NetPacket*>& net_packet_list_to_receive);
-
-      // Sync NetRecv
-      void processSyncRecv();
+   // Sync NetRecv
+   void processSyncRecv();
 };
 
 #endif // NETWORK_H

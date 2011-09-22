@@ -9,11 +9,11 @@ class FiniteBufferNetworkModelFlipAtac : public FiniteBufferNetworkModel
    public:
       enum Stage 
       {
-         BCAST_ROUTER,				   //=0
-         MUX_ROUTER,				      //=1
-         INGRESS_ROUTER,          	//=2
-         MIDDLE_ROUTER,		      	//=3
-         EGRESS_ROUTER,		      	//=4
+         BCAST_ROUTER = 1,    // Always starts at 1
+         MUX_ROUTER = 2,
+         INGRESS_ROUTER = 3,
+         MIDDLE_ROUTER = 4,
+         EGRESS_ROUTER = 5
       };
 
       // Constructor initializes network topology & creates network nodes for this core

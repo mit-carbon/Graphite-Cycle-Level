@@ -24,10 +24,10 @@ public:
          UInt32 flit_width,
          RouterPerformanceModel* router_performance_model,
          RouterPowerModel* router_power_model,
-         vector<LinkPerformanceModel*>& link_performance_model_list,
-         vector<LinkPowerModel*>& link_power_model_list,
-         vector<vector<Router::Id> >& input_channel_to_router_id_list__mapping,
-         vector<vector<Router::Id> >& output_channel_to_router_id_list__mapping,
+         vector<LinkPerformanceModel*> link_performance_model_list,
+         vector<LinkPowerModel*> link_power_model_list,
+         vector<vector<Router::Id> > input_channel_to_router_id_list__mapping,
+         vector<vector<Router::Id> > output_channel_to_router_id_list__mapping,
          PacketType flow_control_packet_type);
    ~NetworkNode();
 
@@ -35,10 +35,8 @@ public:
    SInt32 getNumInputChannels()  { return _num_input_channels; }
    SInt32 getNumOutputChannels() { return _num_output_channels; }
 
-   static void addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, \
-         Router::Id& router_id);
-   static void addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, \
-         vector<Router::Id>& router_id);
+   static void addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, Router::Id& router_id);
+   static void addChannelMapping(vector<vector<Router::Id> >& channel_to_router_id_list__mapping, vector<Router::Id>& router_id);
 
    // Process NetworkMsg
    void processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& output_net_packet_list);
@@ -51,15 +49,12 @@ public:
    vector<Router::Id>& getRouterIdListFromOutputChannel(SInt32 output_channel_id);
 
    // Query Event Counters
-   UInt64 getTotalInputBufferWrites()
-   { return _total_input_buffer_writes; }
-   UInt64 getTotalInputBufferReads()
-   { return _total_input_buffer_reads; }
-   UInt64 getTotalSwitchAllocatorRequests()
-   { return _total_switch_allocator_requests; }
-   UInt64 getTotalCrossbarTraversals()
-   { return _total_crossbar_traversals; }
-   UInt64 getTotalLinkTraversals(SInt32 channel_id);
+   UInt64 getTotalInputBufferWrites();
+   UInt64 getTotalInputBufferReads();
+   UInt64 getTotalSwitchAllocatorRequests();
+   UInt64 getTotalCrossbarTraversals(SInt32 multicast_index);
+   UInt64 getTotalOutputLinkUnicasts(SInt32 link_id_start, SInt32 link_id_end = Channel::INVALID);
+   UInt64 getTotalOutputLinkBroadcasts(SInt32 link_id_start, SInt32 link_id_end = Channel::INVALID);
 
    // RouterPerformanceModel
    RouterPerformanceModel* getRouterPerformanceModel()
@@ -90,8 +85,15 @@ private:
    UInt64 _total_input_buffer_writes;
    UInt64 _total_input_buffer_reads;
    UInt64 _total_switch_allocator_requests;
-   UInt64 _total_crossbar_traversals;
-   vector<UInt64> _total_link_traversals;
+   vector<UInt64> _total_crossbar_traversals;
+   vector<UInt64> _total_output_link_unicasts;
+   vector<UInt64> _total_output_link_broadcasts;
+
+   // Contention Model Counters
+   vector<UInt64> _total_contention_delay_counters;
+
+   // Cached Output Endpoint List - For all the available input channels
+   vector< vector<Channel::Endpoint>* > _cached_output_endpoint_list;
 
    // Time Normalizer
    // TimeNormalizer* _time_normalizer;
@@ -126,8 +128,16 @@ private:
    // Create Router <-> Channel Mappings 
    void createMappings();
    
-   // Initialize Event Counters
+   // Initialize Counters
    void initializeEventCounters();
+   void initializeContentionModelCounters();
+   // Update Counters
+   void updateEventCounters(Flit* flit);
+   void updateContentionModelCounters(Flit* flit);
+
+   // Cached Output Endpoint List
+   vector<Channel::Endpoint>* getOutputEndpointList(SInt32 input_channel);
+   void setOutputEndpointList(SInt32 input_channel, vector<Channel::Endpoint>* output_endpoint_list);
 
    // Remote Network Node
    NetworkNode* getRemoteNetworkNode(PacketType packet_type, Channel::Endpoint& input_endpoint);

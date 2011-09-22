@@ -1,5 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
 #include <cassert>
 #include <cstdio>
 
@@ -17,7 +15,7 @@ MinHeap::insert(Node* node)
 {
    node->_index = _node_list.size();
    UInt64 key = node->_key;
-   node->_key = UINT64_MAX;
+   node->_key = UINT64_MAX_;
    _node_list.push_back(node);
    return decreaseKey(node, key);
 }
@@ -26,7 +24,7 @@ bool
 MinHeap::insert(UInt64 key, void* data)
 {
    LOG_PRINT("Insert(%llu, %p), Size(%u)", key, data, size());
-   Node* node = new Node(UINT64_MAX, data, _node_list.size());
+   Node* node = new Node(UINT64_MAX_, data, _node_list.size());
    _node_list.push_back(node);
    return decreaseKey(node, key);
 }
@@ -36,7 +34,7 @@ MinHeap::min()
 {
    LOG_PRINT("min(), Size(%u)", size());
    if (_node_list.empty())
-      return make_pair<UInt64,void*>(UINT64_MAX, NULL);
+      return make_pair<UInt64,void*>(UINT64_MAX_, NULL);
    else
       return make_pair<UInt64,void*>(_node_list.front()->_key, _node_list.front()->_data);
 }
@@ -46,7 +44,7 @@ MinHeap::extractMin()
 {
    LOG_PRINT("extractMin(), Size(%u)", size());
    if (_node_list.empty())
-      return make_pair<UInt64,void*>(UINT64_MAX, NULL);
+      return make_pair<UInt64,void*>(UINT64_MAX_, NULL);
 
    // Get the node with the minimum key
    Node* min_node = _node_list.front();
@@ -201,7 +199,7 @@ MinHeap::Node::~Node()
 int main(int argc, char* argv[])
 {
    MinHeap min_heap;
-   UInt64 keys[] = {100, UINT64_MAX, 50, 35, 1000, 55};
+   UInt64 keys[] = {100, UINT64_MAX_, 50, 35, 1000, 55};
    printf("\n\n");
    for (int i = 0; i < 6; i++)
    {
@@ -229,7 +227,7 @@ int main(int argc, char* argv[])
 
    min_heap_2.decreaseKey(nodes[1], 10);
    min_heap_2.print();
-   min_heap_2.increaseKey(nodes[3], UINT64_MAX);
+   min_heap_2.increaseKey(nodes[3], UINT64_MAX_);
    min_heap_2.print();
    min_heap_2.decreaseKey(nodes[3], 45);
    min_heap_2.print();

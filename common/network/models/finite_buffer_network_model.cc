@@ -2,6 +2,7 @@
 
 #include "core.h"
 #include "finite_buffer_network_model.h"
+#include "router_performance_model.h"
 #include "log.h"
 #include "packet_type.h"
 #include "clock_converter.h"
@@ -12,6 +13,7 @@ FiniteBufferNetworkModel::FiniteBufferNetworkModel(Network* net, SInt32 network_
    : NetworkModel(net, network_id, true)
    , _enabled(false)
    , _sender_sequence_num(0)
+   , _netPacketInjectorExitCallback(NULL)
 {
    _core_id = getNetwork()->getCore()->getId();
    _flow_control_packet_type = getNetwork()->getPacketTypeFromNetworkId(network_id);
@@ -47,13 +49,15 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* raw_packet, list<NetPacket*>&
    assert(raw_packet->sender == _core_id);
  
    if (raw_packet->sender == raw_packet->receiver)
+   {
+      signalNetPacketInjector(raw_packet->time);
       return;
+   }
 
    // Split the packet into multiple flits 
    SInt32 serialization_latency = computeSerializationLatency(raw_packet);
    
    // Account for the Sender Contention Delay
-   // TODO: Should there be a contention delay here ?
    UInt64 contention_delay = _sender_contention_model->computeQueueDelay(raw_packet->time, serialization_latency);
    raw_packet->time += contention_delay;
    
@@ -62,21 +66,17 @@ FiniteBufferNetworkModel::sendNetPacket(NetPacket* raw_packet, list<NetPacket*>&
          raw_packet, modeling_packet_list_to_send,
          serialization_latency);
 
-   // Get the ingress router id
-   Router::Id ingress_router_id = computeIngressRouterId(_core_id);
-
    // Send out all the flits
    list<NetPacket*>::iterator packet_it = modeling_packet_list_to_send.begin();
    for ( ; packet_it != modeling_packet_list_to_send.end(); packet_it ++)
    {
       NetPacket* modeling_packet_to_send = *packet_it;
       modeling_packet_to_send->sender = _core_id;
-      modeling_packet_to_send->receiver = ingress_router_id._core_id;
+      modeling_packet_to_send->receiver = _core_id;
       
       Flit* flit_to_send = (Flit*) modeling_packet_to_send->data;
       flit_to_send->_sender_router_index = CORE_INTERFACE;
-      flit_to_send->_receiver_router_index = ingress_router_id._index;
-      
+      flit_to_send->_receiver_router_index = NET_PACKET_INJECTOR;
    }
 
    LOG_PRINT("sendNetPacket() exit, modeling_packet_list_to_send.size(%u)", modeling_packet_list_to_send.size());
@@ -101,16 +101,16 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
    {
       // get the 'NetworkMsg*' object
       NetworkMsg* network_msg = (NetworkMsg*) net_packet->data;
-      SInt32 router_idx = network_msg->_receiver_router_index;
+      SInt32 node_type = network_msg->_receiver_router_index;
       
-      if (router_idx == CORE_INTERFACE)
+      if (node_type == CORE_INTERFACE)
       {
          assert(network_msg->_type == NetworkMsg::DATA);
          // Handle the local network packet
          receiveModelingPacket(net_packet, raw_packet_list_to_receive); 
       }
 
-      else // (router_idx != Router::Id::CORE_INTERFACE)
+      else // (node_type != CORE_INTERFACE)
       {
          LOG_PRINT("Receiver Router(%i,%i)", net_packet->receiver, network_msg->_receiver_router_index);
          NetworkNode* receiver_network_node = _network_node_map[network_msg->_receiver_router_index];
@@ -126,23 +126,95 @@ FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
             {
                LOG_PRINT("Head Flit");
                HeadFlit* head_flit = (HeadFlit*) flit;
-               // Calls the specific network model (emesh, atac, etc.)
-               computeOutputEndpointList(head_flit, receiver_network_node);
+
+               if (node_type == NET_PACKET_INJECTOR)
+               {
+                  head_flit->_output_endpoint_list = new vector<Channel::Endpoint>(1,Channel::Endpoint(0,0));
+               }
+               else // (node_type != NET_PACKET_INJECTOR)
+               {
+                  // Calls the specific network model (emesh, atac, etc.)
+                  computeOutputEndpointList(head_flit, receiver_network_node);
+               }
             }
          }
 
          // process the 'NetworkMsg'
+         LOG_PRINT("Before Processing NetPacket");
          receiver_network_node->processNetPacket(net_packet, modeling_packet_list_to_send);
-         LOG_PRINT("After Processing: Size of net_packet list(%u)", modeling_packet_list_to_send.size());
+         LOG_PRINT("After Processing: Size of modeling packet list(%u)", modeling_packet_list_to_send.size());
 
+         if (receiver_network_node->getRouterId()._index == NET_PACKET_INJECTOR)
+         {
+            UInt64 exit_time = getNetPacketInjectorExitTime(modeling_packet_list_to_send);
+            if (exit_time != UINT64_MAX_)
+               signalNetPacketInjector(exit_time);
+         }
+         
          // Print the list - For Debugging
          // printNetPacketList(modeling_packet_list_to_send);
       
-      } // if (router_idx == Router::Id::CORE_INTERFACE)
+      } // if (node_type == CORE_INTERFACE)
 
    } // if (net_packet->is_raw)
 
    LOG_PRINT("receiveNetPacket(%p) exit", net_packet);
+}
+
+void
+FiniteBufferNetworkModel::registerNetPacketInjectorExitCallback(NetPacketInjectorExitCallback callback, void* obj)
+{
+   assert(!_netPacketInjectorExitCallback);
+   _netPacketInjectorExitCallback = callback;
+   _netPacketInjectorExitCallbackObj = obj;
+}
+
+void
+FiniteBufferNetworkModel::unregisterNetPacketInjectorExitCallback()
+{
+   assert(_netPacketInjectorExitCallback);
+   _netPacketInjectorExitCallback = NULL;
+}
+
+NetworkNode*
+FiniteBufferNetworkModel::createNetPacketInjectorNode(Router::Id ingress_router_id,
+                                                      BufferManagementScheme::Type ingress_router_buffer_management_scheme,
+                                                      SInt32 ingress_router_buffer_size)
+{
+   RouterPerformanceModel* router_performance_model =
+      new RouterPerformanceModel(
+            _flow_control_scheme,
+            0, 0, /* data/credit pipeline delay */
+            1, 1, /* number of input/output ports */
+            vector<SInt32>(1, 1), vector<SInt32>(1, 1), /* num input/output endpoints */
+            vector<BufferManagementScheme::Type>(1, BufferManagementScheme::INFINITE),
+            vector<BufferManagementScheme::Type>(1, ingress_router_buffer_management_scheme),
+            vector<SInt32>(1, -1),
+            vector<SInt32>(1, ingress_router_buffer_size)
+            );
+
+   // No Router Power Model
+   RouterPowerModel* router_power_model = NULL;
+
+   // No Link Performance & Power Models
+   vector<LinkPerformanceModel*> link_performance_model_list(1, NULL);
+   vector<LinkPowerModel*> link_power_model_list(1, NULL);
+
+   // Channel <-> Router Id List Mapping
+   vector<vector<Router::Id> > input_channel_to_router_id_list__mapping;
+   vector<vector<Router::Id> > output_channel_to_router_id_list__mapping;
+   input_channel_to_router_id_list__mapping.push_back(vector<Router::Id>(1, Router::Id(_core_id, CORE_INTERFACE)));
+   output_channel_to_router_id_list__mapping.push_back(vector<Router::Id>(1, ingress_router_id));
+
+   return new NetworkNode(Router::Id(_core_id, NET_PACKET_INJECTOR),
+                          _flit_width,
+                          router_performance_model,
+                          router_power_model,
+                          link_performance_model_list,
+                          link_power_model_list,
+                          input_channel_to_router_id_list__mapping,
+                          output_channel_to_router_id_list__mapping,
+                          _flow_control_packet_type);
 }
 
 void
@@ -224,7 +296,7 @@ FiniteBufferNetworkModel::receiveModelingPacket(NetPacket* modeling_packet, list
    if (FlowControlScheme::isPacketComplete(_flow_control_scheme, flit->_type))
    {
       LOG_PRINT("Modeling Packet Complete");
-      
+    
       // Find the raw_packet
       PacketMap::iterator raw_it = _recvd_raw_packet_map.find(packet_id);
       assert(raw_it != _recvd_raw_packet_map.end());
@@ -373,8 +445,8 @@ FiniteBufferNetworkModel::updatePacketStatistics(const NetPacket* raw_packet, SI
 void
 FiniteBufferNetworkModel::outputSummary(ostream& out)
 {
-   out << "    Bytes Received: " << _total_bytes_received << endl;
-   out << "    Packets Received: " << _total_packets_received << endl;
+   out << "    Total Bytes Received: " << _total_bytes_received << endl;
+   out << "    Total Packets Received: " << _total_packets_received << endl;
    if (_total_packets_received > 0)
    {
       UInt64 total_contention_delay_in_ns = convertCycleCount(_total_contention_delay, getFrequency(), 1.0);
@@ -382,6 +454,7 @@ FiniteBufferNetworkModel::outputSummary(ostream& out)
 
       out << "    Average Packet Length: " << 
          ((float) _total_bytes_received / _total_packets_received) << endl;
+      
       out << "    Average Contention Delay (in clock cycles): " << 
          ((double) _total_contention_delay / _total_packets_received) << endl;
       out << "    Average Contention Delay (in ns): " << 
@@ -424,6 +497,35 @@ FiniteBufferNetworkModel::initializePerformanceCounters()
    _total_bytes_received = 0;
    _total_packet_latency = 0;
    _total_contention_delay = 0;
+}
+
+UInt64
+FiniteBufferNetworkModel::getNetPacketInjectorExitTime(const list<NetPacket*>& modeling_packet_list)
+{
+   for (list<NetPacket*>::const_iterator it = modeling_packet_list.begin(); it != modeling_packet_list.end(); it ++)
+   {
+      NetPacket* net_packet = *it;
+      NetworkMsg* network_msg = (NetworkMsg*) net_packet->data;
+      assert(network_msg->_type == NetworkMsg::DATA);
+      Flit* flit = (Flit*) network_msg;
+
+      if (FlowControlScheme::isPacketComplete(_flow_control_scheme, flit->_type))
+      {
+         list<NetPacket*>::const_iterator end_it = modeling_packet_list.end();
+         assert(end_it == ++it);
+         return net_packet->time;
+      }
+   }
+   
+   return UINT64_MAX_;
+}
+
+void
+FiniteBufferNetworkModel::signalNetPacketInjector(UInt64 time)
+{
+   assert(time != UINT64_MAX_);
+   if (_netPacketInjectorExitCallback)
+      _netPacketInjectorExitCallback(_netPacketInjectorExitCallbackObj, time);
 }
 
 void

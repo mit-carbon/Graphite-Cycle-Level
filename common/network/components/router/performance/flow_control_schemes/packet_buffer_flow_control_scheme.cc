@@ -1,5 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
 #include <cmath>
 #include "packet_buffer_flow_control_scheme.h"
 #include "log.h"
@@ -129,7 +127,7 @@ PacketBufferFlowControlScheme::sendPacket(SInt32 input_channel)
       Channel::Endpoint output_endpoint = *endpoint_it;
 
       UInt64 allocated_time = tryAllocateDownstreamBuffer(head_flit, output_endpoint);
-      if (allocated_time == UINT64_MAX)
+      if (allocated_time == UINT64_MAX_)
       {
          LOG_PRINT("Could not allocate buffers for endpoint(%i,%i)",
                output_endpoint._channel_id, output_endpoint._index);

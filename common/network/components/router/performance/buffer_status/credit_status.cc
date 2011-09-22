@@ -1,5 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
 #include "credit_status.h"
 #include "credit_msg.h"
 #include "utils.h"
@@ -26,7 +24,7 @@ CreditStatus::allocate(Flit* flit, SInt32 num_buffers)
 UInt64
 CreditStatus::tryAllocate(Flit* flit, SInt32 num_buffers)
 {
-   return (num_buffers <= _credit_count) ? _last_msg_time : UINT64_MAX;
+   return (num_buffers <= _credit_count) ? _last_msg_time : UINT64_MAX_;
 }
 
 void

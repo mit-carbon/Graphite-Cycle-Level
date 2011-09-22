@@ -63,7 +63,7 @@ public:
    void recvMsg(core_id_t sender, core_id_t receiver, char *buffer, SInt32 size, carbon_network_t net_type);
    void __recvMsg(const NetPacket& packet);
 
-  
+   // Memory Access 
    void initiateMemoryAccess(UInt64 time, UInt32 memory_access_id, MemComponent::component_t mem_component,
          lock_signal_t lock_signal, mem_op_t mem_op_type,
          IntPtr address, Byte* data_buffer, UInt32 bytes, bool modeled = false);
@@ -82,6 +82,11 @@ public:
 
    void enablePerformanceModels();
    void disablePerformanceModels();
+
+   // External Output Summary Callback
+   typedef void (*OutputSummaryCallback)(void* callback_obj, ostream& out);
+   void registerExternalOutputSummaryCallback(OutputSummaryCallback callback, void* callback_obj);
+   void unregisterExternalOutputSummaryCallback(OutputSummaryCallback callback);
 
 private:
    
@@ -145,6 +150,10 @@ private:
   
    // Memory Access Status
    std::map<UInt32, MemoryAccessStatus*> m_memory_access_status_map;
+
+   // External Output Summary Callback
+   OutputSummaryCallback m_external_output_summary_callback;
+   void* m_external_callback_obj;
 
    // Recv Buffer
    RecvBuffer m_recv_buffer;

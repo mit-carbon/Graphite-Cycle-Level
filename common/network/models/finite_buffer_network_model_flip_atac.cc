@@ -84,7 +84,12 @@ FiniteBufferNetworkModelFlipAtac::FiniteBufferNetworkModelFlipAtac(Network* netw
       core_id_t mux_core_id = (_cluster_id * _num_cores_per_cluster) + i;
       cluster_mux_coreID_list.push_back(mux_core_id);
    }
-   
+  
+   // Net Packet Injector
+   _network_node_map[NET_PACKET_INJECTOR] = createNetPacketInjectorNode(computeIngressRouterId(_core_id),
+         BufferManagementScheme::parse(Sim()->getCfg()->getString("network/flip_atac/buffer_management_scheme")),
+         Sim()->getCfg()->getInt("network/flip_atac/router/input_buffer_size"));
+         
    // Always create all types of nodes (BCAST, MUX, INGRESS, MIDDLE, EGRESS) for each core. 
    // Note: this is to comply with the finite buffer model framework (indexing in _network_node_map vector)
    LOG_PRINT("Create BCAST_ROUTER for core_id %i", core_id);
@@ -329,22 +334,22 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 
    // Add input and output connections to the network node
    
-   if (router_index == BCAST_ROUTER){
+   if (router_index == BCAST_ROUTER)
+   {
       // BCAST INPUT
       LOG_PRINT("Creating BCAST_ROUTER input...");
-      Router::Id core_interface(node_coreID, CORE_INTERFACE);		   // get the id of the input router
-		NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, core_interface); //add this router to list of node input connections
+      Router::Id net_packet_injector_node(node_coreID, NET_PACKET_INJECTOR);		   // get the id of the input router
+		NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, net_packet_injector_node); //add this router to list of node input connections
 		num_input_endpoints_list.push_back(1);					            //each channel has one input
 			
-		 // make input buffer scheme infinite since connected to CORE_INTERFACE 
-		 // need infinite buffer for core_interface to ensure network message type is DATA
-		 input_buffer_management_schemes.push_back(BufferManagementScheme::INFINITE);
-		 input_buffer_size_list.push_back(-1);
+		 input_buffer_management_schemes.push_back(buffer_management_scheme);
+		 input_buffer_size_list.push_back(router_input_buffer_size);
           
       // BCAST OUTPUT
       // In this version, BCAST has one output channel with endpoints at each cluster
       vector<Router::Id> router_output_list;
-      for (UInt32 i = 0; i < _num_clusters; i++){
+      for (UInt32 i = 0; i < _num_clusters; i++)
+      {
          LOG_PRINT("Creating BCAST_ROUTER output...");
          core_id_t mux_coreID = i * _num_cores_per_cluster + (node_coreID / _num_clusters); // note: mux_index =(node_coreID/_num_clusters);
          Router::Id mux_router(mux_coreID, MUX_ROUTER);
@@ -360,11 +365,13 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 		downstream_buffer_size_list.push_back(router_input_buffer_size);
    }
    
-   else if (router_index == MUX_ROUTER){
+   else if (router_index == MUX_ROUTER)
+   {
       // MUX INPUT
       // mux has as many input channels as there are clusters in the network
       LOG_PRINT("Creating MUX_ROUTER input...");
-      for (UInt32 i = 0; i < _num_clusters; i ++){
+      for (UInt32 i = 0; i < _num_clusters; i ++)
+      {
          SInt32 mux_index = node_coreID - (_cluster_id * _num_cores_per_cluster);  // index of this mux in this cluster's list
          core_id_t bcast_coreID = (mux_index * _num_clusters) + i;
          Router::Id bcast_router(bcast_coreID, BCAST_ROUTER);
@@ -389,11 +396,13 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 		downstream_buffer_size_list.push_back(router_input_buffer_size);
    }
    
-    else if (router_index == INGRESS_ROUTER){ 
-	   // INGRESS INPUT 
+   else if (router_index == INGRESS_ROUTER)
+   {
+      // INGRESS INPUT 
 	   LOG_PRINT("Creating INGRESS input...");
       // for each input channel of ingress router
-		 for (UInt32 i = 0; i < _num_router_ports; i++){
+		for (UInt32 i = 0; i < _num_router_ports; i++)
+      {
 			core_id_t coreID = computeInterfaceCoreID(node_coreID, i);
 			Router::Id mux_router(coreID, MUX_ROUTER);		
 			NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, mux_router); // add this core to list of node input connections
@@ -407,7 +416,8 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 		// INGRESS OUTPUT
 		LOG_PRINT("Creating INGRESS output...");
       // add connections to all middle routers at output
-		for (UInt32 i = 0; i < _num_mid_routers; i++){
+		for (UInt32 i = 0; i < _num_mid_routers; i++)
+      {
 			core_id_t coreID = computeMiddleCoreID((_cluster_id*_num_mid_routers)+i);  
 			Router::Id router_id(coreID, MIDDLE_ROUTER);
 			NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, router_id); 
@@ -418,15 +428,16 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 			downstream_buffer_management_schemes.push_back(buffer_management_scheme);
 			downstream_buffer_size_list.push_back(router_input_buffer_size);
 		}
-    }
+   }
    
-   
-   else if (router_index == MIDDLE_ROUTER){
+   else if (router_index == MIDDLE_ROUTER)
+   {
 	   // MIDDLE INPUT
 	   LOG_PRINT("Creating MIDDLE input...");
       // for each input channel of middle router
 	   // add connections to all ingress routers
-		for (UInt32 i = 0; i < _num_in_routers; i++){
+		for (UInt32 i = 0; i < _num_in_routers; i++)
+      {
 			core_id_t coreID = computeIngressCoreID((mid_cluster_id*_num_in_routers) + i);      //use mid_cluster_id because want the cluster in which the middle router resides (not necessarily the same as the cluster of the CORE_INTERFACE with same ID)
 			Router::Id router_id(coreID, INGRESS_ROUTER);
 			NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, router_id); 
@@ -441,7 +452,8 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 	   // MIDDLE OUTPUT 
       LOG_PRINT("Creating MIDDLE output...");
 	   // add connections to all egress routers
-		for (UInt32 i = 0; i < _num_in_routers; i++){
+		for (UInt32 i = 0; i < _num_in_routers; i++)
+      {
 			LOG_PRINT("mid_cluster_id is %i", mid_cluster_id);
 			core_id_t coreID = computeEgressCoreID((mid_cluster_id*_num_in_routers)+i); 
 			Router::Id router_id(coreID, EGRESS_ROUTER);
@@ -457,10 +469,11 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
   
 	else //if (router_index == EGRESS_ROUTER)
 	{
-   // EGRESS INPUT
+      // EGRESS INPUT
 		LOG_PRINT("Creating EGRESS input...");
       // add connections to all ingress routers
-		for (UInt32 i = 0; i < _num_mid_routers; i++){
+		for (UInt32 i = 0; i < _num_mid_routers; i++)
+      {
 			core_id_t coreID = computeMiddleCoreID((_cluster_id*_num_mid_routers)+i);  
 			Router::Id router_id(coreID, MIDDLE_ROUTER);
 			NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, router_id); 
@@ -473,7 +486,8 @@ FiniteBufferNetworkModelFlipAtac::createNetworkNode(core_id_t node_coreID, SInt3
 	   
 	    // EGRESS OUTPUT
       LOG_PRINT("Creating EGRESS output...");
-		for (UInt32 i = 0; i < _num_router_ports; i++){
+		for (UInt32 i = 0; i < _num_router_ports; i++)
+      {
 			// add the core interfaces
 			core_id_t coreID = computeEgressInterfaceCoreID(node_coreID, i);	
 			Router::Id core_interface(coreID, CORE_INTERFACE);		
@@ -619,32 +633,42 @@ FiniteBufferNetworkModelFlipAtac::outputEventCountSummary(ostream& out)
    out << "    Bcast Total Input Buffer Writes: " << _network_node_map[BCAST_ROUTER]->getTotalInputBufferWrites() << endl;
    out << "    Bcast Total Input Buffer Reads: " << _network_node_map[BCAST_ROUTER]->getTotalInputBufferReads() << endl;
    out << "    Bcast Total Switch Allocator Requests: " << _network_node_map[BCAST_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Bcast Total Crossbar Traversals: " << _network_node_map[BCAST_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Bcast Total Link Traversals: " << _network_node_map[BCAST_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Bcast Total Crossbar Traversals: " << _network_node_map[BCAST_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+   UInt64 bcast_link_traversals = _network_node_map[BCAST_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                  _network_node_map[BCAST_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+   out << "    Bcast Total Link Traversals: " << bcast_link_traversals << endl;
    
    out << "    Mux Total Input Buffer Writes: " << _network_node_map[MUX_ROUTER]->getTotalInputBufferWrites() << endl;
    out << "    Mux Total Input Buffer Reads: " << _network_node_map[MUX_ROUTER]->getTotalInputBufferReads() << endl;
    out << "    Mux Total Switch Allocator Requests: " << _network_node_map[MUX_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Mux Total Crossbar Traversals: " << _network_node_map[MUX_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Mux Total Link Traversals: " << _network_node_map[MUX_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Mux Total Crossbar Traversals: " << _network_node_map[MUX_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+   UInt64 mux_link_traversals = _network_node_map[MUX_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                _network_node_map[MUX_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+   out << "    Mux Total Link Traversals: " << mux_link_traversals << endl;
    
    out << "    Ingress Total Input Buffer Writes: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
    out << "    Ingress Total Input Buffer Reads: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferReads() << endl;
    out << "    Ingress Total Switch Allocator Requests: " << _network_node_map[INGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Ingress Total Crossbar Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Ingress Total Link Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Ingress Total Crossbar Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+   UInt64 ingress_link_traversals = _network_node_map[INGRESS_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                    _network_node_map[INGRESS_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+   out << "    Ingress Total Link Traversals: " << ingress_link_traversals << endl;
    
    out << "    Middle  Total Input Buffer Writes: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferWrites() << endl;
    out << "    Middle  Total Input Buffer Reads: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferReads() << endl;
    out << "    Middle  Total Switch Allocator Requests: " << _network_node_map[MIDDLE_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Middle  Total Crossbar Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Middle  Total Link Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Middle  Total Crossbar Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+   UInt64 middle_link_traversals = _network_node_map[MIDDLE_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                   _network_node_map[MIDDLE_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+   out << "    Middle  Total Link Traversals: " << middle_link_traversals << endl;
    
    out << "    Egress  Total Input Buffer Writes: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
    out << "    Egress  Total Input Buffer Reads: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferReads() << endl;
    out << "    Egress  Total Switch Allocator Requests: " << _network_node_map[EGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Egress  Total Crossbar Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Egress  Total Link Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Egress  Total Crossbar Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+   UInt64 egress_link_traversals = _network_node_map[EGRESS_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                   _network_node_map[EGRESS_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+   out << "    Egress  Total Link Traversals: " << egress_link_traversals << endl;
 }
 
 

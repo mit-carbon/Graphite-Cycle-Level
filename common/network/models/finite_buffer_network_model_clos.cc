@@ -58,38 +58,40 @@ FiniteBufferNetworkModelClos::FiniteBufferNetworkModelClos(Network* network, SIn
       egress_coreID_list.push_back( (i * num_router_ports) + num_router_ports-1);
    }
    
-   // Get this core's id:
-   core_id_t core_id = getNetwork()->getCore()->getId();    
-   
+   // NetPacket Injector Nodes
+   _network_node_map[NET_PACKET_INJECTOR] = createNetPacketInjectorNode(computeIngressRouterId(_core_id),
+         BufferManagementScheme::parse(Sim()->getCfg()->getString("network/clos/buffer_management_scheme")),
+         Sim()->getCfg()->getInt("network/clos/router/input_buffer_size") );
+
    // Always create all types of nodes (INGRESS, MIDDLE, EGRESS) for each core. 
-   if (find(ingress_coreID_list.begin(), ingress_coreID_list.end(), core_id) != ingress_coreID_list.end())
+   if (find(ingress_coreID_list.begin(), ingress_coreID_list.end(), _core_id) != ingress_coreID_list.end())
    {
-      LOG_PRINT("Create INGRESS_ROUTER for core_id %i", core_id);
-      NetworkNode* ingress_router = createNetworkNode(core_id, INGRESS_ROUTER);
+      LOG_PRINT("Create INGRESS_ROUTER for core_id %i", _core_id);
+      NetworkNode* ingress_router = createNetworkNode(_core_id, INGRESS_ROUTER);
       //add this node to the list of network nodes associated with this core (list is declared protected in "finite_buffer_network_model.h")
       _network_node_map[INGRESS_ROUTER] = ingress_router;
    }
          
-   if (find(middle_coreID_list.begin(), middle_coreID_list.end(), core_id) != middle_coreID_list.end())
+   if (find(middle_coreID_list.begin(), middle_coreID_list.end(), _core_id) != middle_coreID_list.end())
    {
-      LOG_PRINT("Create MIDDLE_ROUTER for core_id %i", core_id);
-      NetworkNode* middle_router = createNetworkNode(core_id, MIDDLE_ROUTER);
+      LOG_PRINT("Create MIDDLE_ROUTER for core_id %i", _core_id);
+      NetworkNode* middle_router = createNetworkNode(_core_id, MIDDLE_ROUTER);
       //add this node to the list of network nodes associated with this core (list is declared protected in "finite_buffer_network_model.h")
       _network_node_map[MIDDLE_ROUTER] = middle_router;
    }
 
-   if (find(egress_coreID_list.begin(), egress_coreID_list.end(), core_id) != egress_coreID_list.end())
+   if (find(egress_coreID_list.begin(), egress_coreID_list.end(), _core_id) != egress_coreID_list.end())
    {
-      LOG_PRINT("Create EGRESS_ROUTER for core_id %i", core_id);
-      NetworkNode* egress_router = createNetworkNode(core_id, EGRESS_ROUTER);
+      LOG_PRINT("Create EGRESS_ROUTER for core_id %i", _core_id);
+      NetworkNode* egress_router = createNetworkNode(_core_id, EGRESS_ROUTER);
       //add this node to the list of network nodes associated with this core (list is declared protected in "finite_buffer_network_model.h")
       _network_node_map[EGRESS_ROUTER] = egress_router;
    }
 
    // Seed the buffer for random number generation
-   srand48_r(core_id, &_rand_data_buffer);
+   srand48_r(_core_id, &_rand_data_buffer);
    
-   LOG_PRINT("Exit FiniteBufferNetworkModelClos constructor core_id %i", core_id);
+   LOG_PRINT("Exit FiniteBufferNetworkModelClos constructor core_id %i", _core_id);
 }
 
 FiniteBufferNetworkModelClos::~FiniteBufferNetworkModelClos()
@@ -256,7 +258,7 @@ FiniteBufferNetworkModelClos::createNetworkNode(core_id_t node_coreID, SInt32 ro
       LOG_PRINT_ERROR("Could not read Clos parameters from the cfg file");
    }
      
-   BufferManagementScheme::Type buffer_management_scheme = \
+   BufferManagementScheme::Type buffer_management_scheme =
          BufferManagementScheme::parse(buffer_management_scheme_str);
    
    // Initialize vectors which will provide router and core connection info
@@ -291,14 +293,13 @@ FiniteBufferNetworkModelClos::createNetworkNode(core_id_t node_coreID, SInt32 ro
       {
          // add the core interfaces
          core_id_t coreID = computeInterfaceCoreID(node_coreID, i);  // compute the ID of each core at input of this router, given the coreID of this INGRESS router
-         Router::Id core_interface(coreID, CORE_INTERFACE);    
-         NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, core_interface); //add this core to list of node input connections
+         Router::Id net_packet_injector_node(coreID, NET_PACKET_INJECTOR); 
+         NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, net_packet_injector_node); //add this core to list of node input connections
          num_input_endpoints_list.push_back(1);             //each channel has one input
          
-         // make input buffer scheme infinite since connected to CORE_INTERFACE 
          // need infinite buffer for core_interface to ensure network message type is DATA
-         input_buffer_management_schemes.push_back(BufferManagementScheme::INFINITE);
-         input_buffer_size_list.push_back(-1);
+         input_buffer_management_schemes.push_back(buffer_management_scheme);
+         input_buffer_size_list.push_back(router_input_buffer_size);
       }
 
       // INGRESS OUTPUT
@@ -496,7 +497,6 @@ FiniteBufferNetworkModelClos::computeEgressCoreID(core_id_t node_coreID, UInt32 
 Router::Id
 FiniteBufferNetworkModelClos::computeIngressRouterId(core_id_t core_id)
 {
-   //assert(core_id == _core_id);
    core_id_t ingress_core_id = core_id / num_router_ports * num_router_ports;
    return Router::Id(ingress_core_id, INGRESS_ROUTER);
 }
@@ -526,20 +526,26 @@ FiniteBufferNetworkModelClos::outputEventCountSummary(ostream& out)
    out << "    Ingress Total Input Buffer Writes: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
    out << "    Ingress Total Input Buffer Reads: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferReads() << endl;
    out << "    Ingress Total Switch Allocator Requests: " << _network_node_map[INGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Ingress Total Crossbar Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Ingress Total Link Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Ingress Total Crossbar Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+   UInt64 ingress_link_traversals = _network_node_map[INGRESS_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                    _network_node_map[INGRESS_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+   out << "    Ingress Total Link Traversals: " << ingress_link_traversals << endl;
    
    out << "    Middle  Total Input Buffer Writes: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferWrites() << endl;
    out << "    Middle  Total Input Buffer Reads: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferReads() << endl;
    out << "    Middle  Total Switch Allocator Requests: " << _network_node_map[MIDDLE_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Middle  Total Crossbar Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Middle  Total Link Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Middle  Total Crossbar Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+   UInt64 middle_link_traversals = _network_node_map[MIDDLE_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                   _network_node_map[MIDDLE_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+   out << "    Middle  Total Link Traversals: " << middle_link_traversals << endl;
    
    out << "    Egress  Total Input Buffer Writes: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
    out << "    Egress  Total Input Buffer Reads: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferReads() << endl;
    out << "    Egress  Total Switch Allocator Requests: " << _network_node_map[EGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Egress  Total Crossbar Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalCrossbarTraversals() << endl;
-   out << "    Egress  Total Link Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalLinkTraversals(Channel::ALL) << endl;
+   out << "    Egress  Total Crossbar Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+   UInt64 egress_link_traversals = _network_node_map[EGRESS_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                   _network_node_map[EGRESS_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+   out << "    Egress  Total Link Traversals: " << egress_link_traversals << endl;
 }
 
 pair<bool,UInt32>

@@ -1,5 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <climits>
 #include "simulator.h"
 #include "core_manager.h"
 #include "core.h"
@@ -70,13 +68,13 @@ EventManager::isReady(UInt64 event_time)
 
    UInt64 global_time = _global_meta_event_heap->getFirstEventTime();
    // TODO: Make this a range later
-   return ( (event_time == global_time) && (event_time != UINT64_MAX) );
+   return ( (event_time == global_time) && (event_time != UINT64_MAX_) );
 }
 
 bool
 EventManager::hasEventsPending()
 {
-   return (_global_meta_event_heap->getFirstEventTime() != UINT64_MAX);
+   return (_global_meta_event_heap->getFirstEventTime() != UINT64_MAX_);
 }
 
 void
@@ -114,7 +112,7 @@ EventManager::processEventInOrder(Event* event, core_id_t core_id, EventQueue::T
       // Get the current global time and set that as the event time
       EventStartThread* event_start_thread = (EventStartThread*) event;
       UInt64 global_time = _global_meta_event_heap->getFirstEventTime();
-      if (global_time != UINT64_MAX)
+      if (global_time != UINT64_MAX_)
          event_start_thread->setTime(global_time);
 
       // Set the Time in the Performance Model

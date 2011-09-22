@@ -1,5 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
 #include "on_off_status.h"
 #include "on_off_msg.h"
 #include "log.h"
@@ -24,7 +22,7 @@ OnOffStatus::tryAllocate(Flit* flit, SInt32 num_buffers)
    // Only possible with flit-buffer flow control
    LOG_ASSERT_ERROR(num_buffers == 1, "Num Buffers Requested must be 1 to work with On-Off Buffer Management Scheme");
    
-   return (_on_off_status) ? _last_msg_time : UINT64_MAX;
+   return (_on_off_status) ? _last_msg_time : UINT64_MAX_;
 }
 
 void

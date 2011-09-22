@@ -1,5 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
 #include "head_flit.h"
 #include "wormhole_unicast__virtual_cut_through_broadcast__flow_control_scheme.h"
 #include "log.h"
@@ -94,7 +92,7 @@ WormholeUnicastVirtualCutThroughBroadcastFlowControlScheme::sendFlit(SInt32 inpu
             
             // Try to allocate downstream buffers
             UInt64 allocated_time = tryAllocateDownstreamBuffer(head_flit, output_endpoint, head_flit->_num_flits);
-            if (allocated_time == UINT64_MAX)
+            if (allocated_time == UINT64_MAX_)
             {
                LOG_PRINT("Could not allocate a buffer for output endpoint(%i,%i): Num Flits(%i)",
                      output_endpoint._channel_id, output_endpoint._index, head_flit->_num_flits);
@@ -184,7 +182,7 @@ WormholeUnicastVirtualCutThroughBroadcastFlowControlScheme::sendFlit(SInt32 inpu
 
       // Allocate downstream buffer - Allocate one flit at a time
       UInt64 allocated_time = tryAllocateDownstreamBuffer(flit, output_endpoint, 1);
-      if (allocated_time == UINT64_MAX)
+      if (allocated_time == UINT64_MAX_)
       {
          LOG_PRINT("Could not allocate downstream buffer for output endpoint(%i,%i)",
                output_endpoint._channel_id, output_endpoint._index);

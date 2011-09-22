@@ -1,5 +1,3 @@
-#define __STDC_LIMIT_MACROS
-#include <stdint.h>
 #include <cassert>
 
 #include "simulator.h"
@@ -12,7 +10,7 @@
 
 QueueModelHistoryTree::QueueModelHistoryTree(UInt64 min_processing_time):
    _min_processing_time(min_processing_time),
-   _MAX_CYCLE_COUNT(UINT64_MAX)
+   _MAX_CYCLE_COUNT(UINT64_MAX_)
 {
    try
    {
@@ -45,7 +43,7 @@ QueueModelHistoryTree::computeQueueDelay(UInt64 pkt_time, UInt64 processing_time
 {
    LOG_PRINT("Packet(%llu,%llu)", pkt_time, processing_time);
   
-   UInt64 queue_delay = UINT64_MAX;
+   UInt64 queue_delay = UINT64_MAX_;
 
    IntervalTree::Node* min_node = _interval_tree->search(PAIR(0,1));
    // Prune the Tree when it grows too large
@@ -113,7 +111,7 @@ QueueModelHistoryTree::computeQueueDelay(UInt64 pkt_time, UInt64 processing_time
       }
    }
    
-   assert(queue_delay != UINT64_MAX);
+   assert(queue_delay != UINT64_MAX_);
 
    updateQueueCounters(processing_time);
    _queue_model_m_g_1->updateQueue(pkt_time, processing_time, queue_delay);

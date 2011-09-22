@@ -12,7 +12,7 @@ CoreManager::CoreManager()
       , m_thread_type_tls(TLS::create())
       , m_num_registered_sim_threads(0)
 {
-   LOG_PRINT("Starting CoreManager Constructor.");
+   LOG_PRINT("Core Manager ctor start");
 
    UInt32 num_cores = Config::getSingleton()->getTotalCores();
    for (UInt32 i = 0; i < num_cores; i++)
@@ -21,12 +21,13 @@ CoreManager::CoreManager()
       m_initialized_cores.push_back(false);
    }
 
-   LOG_PRINT("Finished CoreManager Constructor.");
+   LOG_PRINT("Core Manager ctor end");
 }
 
 CoreManager::~CoreManager()
 {
    LOG_PRINT("Core Manager dtor start");
+   
    for (std::vector<Core*>::iterator i = m_cores.begin(); i != m_cores.end(); i++)
    {
       delete *i;
@@ -37,6 +38,7 @@ CoreManager::~CoreManager()
    LOG_PRINT("Deleted m_core_tls");
    delete m_thread_type_tls;
    LOG_PRINT("Deleted m_thread_type_tls");
+   
    LOG_PRINT("Core Manager dtor end");
 }
 
@@ -112,10 +114,7 @@ core_id_t
 CoreManager::getCurrentCoreID()
 {
    Core *core = getCurrentCore();
-   if (!core)
-       return INVALID_CORE_ID;
-   else
-       return core->getId();
+   return core ? core->getId() : INVALID_CORE_ID;
 }
 
 Core*

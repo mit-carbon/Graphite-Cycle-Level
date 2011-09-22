@@ -3,7 +3,6 @@
 #include "simulator.h"
 #include "clock_converter.h"
 #include "network.h"
-#include "network_model_emesh_hop_by_hop.h"
 #include "log.h"
 
 namespace PrL1PrL2DramDirectoryMOSI
@@ -119,7 +118,7 @@ MemoryManager::MemoryManager(Core* core,
    // if (getCore()->getId() == 0)
    //    printCoreListWithMemoryControllers(core_list_with_dram_controllers);
    
-   if (find(core_list_with_dram_controllers.begin(), core_list_with_dram_controllers.end(), getCore()->getId()) \
+   if (find(core_list_with_dram_controllers.begin(), core_list_with_dram_controllers.end(), getCore()->getId())
          != core_list_with_dram_controllers.end())
    {
       m_dram_cntlr_present = true;
@@ -178,8 +177,8 @@ MemoryManager::MemoryManager(Core* core,
          l2_cache_data_access_time, l2_cache_tags_access_time, core_frequency);
 
    // Register Call-backs
-   getNetwork()->registerCallback(SHARED_MEM_1, MemoryManagerNetworkCallback, this);
-   getNetwork()->registerCallback(SHARED_MEM_2, MemoryManagerNetworkCallback, this);
+   getNetwork()->registerAsyncRecvCallback(SHARED_MEM_1, MemoryManagerNetworkCallback, this);
+   getNetwork()->registerAsyncRecvCallback(SHARED_MEM_2, MemoryManagerNetworkCallback, this);
 
    // Resolve the Packet Types
    m_unicast_packet_type_lt_threshold = parseNetworkType(unicast_network_type_lt_threshold);
@@ -189,8 +188,8 @@ MemoryManager::MemoryManager(Core* core,
 
 MemoryManager::~MemoryManager()
 {
-   getNetwork()->unregisterCallback(SHARED_MEM_1);
-   getNetwork()->unregisterCallback(SHARED_MEM_2);
+   getNetwork()->unregisterAsyncRecvCallback(SHARED_MEM_1);
+   getNetwork()->unregisterAsyncRecvCallback(SHARED_MEM_2);
 
    // Delete the Performance Models
    delete m_l1_icache_perf_model;
@@ -366,7 +365,8 @@ MemoryManager::getPacketType(core_id_t sender, core_id_t receiver)
       return m_broadcast_packet_type;
 
    // Whether we need to send on the 1st or 2nd SHARED_MEM network
-   SInt32 num_hops = NetworkModelEMeshHopByHop::computeNumHops(sender, receiver);
+   // FIXME: Hard-coded here
+   SInt32 num_hops = 1;
 
    // Send on the first network if the hop count < 4
    if (num_hops < m_unicast_threshold)

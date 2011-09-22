@@ -36,10 +36,10 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       };
       enum NodeType
       {
-         EMESH = 0,
-         SEND_HUB = 1,
-         RECEIVE_HUB = 2,
-         STAR_NET_ROUTER_BASE = 3
+         EMESH = 1, // Starts at 1
+         SEND_HUB = 2,
+         RECEIVE_HUB = 3,
+         STAR_NET_ROUTER_BASE = 4
       };
 
       ////// Private Variables
@@ -57,8 +57,6 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       //// Static 
       
       static bool _initialized;
-      // Tile Width
-      static double _tile_width;
       // Topology Related
       static SInt32 _enet_width;
       static SInt32 _enet_height;
@@ -118,7 +116,7 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
       static bool isAccessPoint(Router::Id router_id);
       static core_id_t computeCoreIDWithOpticalHub(SInt32 cluster_id);
       static bool isHub(Router::Id router_id);
-      static double computeOpticalLinkLength();
+      double computeOpticalLinkLength();
 
       ////// Non-Static Private Functions
 
@@ -158,6 +156,4 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
 
       // Virtual Function in FiniteBufferNetworkModel
       void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node);
-      // Compute Ingress Router Id
-      Router::Id computeIngressRouterId(core_id_t core_id);
 };

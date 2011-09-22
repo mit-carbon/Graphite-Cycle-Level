@@ -183,8 +183,8 @@ MemoryManager::MemoryManager(Core* core,
    LOG_PRINT("Instantiated Cache Performance Models");
 
    // Register Call-backs
-   getNetwork()->registerCallback(SHARED_MEM_1, MemoryManagerNetworkCallback, this);
-   getNetwork()->registerCallback(SHARED_MEM_2, MemoryManagerNetworkCallback, this);
+   getNetwork()->registerAsyncRecvCallback(SHARED_MEM_1, MemoryManagerNetworkCallback, this);
+   getNetwork()->registerAsyncRecvCallback(SHARED_MEM_2, MemoryManagerNetworkCallback, this);
 
    // Register Event Handlers
    if (getCore()->getId() == 0)
@@ -204,8 +204,8 @@ MemoryManager::~MemoryManager()
    }
 
    LOG_PRINT("Memory Manager dtor start");
-   getNetwork()->unregisterCallback(SHARED_MEM_1);
-   getNetwork()->unregisterCallback(SHARED_MEM_2);
+   getNetwork()->unregisterAsyncRecvCallback(SHARED_MEM_1);
+   getNetwork()->unregisterAsyncRecvCallback(SHARED_MEM_2);
 
    // Delete the Models
    delete m_l1_icache_perf_model;

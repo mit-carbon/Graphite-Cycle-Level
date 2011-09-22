@@ -23,9 +23,6 @@ public:
 
    // Virtual Functions which are pure in network_model.h
    void reset() { }
-   UInt32 computeAction(const NetPacket& pkt) { assert(false); return 0; }
-   void routePacket(const NetPacket& pkt, vector<Hop>& nextHops) { assert(false); }
-   void processReceivedPacket(NetPacket& pkt) { assert(false); }
    
    // Output Summary
    void outputSummary(ostream& out);
@@ -36,9 +33,19 @@ public:
    void receiveNetPacket(NetPacket* net_packet, list<NetPacket*>& modeling_packet_list_to_send,
          list<NetPacket*>& raw_packet_list_to_receive);
 
+   // Register/Unregister NetPacketInjectorExitCallback
+   typedef void (*NetPacketInjectorExitCallback)(void*, UInt64);
+   void registerNetPacketInjectorExitCallback(NetPacketInjectorExitCallback callback, void* obj);
+   void unregisterNetPacketInjectorExitCallback();
+
    // Get NetworkNode
    NetworkNode* getNetworkNode(SInt32 node_index)
    { return _network_node_map[node_index]; }
+   void setNetworkNode(SInt32 node_index, NetworkNode* network_node)
+   { _network_node_map[node_index] = network_node; }
+
+   // Get Serialization Latency
+   SInt32 computeSerializationLatency(const NetPacket* raw_packet);
 
 protected:
    // If the network model is enabled
@@ -55,6 +62,13 @@ protected:
    SInt32 _flit_width;
    // CORE_INTERFACE port
    static const SInt32 CORE_INTERFACE = -1;
+   // NET_PACKET_INJECTOR
+   static const SInt32 NET_PACKET_INJECTOR = 0;
+
+   // Create NetPacket Injector Node
+   NetworkNode* createNetPacketInjectorNode(Router::Id ingress_router_id,
+         BufferManagementScheme::Type ingress_router_buffer_management_scheme,
+         SInt32 ingress_router_buffer_size);
 
 private:
    // Typedefs
@@ -98,10 +112,12 @@ private:
    UInt64 _total_packet_latency;
    UInt64 _total_contention_delay;
 
+   // Callback when packet leaves net packet injector
+   NetPacketInjectorExitCallback _netPacketInjectorExitCallback;
+   void* _netPacketInjectorExitCallbackObj;
+
    // Compute the output endpoints->[channel, index] of a particular flit
    virtual void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node) = 0;
-   // Compute the ingress router id
-   virtual Router::Id computeIngressRouterId(core_id_t core_id) = 0;
 
    // Process Received Packet to record packet delays
    void updatePacketStatistics(const NetPacket* pkt, SInt32 zero_load_delay);
@@ -117,11 +133,14 @@ private:
    void getReadyPackets(SInt32 sender, list<NetPacket*>& raw_packet_list_to_receive);
 
    // Utils
-   SInt32 computeSerializationLatency(const NetPacket* raw_packet);
    UInt64 computePacketId(core_id_t sender, UInt64 sequence_num);
 
    // Initialization
    void initializePerformanceCounters();
+
+   // Signal Injector that packet has left the network interface
+   UInt64 getNetPacketInjectorExitTime(const list<NetPacket*>& modeling_packet_list);
+   void signalNetPacketInjector(UInt64 time);
 
    // misc
    void printNetPacketList(const list<NetPacket*>& net_packet_list) const;

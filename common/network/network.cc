@@ -22,19 +22,19 @@ Network::Network(Core *core)
 
    _numMod = Config::getSingleton()->getTotalCores();
 
-   // Allocate memory for callbacks
-   _callbacks = new NetworkCallback [NUM_PACKET_TYPES];
-   _callbackObjs = new void* [NUM_PACKET_TYPES];
+   // Asynchronous callbacks - There are callbacks for every network
+   _asyncRecvCallbacks = new NetRecvCallback [NUM_PACKET_TYPES];
+   _asyncRecvCallbackObjs = new void* [NUM_PACKET_TYPES];
    for (SInt32 i = 0; i < NUM_PACKET_TYPES; i++)
-      _callbacks[i] = NULL;
+      _asyncRecvCallbacks[i] = NULL;
+  
+   // There can only be one sync recv in progress at a given time 
    // Sync recv callbacks
    _syncRecvCallback = NULL;
-   _syncRecvCallbackObj = NULL;
 
    for (SInt32 i = 0; i < NUM_STATIC_NETWORKS; i++)
    {
       UInt32 network_model = NetworkModel::parseNetworkType(Config::getSingleton()->getNetworkType(i));
-      
       _models[i] = NetworkModel::createModel(this, i, network_model);
    }
 
@@ -46,25 +46,25 @@ Network::~Network()
    for (SInt32 i = 0; i < NUM_STATIC_NETWORKS; i++)
       delete _models[i];
 
-   delete [] _callbackObjs;
-   delete [] _callbacks;
+   delete [] _asyncRecvCallbackObjs;
+   delete [] _asyncRecvCallbacks;
 
    LOG_PRINT("Destroyed.");
 }
 
 void
-Network::registerCallback(PacketType type, NetworkCallback callback, void *obj)
+Network::registerAsyncRecvCallback(PacketType type, NetRecvCallback callback, void *obj)
 {
    assert((UInt32)type < NUM_PACKET_TYPES);
-   _callbacks[type] = callback;
-   _callbackObjs[type] = obj;
+   _asyncRecvCallbacks[type] = callback;
+   _asyncRecvCallbackObjs[type] = obj;
 }
 
 void
-Network::unregisterCallback(PacketType type)
+Network::unregisterAsyncRecvCallback(PacketType type)
 {
    assert((UInt32)type < NUM_PACKET_TYPES);
-   _callbacks[type] = NULL;
+   _asyncRecvCallbacks[type] = NULL;
 }
 
 // Enable/Disable Models
@@ -107,7 +107,7 @@ Network::outputSummary(std::ostream &out) const
 void
 Network::processPacket(NetPacket* packet)
 {
-   LOG_PRINT("Got packet : type %i, from %i, time %llu, raw %i", \
+   LOG_PRINT("Got packet : type %i, from %i, time %llu, raw %i",
          (SInt32) packet->type, packet->sender, packet->time, packet->is_raw);
    LOG_ASSERT_ERROR(0 <= packet->sender && packet->sender < _numMod,
          "Invalid Packet Sender(%i)", packet->sender);
@@ -174,35 +174,36 @@ Network::receivePacket(NetPacket* packet)
    LOG_PRINT("After Converting Cycle Count: packet->time(%llu)", packet->time);
 
    // asynchronous I/O support
-   NetworkCallback callback = _callbacks[packet->type];
+   
+   NetRecvCallback asyncRecvCallback = _asyncRecvCallbacks[packet->type];
 
-   if (callback != NULL)
+   if (asyncRecvCallback)
    {
       LOG_PRINT("Executing callback on packet : type %i, from %i, to %i, core_id %i, cycle_count %llu",
             (SInt32) packet->type, packet->sender, packet->receiver, _core->getId(), packet->time);
       assert(0 <= packet->sender && packet->sender < _numMod);
       assert(0 <= packet->type && packet->type < NUM_PACKET_TYPES);
 
-      callback(_callbackObjs[packet->type], *packet);
+      asyncRecvCallback(_asyncRecvCallbackObjs[packet->type], *packet);
 
       packet->release();
+      return;
    }
 
    // synchronous I/O support
-   else
-   {
-      // Signal the app thread that a packet is available
-      LOG_PRINT("Enqueuing packet : type %i, from %i, to %i, core_id %i, cycle_count %llu",
-            (SInt32) packet->type, packet->sender, packet->receiver, _core->getId(), packet->time);
-      
-      _netQueue.push_back(packet);
-
-      // If there is a synchronous receive waiting for same packet
-      if (_syncRecvCallback)
-         processSyncRecv();
-   }
    
-   LOG_PRINT("receivePacket(%p) exit", packet);
+   // Signal the app thread that a packet is available
+   LOG_PRINT("Enqueuing packet : type %i, from %i, to %i, core_id %i, cycle_count %llu",
+         (SInt32) packet->type, packet->sender, packet->receiver, _core->getId(), packet->time);
+   _netQueue.push_back(packet);
+   
+   if (_syncRecvCallback)
+   {
+      processSyncRecv();
+      return;
+   }
+
+   LOG_PRINT("Could not find an asynchronous or synchronous callback for this NetPacket");   
 }
 
 void
@@ -456,12 +457,11 @@ Network::processSyncRecv()
       packet->release();
       // Invalidate the callback variables
       _syncRecvCallback = NULL;
-      _syncRecvCallbackObj = NULL;
    }
 }
 
 void
-Network::netRecv(const NetMatch& match, NetworkCallback callback, void* callbackObj)
+Network::netRecv(const NetMatch& match, NetRecvCallback callback, void* callbackObj)
 {
    LOG_PRINT("Entering netRecv.");
 
@@ -475,9 +475,10 @@ Network::netRecv(const NetMatch& match, NetworkCallback callback, void* callback
 // netSend()
 
 SInt32
-Network::netSend(NetPacket& packet)
+Network::netSend(NetPacket& packet, UInt64 start_time)
 {
    // Interface for sending packets on a network
+   LOG_PRINT("netSend[sender(%i), receiver(%i), type(%u), time(%llu)]", packet.sender, packet.receiver, packet.type, packet.time);
 
    // Convert time from core frequency to network frequency
    packet.time = convertCycleCount(packet.time,
@@ -485,13 +486,23 @@ Network::netSend(NetPacket& packet)
          getNetworkModelFromPacketType(packet.type)->getFrequency());
 
    // Note the start time
-   packet.start_time = packet.time;
+   if (start_time != UINT64_MAX_)
+   {
+      packet.start_time = convertCycleCount(start_time,
+            _core->getPerformanceModel()->getFrequency(),
+            getNetworkModelFromPacketType(packet.type)->getFrequency());
+   }
+   else // (start_time == UINT64_MAX_)
+   {
+      packet.start_time = packet.time;
+   }
 
    NetPacket* packet_to_send = packet.clone();
 
    NetworkModel* model = getNetworkModelFromPacketType(packet_to_send->type);
    if (model->isFiniteBuffer())
    {
+      LOG_PRINT("Finite Buffer Model");
       // Call FiniteBufferNetworkModel functions
       FiniteBufferNetworkModel* finite_buffer_model = (FiniteBufferNetworkModel*) model;
       

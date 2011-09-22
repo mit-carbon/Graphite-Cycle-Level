@@ -26,4 +26,6 @@ typedef SInt32 core_id_t;
 #define INVALID_CORE_ID ((core_id_t) -1)
 #define INVALID_ADDRESS  ((IntPtr) -1)
 
+#define UINT64_MAX_ ((UInt64)-1)
+
 #endif

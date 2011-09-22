@@ -10,10 +10,10 @@
 #include "config.h"
 #include "log.h"
 
-FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net, SInt32 network_id):
-   FiniteBufferNetworkModel(net, network_id)
+FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net, SInt32 network_id)
+   : FiniteBufferNetworkModel(net, network_id)
 {
-   _emesh_network = "network/emesh_hop_by_hop/";
+   _emesh_network = "network/emesh/";
    // Initialize EMesh Topology Parameters
    computeEMeshTopologyParameters(_emesh_width, _emesh_height);
 
@@ -30,27 +30,32 @@ FiniteBufferNetworkModelEMesh::FiniteBufferNetworkModelEMesh(Network* net, SInt3
       LOG_PRINT_ERROR("Could not read Electrical Mesh parameters from the cfg file");
    }
 
-   // Instantiate the routers and links 
+   // Instantiate the routers and links
+   _network_node_map[NET_PACKET_INJECTOR] = createNetPacketInjectorNode(Router::Id(_core_id, EMESH),
+         BufferManagementScheme::parse(Sim()->getCfg()->getString(_emesh_network + "buffer_management_scheme")),
+         Sim()->getCfg()->getInt(_emesh_network + "router/input_buffer_size") );
+   
    _network_node_map[EMESH] = createNetworkNode();
 }
 
 FiniteBufferNetworkModelEMesh::~FiniteBufferNetworkModelEMesh()
 {
-   // Delete the network node
-   delete _network_node_map[EMESH];
+   // Delete the network nodes
+   map<SInt32, NetworkNode*>::iterator it = _network_node_map.begin();
+   for ( ; it != _network_node_map.end(); it ++)
+      delete (*it).second;
 }
 
 NetworkNode*
 FiniteBufferNetworkModelEMesh::createNetworkNode()
 {
-   // FIXME: Change channel -> link , channel -> port later
    // Read necessary parameters from cfg file
    string buffer_management_scheme_str;
    SInt32 data_pipeline_delay = 0;
    SInt32 credit_pipeline_delay = 0;
    SInt32 router_input_buffer_size = 0;
    string link_type;
-   volatile double link_length = 0.0;
+   double link_length = _tile_width;
 
    try
    {
@@ -58,15 +63,14 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
       data_pipeline_delay = Sim()->getCfg()->getInt(_emesh_network + "router/data_pipeline_delay");
       credit_pipeline_delay = Sim()->getCfg()->getInt(_emesh_network + "router/credit_pipeline_delay");
       router_input_buffer_size = Sim()->getCfg()->getInt(_emesh_network + "router/input_buffer_size");
-      link_type = Sim()->getCfg()->getString(_emesh_network + "link/type");
-      link_length = Sim()->getCfg()->getFloat(_emesh_network + "link/length");
+      link_type = Sim()->getCfg()->getString(_emesh_network + "link_type");
    }
    catch (...)
    {
       LOG_PRINT_ERROR("Could not read Electrical mesh parameters from the cfg file");
    }
      
-   BufferManagementScheme::Type buffer_management_scheme = \
+   BufferManagementScheme::Type buffer_management_scheme =
          BufferManagementScheme::parse(buffer_management_scheme_str);
    
    vector<vector<Router::Id> > input_channel_to_router_id_list__mapping;
@@ -80,7 +84,8 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
 
    // Add the core interface
    Router::Id core_interface(_core_id, CORE_INTERFACE);
-   NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, core_interface);
+   Router::Id net_packet_injector_node(_core_id, NET_PACKET_INJECTOR);
+   NetworkNode::addChannelMapping(input_channel_to_router_id_list__mapping, net_packet_injector_node);
    NetworkNode::addChannelMapping(output_channel_to_router_id_list__mapping, core_interface);
    num_input_endpoints_list.push_back(1);
    num_output_endpoints_list.push_back(1);
@@ -107,9 +112,7 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
    SInt32 num_input_channels = input_channel_to_router_id_list__mapping.size();
    SInt32 num_output_channels = output_channel_to_router_id_list__mapping.size();
 
-   input_buffer_management_schemes.push_back(BufferManagementScheme::INFINITE);
-   input_buffer_size_list.push_back(-1);
-   for (SInt32 i = 1; i < num_input_channels; i++)
+   for (SInt32 i = 0; i < num_input_channels; i++)
    {
       input_buffer_management_schemes.push_back(buffer_management_scheme);
       input_buffer_size_list.push_back(router_input_buffer_size);
@@ -144,13 +147,13 @@ FiniteBufferNetworkModelEMesh::createNetworkNode()
    vector<LinkPowerModel*> link_power_model_list; 
    for (SInt32 i = 0; i < num_output_channels; i++)
    {
-      ElectricalLinkPerformanceModel* link_performance_model = \
-         ElectricalLinkPerformanceModel::create(link_type, \
+      ElectricalLinkPerformanceModel* link_performance_model =
+         ElectricalLinkPerformanceModel::create(link_type,
                _frequency, link_length, _flit_width, 1);
       link_performance_model_list.push_back(link_performance_model);
 
-      ElectricalLinkPowerModel* link_power_model = \
-         ElectricalLinkPowerModel::create(link_type, \
+      ElectricalLinkPowerModel* link_power_model =
+         ElectricalLinkPowerModel::create(link_type,
                _frequency, link_length, _flit_width, 1);
       link_power_model_list.push_back(link_power_model);
    }
@@ -270,13 +273,6 @@ FiniteBufferNetworkModelEMesh::computeOutputEndpointList(HeadFlit* head_flit, Ne
          head_flit, curr_network_node, head_flit->_output_endpoint_list->size());
 }
 
-Router::Id
-FiniteBufferNetworkModelEMesh::computeIngressRouterId(core_id_t core_id)
-{
-   assert(core_id == _core_id);
-   return Router::Id(core_id, EMESH);
-}
-
 void
 FiniteBufferNetworkModelEMesh::computeEMeshPosition(core_id_t core_id, SInt32& x, SInt32& y)
 {
@@ -384,9 +380,14 @@ void
 FiniteBufferNetworkModelEMesh::outputEventCountSummary(ostream& out)
 {
    out << "  Event Counters: " << endl;
-   out << "    Total Input Buffer Writes: " << _network_node_map[EMESH]->getTotalInputBufferWrites() << endl;
-   out << "    Total Input Buffer Reads: " << _network_node_map[EMESH]->getTotalInputBufferReads() << endl;
-   out << "    Total Switch Allocator Requests: " << _network_node_map[EMESH]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Total Crossbar Traversals: " << _network_node_map[EMESH]->getTotalCrossbarTraversals() << endl;
-   out << "    Total Link Traversals: " << _network_node_map[EMESH]->getTotalLinkTraversals(Channel::ALL) << endl;
+   NetworkNode* node = _network_node_map[EMESH];
+   out << "    Input Buffer Writes: " << node->getTotalInputBufferWrites() << endl;
+   out << "    Input Buffer Reads: " << node->getTotalInputBufferReads() << endl;
+   out << "    Switch Allocator Requests: " << node->getTotalSwitchAllocatorRequests() << endl;
+   for (SInt32 i = 0; i < 5; i++)
+   {
+      UInt64 crossbar_traversals = (i < node->getNumOutputChannels()) ? node->getTotalCrossbarTraversals(i+1) : 0;
+      out << "    Total Crossbar[" << i+1 << "] Traversals: " << crossbar_traversals << endl;
+   }
+   out << "    Link Traversals: " << node->getTotalOutputLinkUnicasts(Channel::ALL) << endl;
 }

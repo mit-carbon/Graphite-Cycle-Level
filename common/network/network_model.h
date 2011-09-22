@@ -66,10 +66,9 @@ class NetworkModel
 
       virtual volatile float getFrequency() = 0;
 
-      virtual UInt32 computeAction(const NetPacket& pkt) = 0;
-      virtual void routePacket(const NetPacket &pkt,
-                               std::vector<Hop> &nextHops) = 0;
-      virtual void processReceivedPacket(NetPacket &pkt) = 0;
+      virtual UInt32 computeAction(const NetPacket& pkt) { assert(false); return 0; }
+      virtual void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops) { assert(false); }
+      virtual void processReceivedPacket(NetPacket &pkt) { assert(false); }
 
       virtual void outputSummary(std::ostream &out) = 0;
 
@@ -88,6 +87,9 @@ class NetworkModel
       static std::pair<bool, std::vector<core_id_t> > computeMemoryControllerPositions(UInt32 network_type, SInt32 num_memory_controllers);
 
    protected:
+      // Tile Width
+      double _tile_width;
+
       Network *getNetwork() { return _network; }
 
    private:

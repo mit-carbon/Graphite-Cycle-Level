@@ -1,18 +1,15 @@
-#define __STDC_LIMIT_MACROS
-#include <climits>
-
 #include "meta_event_heap.h"
 #include "log.h"
 
-MetaEventHeap::MetaEventHeap(SInt32 num_children, MetaEventHeap* parent_event_heap, \
+MetaEventHeap::MetaEventHeap(SInt32 num_children, MetaEventHeap* parent_event_heap,
       SInt32 event_heap_index_in_parent):
-   _first_event_time(UINT64_MAX),
+   _first_event_time(UINT64_MAX_),
    _parent_event_heap(parent_event_heap),
    _event_heap_index_in_parent(event_heap_index_in_parent)
 {
    for (SInt32 i = 0; i < num_children; i++)
    {
-      _heap_nodes.push_back(new MinHeap::Node(UINT64_MAX));
+      _heap_nodes.push_back(new MinHeap::Node(UINT64_MAX_));
       _heap.insert(_heap_nodes.back());
    }
 }
@@ -32,7 +29,7 @@ MetaEventHeap::updateTime(SInt32 event_index, UInt64 time, bool is_locked)
    if (!is_locked)
       _lock.acquire();
 
-   LOG_PRINT("MetaEventHeap: updateTime(Event Queue Index[%i], Time[%llu]), is_locked(%s) enter", \
+   LOG_PRINT("MetaEventHeap: updateTime(Event Queue Index[%i], Time[%llu]), is_locked(%s) enter",
          event_index, time, is_locked ? "YES" : "NO");
 
    LOG_PRINT("First Event Time(%llu)", _first_event_time);
@@ -49,7 +46,7 @@ MetaEventHeap::updateTime(SInt32 event_index, UInt64 time, bool is_locked)
       LOG_PRINT("Top of Heap Changed: New First Event Time(%llu)", _first_event_time);
    }
    
-   LOG_PRINT("MetaEventHeap: updateTime(Event Queue Index[%i], Time[%llu]), is_locked(%s) exit", \
+   LOG_PRINT("MetaEventHeap: updateTime(Event Queue Index[%i], Time[%llu]), is_locked(%s) exit",
          event_index, time, is_locked ? "YES" : "NO");
 
    if (!is_locked)

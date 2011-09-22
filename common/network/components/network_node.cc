@@ -14,10 +14,10 @@ NetworkNode::NetworkNode(Router::Id router_id,
       UInt32 flit_width,
       RouterPerformanceModel* router_performance_model,
       RouterPowerModel* router_power_model,
-      vector<LinkPerformanceModel*>& link_performance_model_list,
-      vector<LinkPowerModel*>& link_power_model_list,
-      vector<vector<Router::Id> >& input_channel_to_router_id_list__mapping,
-      vector<vector<Router::Id> >& output_channel_to_router_id_list__mapping,
+      vector<LinkPerformanceModel*> link_performance_model_list,
+      vector<LinkPowerModel*> link_power_model_list,
+      vector<vector<Router::Id> > input_channel_to_router_id_list__mapping,
+      vector<vector<Router::Id> > output_channel_to_router_id_list__mapping,
       PacketType flow_control_packet_type):
    _router_id(router_id),
    _flit_width(flit_width),
@@ -39,6 +39,8 @@ NetworkNode::NetworkNode(Router::Id router_id,
   
    // Initialize Event Counters
    initializeEventCounters();
+   // Initialize Contention Model Counters
+   initializeContentionModelCounters();
 
    // printNode();
 
@@ -82,9 +84,16 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
          // Normalize Time 
          normalizeTime(flit);
 
+         // Update Event Counters
+         updateEventCounters(flit);
+
          printNetPacket(input_net_packet, true);
-         
+        
+         LOG_PRINT("processDataMsg: Flit[Type(%s),Time(%llu),Input Endpoint(%i,%i),Sender Router(%i,%i),Receiver Router(%i,%i)]",
+               flit->getTypeString().c_str(), flit->_normalized_time, flit->_input_endpoint._channel_id, flit->_input_endpoint._index,
+               input_net_packet->sender, flit->_sender_router_index, _router_id._core_id, _router_id._index);
          _router_performance_model->processDataMsg(flit, output_network_msg_list);
+         LOG_PRINT("processDataMsg: end - output msg list size(%u)", output_network_msg_list.size());
       }
 
       break;
@@ -250,23 +259,21 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
             _router_power_model->updateDynamicEnergy(_flit_width/2, flit->_num_phits);
          
          // Link Performance Model (Link delay)
+         UInt64 link_delay = 0;
          if (_link_performance_model_list[output_channel])
-            flit->_normalized_time += _link_performance_model_list[output_channel]->getDelay();
+            link_delay = _link_performance_model_list[output_channel]->getDelay();
+         flit->_normalized_time += link_delay;
          
          // Link Power Model
          if (_link_power_model_list[output_channel])
             _link_power_model_list[output_channel]->updateDynamicEnergy(_flit_width/2, flit->_num_phits);
 
          // Increment Zero Load Delay
-         flit->_zero_load_delay += (_router_performance_model->getDataPipelineDelay() +
-                                    _link_performance_model_list[output_channel]->getDelay());
+         flit->_zero_load_delay += (_router_performance_model->getDataPipelineDelay() + link_delay);
 
-         // Increment Event Counters
-         _total_input_buffer_writes += flit->_num_phits;
-         _total_input_buffer_reads += flit->_num_phits;
-         _total_switch_allocator_requests += ((flit->_type & Flit::HEAD) ? 1 : 0);
-         _total_crossbar_traversals += flit->_num_phits;
-         _total_link_traversals[output_channel] += flit->_num_phits;
+
+         // Update Contention Model Counters
+         updateContentionModelCounters(flit);
       }
       
       break;
@@ -323,7 +330,8 @@ NetworkNode::getRemoteLinkDelay(NetworkNode* remote_network_node)
    // Link that connects remote_network_node and curr_network_node
    Channel::Endpoint output_endpoint = remote_network_node->getOutputEndpointFromRouterId(_router_id);
    SInt32 output_channel = output_endpoint._channel_id;
-   return remote_network_node->getLinkPerformanceModel(output_channel)->getDelay();
+   LinkPerformanceModel* link_performance_model = remote_network_node->getLinkPerformanceModel(output_channel);
+   return (link_performance_model ? link_performance_model->getDelay() : 0);
 }
 
 void
@@ -332,29 +340,152 @@ NetworkNode::initializeEventCounters()
    _total_input_buffer_writes = 0;
    _total_input_buffer_reads = 0;
    _total_switch_allocator_requests = 0;
-   _total_crossbar_traversals = 0;
-   _total_link_traversals.resize(_num_output_channels);
-   for (SInt32 i = 0; i < _num_output_channels; i++)
-      _total_link_traversals[i] = 0;
+   _total_crossbar_traversals.resize(_num_output_channels, 0);
+   _total_output_link_unicasts.resize(_num_output_channels, 0);
+   _total_output_link_broadcasts.resize(_num_output_channels, 0);
+
+   _cached_output_endpoint_list.resize(_num_input_channels, 0);
+}
+
+void
+NetworkNode::initializeContentionModelCounters()
+{
+   _total_contention_delay_counters.resize(_num_input_channels, 0);
+}
+
+void
+NetworkNode::updateEventCounters(Flit* flit)
+{
+   SInt32 input_channel = flit->_input_endpoint._channel_id;
+   vector<Channel::Endpoint>* output_endpoint_list;
+   if (flit->_type & Flit::HEAD)
+   {
+      HeadFlit* head_flit = (HeadFlit*) flit;
+      output_endpoint_list = head_flit->_output_endpoint_list;
+      setOutputEndpointList(input_channel, output_endpoint_list);
+   }
+   else // (flit->_type != Flit::HEAD)
+   {
+      output_endpoint_list = getOutputEndpointList(input_channel);
+   }
+
+   if (flit->_type & Flit::TAIL)
+      setOutputEndpointList(input_channel, NULL);
+   
+   // Increment Event Counters
+   
+   // Input Buffer Writes
+   _total_input_buffer_writes += flit->_num_phits;
+   // Input Buffer Reads
+   _total_input_buffer_reads += flit->_num_phits;
+   
+   // Switch Allocator Requests
+   _total_switch_allocator_requests += ((flit->_type & Flit::HEAD) ? 1 : 0);
+   
+   // Crossbar Traversals - depending on multicast index
+   if (output_endpoint_list->size() > 0)
+      _total_crossbar_traversals[output_endpoint_list->size() - 1] += flit->_num_phits;
+
+   // Link Traversals - based on number of endpoints to which it is forwarded 
+   vector<Channel::Endpoint>::iterator it = output_endpoint_list->begin();
+   for ( ; it != output_endpoint_list->end(); it++)
+   {
+      Channel::Endpoint endpoint = (*it);
+      if (endpoint._index == Channel::Endpoint::ALL)
+         _total_output_link_broadcasts[endpoint._channel_id] += flit->_num_phits;
+      else // (endpoint._index != Channel::Endpoint::ALL)
+         _total_output_link_unicasts[endpoint._channel_id] += flit->_num_phits;
+   }
+}
+
+void
+NetworkNode::updateContentionModelCounters(Flit* flit)
+{
+   SInt32 input_channel = flit->_input_endpoint._channel_id;
+   _total_contention_delay_counters[input_channel] += (flit->_normalized_time - flit->_normalized_time_at_entry);
 }
 
 UInt64
-NetworkNode::getTotalLinkTraversals(SInt32 channel_id)
+NetworkNode::getTotalInputBufferWrites()
 {
-   if (channel_id == Channel::ALL)
+   return _total_input_buffer_writes;
+}
+
+UInt64
+NetworkNode::getTotalInputBufferReads()
+{
+   return _total_input_buffer_reads;
+}
+
+UInt64
+NetworkNode::getTotalSwitchAllocatorRequests()
+{
+   return _total_switch_allocator_requests;
+}
+
+UInt64
+NetworkNode::getTotalCrossbarTraversals(SInt32 multicast_index)
+{
+   assert(multicast_index >= 1 && multicast_index <= _num_output_channels);
+   return _total_crossbar_traversals[multicast_index-1];
+}
+
+UInt64
+NetworkNode::getTotalOutputLinkUnicasts(SInt32 link_id_start, SInt32 link_id_end)
+{
+   if (link_id_start == Channel::ALL)
    {
-      UInt64 total_traversals = 0;
-      for (SInt32 i = 0; i < _num_output_channels; i++)
-         total_traversals += _total_link_traversals[i];
-      return total_traversals;
+      assert(link_id_end == Channel::INVALID);
+      link_id_start = 0;
+      link_id_end = _num_output_channels-1;
    }
-   else
+   else if (link_id_end == Channel::INVALID)
    {
-      LOG_ASSERT_ERROR(channel_id >= 0 && channel_id < _num_output_channels,
-            "Invalid Channel ID(%i) not in [0,%i]",
-            channel_id, _num_output_channels);
-      return _total_link_traversals[channel_id];
+      link_id_end = link_id_start;
    }
+
+   UInt64 total_link_unicasts = 0;
+   for (SInt32 i = link_id_start; i <= link_id_end; i++)
+   {
+      total_link_unicasts += _total_output_link_unicasts[i];
+   }
+   return total_link_unicasts;
+}
+
+UInt64
+NetworkNode::getTotalOutputLinkBroadcasts(SInt32 link_id_start, SInt32 link_id_end)
+{
+   if (link_id_start == Channel::ALL)
+   {
+      assert(link_id_end == Channel::INVALID);
+      link_id_start = 0;
+      link_id_end = _num_output_channels-1;
+   }
+   else if (link_id_end == Channel::INVALID)
+   {
+      link_id_end = link_id_start;
+   }
+
+   UInt64 total_link_broadcasts = 0;
+   for (SInt32 i = link_id_start; i <= link_id_end; i++)
+   {
+      total_link_broadcasts += _total_output_link_broadcasts[i];
+   }
+   return total_link_broadcasts;
+}
+
+vector<Channel::Endpoint>*
+NetworkNode::getOutputEndpointList(SInt32 input_channel)
+{
+   assert(_cached_output_endpoint_list[input_channel]);
+   return _cached_output_endpoint_list[input_channel];
+}
+
+void
+NetworkNode::setOutputEndpointList(SInt32 input_channel, vector<Channel::Endpoint>* output_endpoint_list)
+{
+   assert( (output_endpoint_list == NULL) == (_cached_output_endpoint_list[input_channel] != NULL) );
+   _cached_output_endpoint_list[input_channel] = output_endpoint_list;
 }
 
 void
