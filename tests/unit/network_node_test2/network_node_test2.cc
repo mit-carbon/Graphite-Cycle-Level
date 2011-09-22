@@ -1,4 +1,9 @@
 #include "network_node_test2.h"
+#include "simulator.h"
+#include "core_manager.h"
+#include "core.h"
+#include "network.h"
+#include "finite_buffer_network_model.h"
 #include "network_node.h"
 #include "router_performance_model.h"
 #include "flow_control_scheme.h"
@@ -6,9 +11,11 @@
 #include "router_power_model.h"
 #include "electrical_link_performance_model.h"
 #include "link_power_model.h"
+#include "network_msg.h"
+#include "flit.h"
+#include "head_flit.h"
 #include "credit_msg.h"
 #include "on_off_msg.h"
-#include "channel.h"
 #include "carbon_user.h"
 
 int main(int argc, char *argv[])
@@ -16,67 +23,108 @@ int main(int argc, char *argv[])
    // Start simulation
    CarbonStartSim(argc, argv);
 
-   SInt32 num_input_channels = 5;
-   SInt32 num_output_channels = 5;
+   SInt32 num_channels = 5;
    SInt32 fanout = 4;
 
    // Router Performance Model
-   vector<SInt32> num_input_endpoints_list(num_input_channels, 1);
-   vector<SInt32> num_output_endpoints_list(num_output_channels, fanout);
-   vector<BufferManagementScheme::Type> input_buffer_management_schemes(num_input_channels, BufferManagementScheme::CREDIT);
-   vector<BufferManagementScheme::Type> downstream_buffer_management_schemes(num_output_channels, BufferManagementScheme::CREDIT);
-   vector<SInt32> input_buffer_size_list(num_input_channels, 4);
-   vector<SInt32> downstream_buffer_size_list(num_output_channels, 4);
    FlowControlScheme::Type flow_control_scheme = FlowControlScheme::WORMHOLE;
    SInt32 data_pipeline_delay = 1;
    SInt32 credit_pipeline_delay = 1;
 
-   RouterPerformanceModel* router_performance_model = new RouterPerformanceModel(flow_control_scheme,
+   // Get Finite Buffer Network Model
+   Core* core = Sim()->getCoreManager()->getCoreFromID(0);
+   assert(core);
+   NetworkModel* network_model = core->getNetwork()->getNetworkModelFromPacketType(USER_2);
+   assert(network_model->isFiniteBuffer());
+   FiniteBufferNetworkModel* finite_buffer_network_model = (FiniteBufferNetworkModel*) network_model;
+
+   vector<SInt32> num_input_endpoints_list(num_channels, 1);
+   vector<SInt32> num_output_endpoints_list(num_channels, fanout);
+   vector<BufferManagementScheme::Type> input_buffer_management_schemes(num_channels, BufferManagementScheme::CREDIT);
+   vector<BufferManagementScheme::Type> downstream_buffer_management_schemes(num_channels, BufferManagementScheme::CREDIT);
+   vector<SInt32> input_buffer_size_list(num_channels, 4);
+   vector<SInt32> downstream_buffer_size_list(num_channels, 4);
+   
+   RouterPerformanceModel* router_performance_model = new RouterPerformanceModel(
+         flow_control_scheme,
          data_pipeline_delay, credit_pipeline_delay,
-         num_input_channels, num_output_channels,
+         num_channels, num_channels,
          num_input_endpoints_list, num_output_endpoints_list,
          input_buffer_management_schemes, downstream_buffer_management_schemes,
          input_buffer_size_list, downstream_buffer_size_list);
-
-   // Router Power Model
-   RouterPowerModel* router_power_model = (RouterPowerModel*) NULL;
 
    // Link Performance Model
    UInt32 flit_width = 64;
    double link_length = 1.0;
    float frequency = 1; // In GHz
    string link_type = "electrical_repeated";
-   LinkPerformanceModel* link_performance_model = ElectricalLinkPerformanceModel::create(
-         link_type, frequency, link_length, flit_width, 1);
-   vector<LinkPerformanceModel*> link_performance_model_list(num_output_channels, link_performance_model);
 
-   // Link Power Model
-   vector<LinkPowerModel*> link_power_model_list(num_output_channels, (LinkPowerModel*) NULL);
+   LinkPerformanceModel* link_performance_model = 
+      ElectricalLinkPerformanceModel::create(link_type, frequency, link_length, flit_width, 1);
+   vector<LinkPerformanceModel*> link_performance_model_list(num_channels, link_performance_model);
 
    // Network Node
    vector<vector<Router::Id> > input_channel_to_router_id_list__mapping;
    vector<vector<Router::Id> > output_channel_to_router_id_list__mapping;
-   for (SInt32 i = 0; i < num_input_channels; i++)
+   for (SInt32 i = 0; i < num_channels; i++)
    {
-      Router::Id router_id(i,0);
+      Router::Id router_id(0, i);
       vector<Router::Id> router_id_list(1, router_id);
       input_channel_to_router_id_list__mapping.push_back(router_id_list);
    }
-   for (SInt32 i = 0; i < num_output_channels; i++)
+   for (SInt32 i = 0; i < num_channels; i++)
    {
       vector<Router::Id> router_id_list;
       for (SInt32 j = 0; j < fanout; j++)
       {
-         Router::Id router_id(i+j*num_output_channels, 0);
+         Router::Id router_id(0, j*num_channels + i);
          router_id_list.push_back(router_id);
       }
       output_channel_to_router_id_list__mapping.push_back(router_id_list);
    }
-   NetworkNode* network_node = new NetworkNode(Router::Id(fanout*num_output_channels,0), flit_width,
-         router_performance_model, router_power_model,
-         link_performance_model_list, link_power_model_list,
+
+   NetworkNode* network_node = new NetworkNode(
+         Router::Id(0, num_channels*fanout),
+         flit_width,
+         router_performance_model,
+         NULL,
+         link_performance_model_list,
+         vector<LinkPowerModel*>(num_channels, NULL),
          input_channel_to_router_id_list__mapping,
-         output_channel_to_router_id_list__mapping);
+         output_channel_to_router_id_list__mapping,
+         USER_2);
+
+   finite_buffer_network_model->setNetworkNode(num_channels, network_node);
+   
+   for (SInt32 i = 0; i < num_channels * fanout; i++)
+   {
+      RouterPerformanceModel* router_performance_model = new RouterPerformanceModel(
+            flow_control_scheme,
+            data_pipeline_delay, credit_pipeline_delay,
+            1,1,
+            vector<SInt32>(1,1),
+            vector<SInt32>(1,1),
+            vector<BufferManagementScheme::Type>(1,BufferManagementScheme::CREDIT),
+            vector<BufferManagementScheme::Type>(1,BufferManagementScheme::CREDIT),
+            vector<SInt32>(1,4),
+            vector<SInt32>(1,4));
+      LinkPerformanceModel* link_performance_model =
+         ElectricalLinkPerformanceModel::create(link_type, frequency, link_length, flit_width, 1);
+      
+      NetworkNode* network_node =
+         new NetworkNode(
+               Router::Id(0,i),
+               flit_width,
+               router_performance_model,
+               NULL,
+               vector<LinkPerformanceModel*>(1,link_performance_model),
+               vector<LinkPowerModel*>(1,NULL),
+               vector<vector<Router::Id> >(1, vector<Router::Id>(1, Router::Id(0, num_channels*fanout)) ),
+               vector<vector<Router::Id> >(1, vector<Router::Id>(1, Router::Id(0, num_channels*fanout)) ),
+               USER_2);
+
+      finite_buffer_network_model->setNetworkNode(i, network_node);
+   }
 
    list<NetPacket*> input_net_packet_list = createNetPacketList(); 
    printNetPacketList(input_net_packet_list, true);
@@ -93,7 +141,6 @@ int main(int argc, char *argv[])
       printNetPacketList(output_net_packet_list);
       
       destroyNetPacketList(output_net_packet_list);
-      destroyNetPacket(*it);
    }
 
    // Stop simulation
@@ -130,28 +177,28 @@ void printNetPacket(NetPacket* net_packet, bool is_input_msg)
       
       {
          Flit* flit = (Flit*) network_msg;
-         fprintf(stderr, "Flit [Type(%s), Normalized Time at Entry(%llu), Delay(%llu), Length(%i), Sender(%i), Receiver(%i), Requester(%i), Net Packet(%p), Output Endpoint List(%p)]\n",
+         fprintf(stderr, "Flit [Type(%s), Normalized Time at Entry(%llu), Delay(%llu), Length(%i), Sender(%i), Receiver(%i), Net Packet(%p)]\n",
                flit->getTypeString().c_str(),
                (long long unsigned int) flit->_normalized_time_at_entry,
                (long long unsigned int) (flit->_normalized_time - flit->_normalized_time_at_entry),
-               flit->_length,
+               flit->_num_phits,
                flit->_sender,
                flit->_receiver,
-               flit->_requester,
-               flit->_net_packet,
-               flit->_output_endpoint_list);
+               flit->_net_packet);
 
-         if ((flit->_type == Flit::HEAD) && (is_input_msg))
+         if ((flit->_type & Flit::HEAD) && (is_input_msg))
          {
-            ChannelEndpointList* endpoint_list = flit->_output_endpoint_list;
+            HeadFlit* head_flit = (HeadFlit*) flit;
+            vector<Channel::Endpoint>* endpoint_list = head_flit->_output_endpoint_list;
             fprintf(stderr, "Head Flit [Output Endpoint List( ");
-            while (endpoint_list->curr() != endpoint_list->last())
+            
+            vector<Channel::Endpoint>::iterator it = endpoint_list->begin();
+            for ( ; it != endpoint_list->end(); it ++)
             {
-               fprintf(stderr, "(%i,%i), ", endpoint_list->curr()._channel_id, endpoint_list->curr()._index);
-               endpoint_list->incr();
+               Channel::Endpoint endpoint = *it;
+               fprintf(stderr, "(%i,%i), ", endpoint._channel_id, endpoint._index);
             }
-            fprintf(stderr, "(%i,%i) )]\n", endpoint_list->curr()._channel_id, endpoint_list->curr()._index);
-            endpoint_list->incr();
+            fprintf(stderr, ")]\n");
          }
       }
 
@@ -190,36 +237,36 @@ list<NetPacket*> createNetPacketList()
 
    // Head Flit - 0 -> [ (0,1), (3,ALL), (4,0) ]
    output_endpoints << 0 << 1 << 3 << Channel::Endpoint::ALL << 4 << 0;
-   addFlit(net_packet_list, Flit::HEAD, 5, 1, Router::Id(1,0), Router::Id(20,0), 3, &output_endpoints);
+   addFlit(net_packet_list, Flit::HEAD, 5, 1, Router::Id(0,1), Router::Id(0,20), 3, &output_endpoints);
 
    // Head Flit - 1
    output_endpoints << 0 << 0;
-   addFlit(net_packet_list, Flit::HEAD, 6, 1, Router::Id(2,0), Router::Id(20,0), 1, &output_endpoints);
+   addFlit(net_packet_list, Flit::HEAD, 6, 1, Router::Id(0,2), Router::Id(0,20), 1, &output_endpoints);
 
    // Tail Flit - 1
-   addFlit(net_packet_list, Flit::TAIL, 7, 1, Router::Id(2,0), Router::Id(20,0));
+   addFlit(net_packet_list, Flit::TAIL, 7, 1, Router::Id(0,2), Router::Id(0,20));
    
    // Body Flit - 0
-   addFlit(net_packet_list, Flit::BODY, 7, 1, Router::Id(1,0), Router::Id(20,0));
+   addFlit(net_packet_list, Flit::BODY, 7, 1, Router::Id(0,1), Router::Id(0,20));
 
    // Tail Flit - 0
-   addFlit(net_packet_list, Flit::TAIL, 10, 1, Router::Id(1,0), Router::Id(20,0));
+   addFlit(net_packet_list, Flit::TAIL, 10, 1, Router::Id(0,1), Router::Id(0,20));
 
    return net_packet_list;
 }
 
 void addFlit(list<NetPacket*>& net_packet_list,
-      Flit::Type flit_type, UInt64 time, SInt32 length,
+      Flit::Type flit_type, UInt64 time, SInt32 num_phits,
       Router::Id sender_router_id, Router::Id receiver_router_id,
       SInt32 num_output_endpoints, UnstructuredBuffer* output_endpoints_ptr)
 {
-   Flit* flit = new Flit(flit_type, length, INVALID_CORE_ID, INVALID_CORE_ID, INVALID_CORE_ID);
-   flit->_normalized_time = time;
-   flit->_normalized_time_at_entry = time;
-   flit->_sender_router_index = sender_router_id._index;
-   flit->_receiver_router_index = receiver_router_id._index;
-   if (flit_type == Flit::HEAD)
+   Flit* flit;
+   if (flit_type & Flit::HEAD)
    {
+      HeadFlit* head_flit = new HeadFlit(1, num_phits, INVALID_CORE_ID, INVALID_CORE_ID);
+      head_flit->_type = flit_type;
+           
+      // Add Output Endpoints
       assert(output_endpoints_ptr);
       UnstructuredBuffer& output_endpoints = *output_endpoints_ptr;
 
@@ -232,8 +279,18 @@ void addFlit(list<NetPacket*>& net_packet_list,
          output_endpoints >> index;
          output_endpoint_vec.push_back(Channel::Endpoint(channel_id, index));
       }
-      flit->_output_endpoint_list = new ChannelEndpointList(output_endpoint_vec);
+      head_flit->_output_endpoint_list = new vector<Channel::Endpoint>(output_endpoint_vec);
+      flit = head_flit;
    }
+   else
+   {
+      flit = new Flit(flit_type, num_phits, INVALID_CORE_ID, INVALID_CORE_ID);
+   }
+
+   flit->_normalized_time = time;
+   flit->_normalized_time_at_entry = time;
+   flit->_sender_router_index = sender_router_id._index;
+   flit->_receiver_router_index = receiver_router_id._index;
    
    NetPacket* net_packet = new NetPacket(time, USER_2,
          sender_router_id._core_id, receiver_router_id._core_id,
