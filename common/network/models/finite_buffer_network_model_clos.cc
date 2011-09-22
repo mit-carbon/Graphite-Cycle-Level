@@ -523,29 +523,62 @@ void
 FiniteBufferNetworkModelClos::outputEventCountSummary(ostream& out)
 {
    out << "  Event Counters: " << endl;
-   out << "    Ingress Total Input Buffer Writes: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
-   out << "    Ingress Total Input Buffer Reads: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferReads() << endl;
-   out << "    Ingress Total Switch Allocator Requests: " << _network_node_map[INGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Ingress Total Crossbar Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalCrossbarTraversals(1) << endl;
-   UInt64 ingress_link_traversals = _network_node_map[INGRESS_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
-                                    _network_node_map[INGRESS_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
-   out << "    Ingress Total Link Traversals: " << ingress_link_traversals << endl;
-   
-   out << "    Middle  Total Input Buffer Writes: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferWrites() << endl;
-   out << "    Middle  Total Input Buffer Reads: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferReads() << endl;
-   out << "    Middle  Total Switch Allocator Requests: " << _network_node_map[MIDDLE_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Middle  Total Crossbar Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalCrossbarTraversals(1) << endl;
-   UInt64 middle_link_traversals = _network_node_map[MIDDLE_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
-                                   _network_node_map[MIDDLE_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
-   out << "    Middle  Total Link Traversals: " << middle_link_traversals << endl;
-   
-   out << "    Egress  Total Input Buffer Writes: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
-   out << "    Egress  Total Input Buffer Reads: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferReads() << endl;
-   out << "    Egress  Total Switch Allocator Requests: " << _network_node_map[EGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
-   out << "    Egress  Total Crossbar Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalCrossbarTraversals(1) << endl;
-   UInt64 egress_link_traversals = _network_node_map[EGRESS_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
-                                   _network_node_map[EGRESS_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
-   out << "    Egress  Total Link Traversals: " << egress_link_traversals << endl;
+   if (_network_node_map[INGRESS_ROUTER])
+   {
+      out << "    Ingress Total Input Buffer Writes: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+      out << "    Ingress Total Input Buffer Reads: " << _network_node_map[INGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+      out << "    Ingress Total Switch Allocator Requests: " << _network_node_map[INGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+      out << "    Ingress Total Crossbar Traversals: " << _network_node_map[INGRESS_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+      UInt64 ingress_link_traversals = _network_node_map[INGRESS_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                       _network_node_map[INGRESS_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+      out << "    Ingress Total Link Traversals: " << ingress_link_traversals << endl;
+   }
+   else
+   {
+      out << "    Ingress Total Input Buffer Writes: " << endl;
+      out << "    Ingress Total Input Buffer Reads: " << endl;
+      out << "    Ingress Total Switch Allocator Requests: " << endl;
+      out << "    Ingress Total Crossbar Traversals: " << endl;
+      out << "    Ingress Total Link Traversals: " << endl;
+   }
+  
+   if (_network_node_map[MIDDLE_ROUTER])
+   {
+      out << "    Middle  Total Input Buffer Writes: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferWrites() << endl;
+      out << "    Middle  Total Input Buffer Reads: " << _network_node_map[MIDDLE_ROUTER]->getTotalInputBufferReads() << endl;
+      out << "    Middle  Total Switch Allocator Requests: " << _network_node_map[MIDDLE_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+      out << "    Middle  Total Crossbar Traversals: " << _network_node_map[MIDDLE_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+      UInt64 middle_link_traversals = _network_node_map[MIDDLE_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                      _network_node_map[MIDDLE_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+      out << "    Middle  Total Link Traversals: " << middle_link_traversals << endl;
+   }
+   else
+   {
+      out << "    Middle  Total Input Buffer Writes: " << endl;
+      out << "    Middle  Total Input Buffer Reads: " << endl;
+      out << "    Middle  Total Switch Allocator Requests: " << endl;
+      out << "    Middle  Total Crossbar Traversals: " << endl;
+      out << "    Middle  Total Link Traversals: " << endl;
+   }
+
+   if (_network_node_map[EGRESS_ROUTER])
+   {
+      out << "    Egress  Total Input Buffer Writes: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferWrites() << endl;
+      out << "    Egress  Total Input Buffer Reads: " << _network_node_map[EGRESS_ROUTER]->getTotalInputBufferReads() << endl;
+      out << "    Egress  Total Switch Allocator Requests: " << _network_node_map[EGRESS_ROUTER]->getTotalSwitchAllocatorRequests() << endl;
+      out << "    Egress  Total Crossbar Traversals: " << _network_node_map[EGRESS_ROUTER]->getTotalCrossbarTraversals(1) << endl;
+      UInt64 egress_link_traversals = _network_node_map[EGRESS_ROUTER]->getTotalOutputLinkUnicasts(Channel::ALL) +
+                                      _network_node_map[EGRESS_ROUTER]->getTotalOutputLinkBroadcasts(Channel::ALL);
+      out << "    Egress  Total Link Traversals: " << egress_link_traversals << endl;
+   }
+   else
+   {
+      out << "    Egress  Total Input Buffer Writes: " << endl;
+      out << "    Egress  Total Input Buffer Reads: " << endl;
+      out << "    Egress  Total Switch Allocator Requests: " << endl;
+      out << "    Egress  Total Crossbar Traversals: " << endl;
+      out << "    Egress  Total Link Traversals: " << endl;
+   }
 }
 
 pair<bool,UInt32>
