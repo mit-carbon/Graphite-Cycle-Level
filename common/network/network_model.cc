@@ -257,7 +257,7 @@ NetworkModel::updatePacketSendStatistics(const NetPacket* raw_packet)
    }
 
    // Send Time
-   assert(_last_packet_send_time <= raw_packet->start_time);
+   // assert(_last_packet_send_time <= raw_packet->start_time);
    _last_packet_send_time = raw_packet->start_time;
 }
 
