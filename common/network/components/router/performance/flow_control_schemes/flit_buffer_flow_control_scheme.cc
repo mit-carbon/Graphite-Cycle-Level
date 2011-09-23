@@ -25,6 +25,7 @@ FlitBufferFlowControlScheme::dividePacket(NetPacket* net_packet,
    NetPacket* head_flit_packet = new NetPacket(net_packet->time, net_packet->type,
          head_flit->size(), (void*) head_flit,
          false /* is_raw */, net_packet->sequence_num);
+   head_flit_packet->start_time = net_packet->start_time;
    net_packet_list.push_back(head_flit_packet);
 
    for (SInt32 i = 1; i < serialization_latency - 1; i++)
@@ -33,6 +34,7 @@ FlitBufferFlowControlScheme::dividePacket(NetPacket* net_packet,
       NetPacket* body_flit_packet = new NetPacket(net_packet->time + i, net_packet->type,
             body_flit->size(), (void*) body_flit,
             false /* is_raw */, net_packet->sequence_num);
+      body_flit_packet->start_time = net_packet->start_time;
       net_packet_list.push_back(body_flit_packet);
    }
    if (serialization_latency > 1)
@@ -42,6 +44,7 @@ FlitBufferFlowControlScheme::dividePacket(NetPacket* net_packet,
       NetPacket* tail_flit_packet = new NetPacket(net_packet->time + serialization_latency - 1, net_packet->type,
             tail_flit->size(), (void*) tail_flit,
             false /* is_raw */, net_packet->sequence_num);
+      tail_flit_packet->start_time = net_packet->start_time;
       net_packet_list.push_back(tail_flit_packet);
    }
    else

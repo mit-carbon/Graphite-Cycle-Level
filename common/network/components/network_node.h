@@ -57,7 +57,7 @@ public:
    UInt64 getTotalOutputLinkBroadcasts(SInt32 link_id_start, SInt32 link_id_end = Channel::INVALID);
 
    // Query Contention Counters
-   float getAverageContentionDelay();
+   double getAverageContentionDelay();
 
    // RouterPerformanceModel
    RouterPerformanceModel* getRouterPerformanceModel()
@@ -128,7 +128,7 @@ private:
    void initializeContentionModelCounters();
    // Update Counters
    void updateEventCounters(Flit* flit);
-   void updateContentionModelCounters(Flit* flit);
+   void updateContentionCounters(Flit* flit);
 
    // Cached Output Endpoint List
    vector<Channel::Endpoint>* getOutputEndpointList(SInt32 input_channel);

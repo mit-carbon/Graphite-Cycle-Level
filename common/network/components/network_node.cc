@@ -235,7 +235,7 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
          Flit* flit = (Flit*) output_network_msg;
 
          // Update Contention Model Counters - when zero load delay is not factored in
-         updateContentionModelCounters(flit);
+         updateContentionCounters(flit);
          
          SInt32 output_channel = flit->_output_endpoint._channel_id;
 
@@ -384,7 +384,7 @@ NetworkNode::updateEventCounters(Flit* flit)
 }
 
 void
-NetworkNode::updateContentionModelCounters(Flit* flit)
+NetworkNode::updateContentionCounters(Flit* flit)
 {
    SInt32 input_channel = flit->_input_endpoint._channel_id;
    if (_router_id._index == FiniteBufferNetworkModel::NET_PACKET_INJECTOR)
@@ -463,7 +463,7 @@ NetworkNode::getTotalOutputLinkBroadcasts(SInt32 link_id_start, SInt32 link_id_e
    return total_link_broadcasts;
 }
 
-float
+double
 NetworkNode::getAverageContentionDelay()
 {
    UInt64 total_contention_delay = 0;
@@ -473,7 +473,7 @@ NetworkNode::getAverageContentionDelay()
       total_contention_delay += _total_contention_delay_counters[i];
       total_flits_processed += _total_flits_processed[i];
    }
-   return ((float) total_contention_delay) / total_flits_processed;
+   return ((double) total_contention_delay) / total_flits_processed;
 }
 
 vector<Channel::Endpoint>*

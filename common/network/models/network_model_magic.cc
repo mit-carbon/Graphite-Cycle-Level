@@ -50,10 +50,10 @@ NetworkModelMagic::routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops)
 }
 
 void
-NetworkModelMagic::processReceivedPacket(NetPacket &pkt)
+NetworkModelMagic::processReceivedPacket(const NetPacket* packet)
 {
    if (_enabled)
-      updatePacketReceiveStatistics(&pkt, 1);
+      updatePacketReceiveStatistics(packet, 1);
 }
 
 void NetworkModelMagic::outputSummary(std::ostream &out)

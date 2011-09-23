@@ -373,14 +373,14 @@ void
 FiniteBufferNetworkModelEMesh::outputSummary(ostream& out)
 {
    NetworkModel::outputSummary(out);
-   outputEventCountSummary(out);
-   outputContentionDelaySummary(out);
+   outputEventCountersSummary(out);
+   outputContentionCountersSummary(out);
 }
 
 void
-FiniteBufferNetworkModelEMesh::outputEventCountSummary(ostream& out)
+FiniteBufferNetworkModelEMesh::outputEventCountersSummary(ostream& out)
 {
-   out << "  Event Counters: " << endl;
+   out << "   Event Counters: " << endl;
    NetworkNode* node = _network_node_map[EMESH];
    out << "    Input Buffer Writes: " << node->getTotalInputBufferWrites() << endl;
    out << "    Input Buffer Reads: " << node->getTotalInputBufferReads() << endl;
@@ -394,9 +394,9 @@ FiniteBufferNetworkModelEMesh::outputEventCountSummary(ostream& out)
 }
 
 void
-FiniteBufferNetworkModelEMesh::outputContentionDelaySummary(ostream& out)
+FiniteBufferNetworkModelEMesh::outputContentionCountersSummary(ostream& out)
 {
-   out << "  Contention Counters: " << endl;
+   out << "   Contention Counters: " << endl;
 
    // NetPacket Injector
    FiniteBufferNetworkModel::outputContentionDelaySummary(out);

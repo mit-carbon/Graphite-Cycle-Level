@@ -13,7 +13,7 @@ public:
 
    UInt32 computeAction(const NetPacket& pkt);
    void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops);
-   void processReceivedPacket(NetPacket& pkt);
+   void processReceivedPacket(const NetPacket* packet);
 
    void outputSummary(std::ostream &out);
 

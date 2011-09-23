@@ -207,6 +207,7 @@ PacketBufferFlowControlScheme::dividePacket(NetPacket* net_packet, list<NetPacke
    NetPacket* head_flit_packet = new NetPacket(net_packet->time, net_packet->type,
          head_flit->size(), (void*) head_flit,
          false /* is_raw */, net_packet->sequence_num);
+   head_flit_packet->start_time = net_packet->start_time;
    net_packet_list.push_back(head_flit_packet);
    LOG_PRINT("PACKET_BUFFER: dividePacket(%p,%i) exit", net_packet, serialization_latency);
 }

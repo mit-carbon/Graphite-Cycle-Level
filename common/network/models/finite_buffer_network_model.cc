@@ -298,6 +298,7 @@ FiniteBufferNetworkModel::receiveModelingPacket(NetPacket* modeling_packet, list
 
       // Update the NetPacket time information
       raw_packet->time = modeling_packet->time + flit->_num_phits - 1;
+      assert(raw_packet->start_time == modeling_packet->start_time);
 
       // Add serialization latency to zero load delay
       SInt32 zero_load_delay = flit->_zero_load_delay;

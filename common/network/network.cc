@@ -158,11 +158,8 @@ Network::receivePacket(NetPacket* packet)
 
    NetworkModel* model = getNetworkModelFromPacketType(packet->type);
    
-   if (!model->isFiniteBuffer())
-   {
-      // I have accepted the packet - process the received packet
-      model->processReceivedPacket(*packet);
-   }
+   // I have accepted the packet - process the received packet
+   model->processReceivedPacket(packet);
 
    LOG_PRINT("Before Converting Cycle Count: packet->time(%llu)", packet->time);
    

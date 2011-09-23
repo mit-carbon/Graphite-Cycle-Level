@@ -232,6 +232,9 @@ NetworkModel::initializePerformanceCounters()
    // Delay Counters
    _total_packet_latency = 0;
    _total_contention_delay = 0;
+   // Throughput Counters
+   _last_packet_send_time = 0;
+   _last_packet_recv_time = 0;
 }
 
 void
@@ -252,6 +255,10 @@ NetworkModel::updatePacketSendStatistics(const NetPacket* raw_packet)
       _total_flits_broadcasted += num_flits;
       _total_bytes_broadcasted += num_bytes;
    }
+
+   // Send Time
+   assert(_last_packet_send_time <= raw_packet->start_time);
+   _last_packet_send_time = raw_packet->start_time;
 }
 
 void
@@ -267,13 +274,19 @@ NetworkModel::updatePacketReceiveStatistics(const NetPacket* raw_packet, SInt32 
 
    SInt32 num_flits = computeSerializationLatency(raw_packet);
    SInt32 num_bytes = getModeledLength(raw_packet);
-   
+  
+   // Received 
    _total_packets_received ++;
    _total_flits_received += num_flits;
    _total_bytes_received += num_bytes;
    
+   // Performance Counters
    _total_packet_latency += packet_latency;
    _total_contention_delay += contention_delay;
+   
+   // Recv Time
+   assert(_last_packet_recv_time <= raw_packet->time);
+   _last_packet_recv_time = raw_packet->time;
 }
 
 void
@@ -291,6 +304,7 @@ NetworkModel::outputSummary(ostream& out)
    out << "    Total Packets Received: " << _total_packets_received << endl;
    out << "    Total Flits Received: " << _total_flits_received << endl;
    out << "    Total Bytes Received: " << _total_bytes_received << endl;
+   
    // Delay Counters
    if (_total_packets_received > 0)
    {
@@ -298,24 +312,49 @@ NetworkModel::outputSummary(ostream& out)
       UInt64 total_packet_latency_in_ns = convertCycleCount(_total_packet_latency, getFrequency(), 1.0);
 
       out << "    Average Packet Length: " << 
-         ((float) _total_bytes_received / _total_packets_received) << endl;
+         ((float) _total_bytes_received) / _total_packets_received << endl;
       
-      out << "    Average Contention Delay (in clock cycles): " << 
-         ((double) _total_contention_delay / _total_packets_received) << endl;
+      out << "    Average Contention Delay (in clock-cycles): " << 
+         ((double) _total_contention_delay) / _total_packets_received << endl;
       out << "    Average Contention Delay (in ns): " << 
-         ((double) total_contention_delay_in_ns / _total_packets_received) << endl;
+         ((double) total_contention_delay_in_ns) / _total_packets_received << endl;
       
-      out << "    Average Packet Latency (in clock cycles): " <<
-         ((double) _total_packet_latency / _total_packets_received) << endl;
+      out << "    Average Packet Latency (in clock-cycles): " <<
+         ((double) _total_packet_latency) / _total_packets_received << endl;
       out << "    Average Packet Latency (in ns): " <<
-         ((double) total_packet_latency_in_ns / _total_packets_received) << endl;
+         ((double) total_packet_latency_in_ns) / _total_packets_received << endl;
    }
    else
    {
       out << "    Average Packet Length: 0" << endl;
-      out << "    Average Contention Delay (in clock cycles): 0" << endl;
+      out << "    Average Contention Delay (in clock-cycles): 0" << endl;
       out << "    Average Contention Delay (in ns): 0" << endl;
-      out << "    Average Packet Latency (in clock cycles): 0" << endl;
+      out << "    Average Packet Latency (in clock-cycles): 0" << endl;
       out << "    Average Packet Latency (in ns): 0" << endl;
+   }
+
+   // Offered Throughput
+   if (_total_packets_sent > 0)
+   {
+      out << "    Offered Throughput (in flits/clock-cycle): " <<
+         ((double) _total_flits_sent) / _last_packet_send_time << endl;
+      out << "    Offered Broadcast Throughput (in flits/clock-cycle): " <<
+         ((double) _total_flits_broadcasted) / _last_packet_send_time << endl;
+   }
+   else
+   {
+      out << "    Offered Throughput (in flits/clock-cycle): 0" << endl;
+      out << "    Offered Broadcast Throughput (in flits/clock-cycle): 0" << endl;
+   }
+
+   // Sustained Throughput
+   if (_total_flits_received > 0)
+   {
+      out << "    Sustained Throughput (in flits/clock-cycle): " <<
+         ((double) _total_flits_received) / _last_packet_recv_time << endl;
+   }
+   else
+   {
+      out << "    Sustained Throughput (in flits/clock-cycle): 0" << endl;
    }
 }

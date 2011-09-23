@@ -36,9 +36,9 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
       void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node);
 
       // Event Count Summary
-      void outputEventCountSummary(ostream& out);
+      void outputEventCountersSummary(ostream& out);
       // Contention Counters Summary
-      void outputContentionDelaySummary(ostream& out);
+      void outputContentionCountersSummary(ostream& out);
 
       // Private Variables
       volatile float _frequency;

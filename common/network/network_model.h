@@ -65,9 +65,9 @@ public:
 
    virtual volatile float getFrequency() = 0;
 
-   virtual UInt32 computeAction(const NetPacket& pkt) { assert(false); return 0; }
-   virtual void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops) { assert(false); }
-   virtual void processReceivedPacket(NetPacket &pkt) { assert(false); }
+   virtual UInt32 computeAction(const NetPacket& packet) { assert(false); return 0; }
+   virtual void routePacket(const NetPacket &packet, std::vector<Hop> &nextHops) { assert(false); }
+   virtual void processReceivedPacket(const NetPacket* packet) {}
 
    virtual void outputSummary(std::ostream &out);
 
@@ -141,6 +141,9 @@ private:
    // Delay Counters
    UInt64 _total_packet_latency;
    UInt64 _total_contention_delay;
+   // Throughput Counters
+   UInt64 _last_packet_send_time;
+   UInt64 _last_packet_recv_time;
    
    // Initialization
    void initializePerformanceCounters();

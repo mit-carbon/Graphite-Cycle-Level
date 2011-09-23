@@ -265,13 +265,13 @@ NetworkModelEMeshHopCounter::routePacket(const NetPacket &pkt,
 }
 
 void
-NetworkModelEMeshHopCounter::processReceivedPacket(NetPacket &pkt)
+NetworkModelEMeshHopCounter::processReceivedPacket(const NetPacket* packet)
 {
    assert(_enabled);
-   assert(pkt.specific == RECEIVER_CORE);
+   assert(packet->specific == RECEIVER_CORE);
 
-   UInt64 zero_load_latency = computeLatency(pkt.sender, _core_id);
-   updatePacketReceiveStatistics(&pkt, zero_load_latency);
+   UInt64 zero_load_latency = computeLatency(packet->sender, _core_id);
+   updatePacketReceiveStatistics(packet, zero_load_latency);
 }
 
 void
@@ -331,8 +331,8 @@ NetworkModelEMeshHopCounter::outputPowerSummary(ostream& out)
       volatile double dynamic_energy = _electrical_router_power_model->getTotalDynamicEnergy() +
                                        _electrical_link_power_model->getDynamicEnergy();
 
-      out << "    Static Power: " << static_power << endl;
-      out << "    Dynamic Energy: " << dynamic_energy << endl;
+      out << "    Static Power (in watts): " << static_power << endl;
+      out << "    Dynamic Energy (in joules): " << dynamic_energy << endl;
    }
 
    out << "   Event Counters:" << endl;

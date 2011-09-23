@@ -88,6 +88,9 @@ FiniteBufferNetworkModelAtac::FiniteBufferNetworkModelAtac(Network* network, SIn
          }
       }
    }
+
+   // Initialize Performance Counters
+   initializePerformanceCounters();
 }
 
 FiniteBufferNetworkModelAtac::~FiniteBufferNetworkModelAtac()
@@ -1018,12 +1021,13 @@ void
 FiniteBufferNetworkModelAtac::outputSummary(ostream& out)
 {
    NetworkModel::outputSummary(out);
-   outputEventCountSummary(out);
-   outputContentionDelaySummary(out);
+   outputEventCountersSummary(out);
+   outputContentionCountersSummary(out);
+   outputPerformanceCountersSummary(out);
 }
 
 void
-FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
+FiniteBufferNetworkModelAtac::outputEventCountersSummary(ostream& out)
 {
    // EMesh Routers
    // SendHub Routers
@@ -1039,7 +1043,7 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
    // elif (HTree):
    //    ReceiveHub-To-Cluster-HTree Links
 
-   out << "  Event Counters:" << endl;
+   out << "   Event Counters:" << endl;
   
    // ENet Router 
    out << "   EMesh Router:" << endl;
@@ -1189,9 +1193,9 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
 }
 
 void
-FiniteBufferNetworkModelAtac::outputContentionDelaySummary(ostream& out)
+FiniteBufferNetworkModelAtac::outputContentionCountersSummary(ostream& out)
 {
-   out << "  Contention Counters: " << endl;
+   out << "   Contention Counters: " << endl;
   
    // NetPacket Injector
    FiniteBufferNetworkModel::outputContentionDelaySummary(out);
@@ -1233,6 +1237,47 @@ FiniteBufferNetworkModelAtac::outputContentionDelaySummary(ostream& out)
    }
 }
 
+void
+FiniteBufferNetworkModelAtac::outputPerformanceCountersSummary(ostream& out)
+{
+   out << "   Performance Counters: " << endl;
+
+   // ENet
+   out << "    Total Packets Received On ENet: " << _total_packets_received_on_enet << endl;
+   out << "    Total Flits Received On ENet: " << _total_flits_received_on_enet << endl;
+   out << "    Total Bytes Received On ENet: " << _total_bytes_received_on_enet << endl;
+   if (_total_packets_received_on_enet > 0)
+   {
+      out << "    Sustained Throughput On ENet: " <<
+         ((double) _total_flits_received_on_enet) / _last_packet_recv_time_on_enet << endl;
+      out << "    Average Packet Latency On ENet: " <<
+         ((double) _total_packet_latency_on_enet) / _total_packets_received_on_enet << endl;
+   }
+   else
+   {
+      out << "    Sustained Throughput On ENet: 0" << endl;
+      out << "    Average Packet Latency On ENet: 0" << endl;
+   }
+  
+   // ONet 
+   out << "    Total Packets Received On ONet: " << _total_packets_received_on_onet << endl;
+   out << "    Total Flits Received On ONet: " << _total_flits_received_on_onet << endl;
+   out << "    Total Bytes Received On ONet: " << _total_bytes_received_on_onet << endl;
+   if (_total_packets_received_on_onet > 0)
+   {
+      out << "    Sustained Throughput On ONet: " <<
+         ((double) _total_flits_received_on_onet) / _last_packet_recv_time_on_onet << endl;
+      out << "    Average Packet Latency On ONet: " <<
+         ((double) _total_packet_latency_on_onet) / _total_packets_received_on_onet << endl;
+   }
+   else
+   {
+      out << "    Sustained Throughput On ONet: 0" << endl;
+      out << "    Average Packet Latency On ONet: 0" << endl;
+   }
+   
+}
+
 pair<bool,SInt32>
 FiniteBufferNetworkModelAtac::computeCoreCountConstraints(SInt32 core_count)
 {
@@ -1255,4 +1300,52 @@ FiniteBufferNetworkModelAtac::computeMemoryControllerPositions(SInt32 num_memory
    }
 
    return (make_pair(true, core_id_list_with_memory_controllers));
+}
+
+void
+FiniteBufferNetworkModelAtac::initializePerformanceCounters()
+{
+   // ENet
+   _total_packets_received_on_enet = 0;
+   _total_flits_received_on_enet = 0;
+   _total_bytes_received_on_enet = 0;
+   _total_packet_latency_on_enet = 0;
+   _last_packet_recv_time_on_enet = 0;
+   // ONet
+   _total_packets_received_on_onet = 0;
+   _total_flits_received_on_onet = 0;
+   _total_bytes_received_on_onet = 0;
+   _total_packet_latency_on_onet = 0;
+   _last_packet_recv_time_on_onet = 0;
+}
+
+void
+FiniteBufferNetworkModelAtac::processReceivedPacket(const NetPacket* net_packet)
+{
+   SInt32 num_flits = computeSerializationLatency(net_packet);
+   SInt32 num_bytes = getModeledLength(net_packet);
+
+   GlobalRoute global_route = computeGlobalRoute(net_packet->sender, net_packet->receiver);
+   if (global_route == GLOBAL_ENET)
+   {
+      _total_packets_received_on_enet ++;
+      _total_flits_received_on_enet += num_flits;
+      _total_bytes_received_on_enet += num_bytes;
+      
+      _total_packet_latency_on_enet += (net_packet->time - net_packet->start_time);
+      
+      assert(_last_packet_recv_time_on_enet <= net_packet->time);
+      _last_packet_recv_time_on_enet = net_packet->time;
+   }
+   else if (global_route == GLOBAL_ONET)
+   {
+      _total_packets_received_on_onet ++;
+      _total_flits_received_on_onet += num_flits;
+      _total_bytes_received_on_onet += num_bytes;
+
+      _total_packet_latency_on_onet += (net_packet->time - net_packet->start_time);
+
+      assert(_last_packet_recv_time_on_onet <= net_packet->time);
+      _last_packet_recv_time_on_onet = net_packet->time;
+   }
 }
