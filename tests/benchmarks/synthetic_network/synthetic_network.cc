@@ -20,8 +20,10 @@ NetworkTrafficType _traffic_pattern_type = UNIFORM_RANDOM;
 double _offered_load = 0.1;
 // Fraction of Broadcasts among injected packets
 double _fraction_broadcasts = 0.0;
-// Size of each Packet in Bytes
-SInt32 _packet_size = 8;
+// Size of each Unicast Packet in Bytes
+SInt32 _unicast_packet_size = 8;
+// Size of each Broadcast Packet in Bytes
+SInt32 _broadcast_packet_size = 8;
 // Total number of packets injected into the network per core
 UInt64 _total_packets = 10000;
 // Number of cores in the network
@@ -57,8 +59,10 @@ int main(int argc, char* argv[])
          _offered_load = (double) atof(argv[i+1]);
       else if (string(argv[i]) == "-b")
          _fraction_broadcasts = (double) atof(argv[i+1]);
-      else if (string(argv[i]) == "-s")
-         _packet_size = (SInt32) atoi(argv[i+1]);
+      else if (string(argv[i]) == "-us")
+         _unicast_packet_size = (SInt32) atoi(argv[i+1]);
+      else if (string(argv[i]) == "-bs")
+         _broadcast_packet_size = (SInt32) atoi(argv[i+1]);
       else if (string(argv[i]) == "-N")
          _total_packets = (UInt64) atoi(argv[i+1]);
       else if (string(argv[i]) == "-c") // Simulator arguments
@@ -260,12 +264,13 @@ void waitForCompletion()
 
 void printHelpMessage()
 {
-   fprintf(stderr, "[Usage]: ./synthetic_network_traffic_generator -p <arg1> -l <arg2> -b <arg3> -s <arg4> -N <arg5>\n");
+   fprintf(stderr, "[Usage]: ./synthetic_network_traffic_generator -p <arg1> -l <arg2> -b <arg3> -us <arg4> -bs <arg5> -N <arg6>\n");
    fprintf(stderr, "where <arg1> = Network Traffic Pattern Type (uniform_random, bit_complement, shuffle, transpose, tornado, nearest_neighbor) (default uniform_random)\n");
    fprintf(stderr, " and  <arg2> = Number of Packets injected into the Network per Core per Cycle (default 0.1)\n");
    fprintf(stderr, " and  <arg3> = Fraction of Broadcasts among Packets sent (default 0.0)\n");
-   fprintf(stderr, " and  <arg4> = Payload Size of each Packet in Bytes (default 8)\n");
-   fprintf(stderr, " and  <arg5> = Total Number of Packets injected into the Network per Core (default 10000)\n");
+   fprintf(stderr, " and  <arg4> = Payload Size of each Unicast Packet in Bytes (default 8)\n");
+   fprintf(stderr, " and  <arg5> = Payload Size of each Broadcast Packet in Bytes (default 8)\n");
+   fprintf(stderr, " and  <arg6> = Total Number of Packets injected into the Network per Core (default 10000)\n");
 }
 
 void debug_printf(const char* fmt, ...)
@@ -333,12 +338,14 @@ void SyntheticCore::netSend(UInt64 net_packet_injector_exit_time)
          // Send a packet to its destination core
          SInt32 receiver = (isBroadcastPacket()) ? NetPacket::BROADCAST :
                                                    _send_vec[_total_packets_sent % _send_vec.size()];
+         SInt32 packet_size = (receiver == NetPacket::BROADCAST) ? _broadcast_packet_size : _unicast_packet_size;
+
          _last_packet_send_time = time;
          
          // Construct packet
-         Byte data[_packet_size];
+         Byte data[packet_size];
          UInt64 send_time = max<UInt64>(_last_packet_send_time, net_packet_injector_exit_time);
-         NetPacket net_packet(send_time, _packet_type, _core->getId(), receiver, _packet_size, data);
+         NetPacket net_packet(send_time, _packet_type, _core->getId(), receiver, packet_size, data);
 
          // Event Counters
          _total_packets_sent ++;
