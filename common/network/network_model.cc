@@ -311,7 +311,7 @@ NetworkModel::outputSummary(ostream& out)
       UInt64 total_contention_delay_in_ns = convertCycleCount(_total_contention_delay, getFrequency(), 1.0);
       UInt64 total_packet_latency_in_ns = convertCycleCount(_total_packet_latency, getFrequency(), 1.0);
 
-      out << "    Average Packet Length: " << 
+      out << "    Average Packet Length (in bytes): " << 
          ((float) _total_bytes_received) / _total_packets_received << endl;
       
       out << "    Average Contention Delay (in clock-cycles): " << 
@@ -326,7 +326,7 @@ NetworkModel::outputSummary(ostream& out)
    }
    else
    {
-      out << "    Average Packet Length: 0" << endl;
+      out << "    Average Packet Length (in bytes): 0" << endl;
       out << "    Average Contention Delay (in clock-cycles): 0" << endl;
       out << "    Average Contention Delay (in ns): 0" << endl;
       out << "    Average Packet Latency (in clock-cycles): 0" << endl;
