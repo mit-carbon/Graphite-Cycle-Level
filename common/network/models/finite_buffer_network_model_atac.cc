@@ -1017,8 +1017,9 @@ FiniteBufferNetworkModelAtac::computeOpticalLinkLength()
 void
 FiniteBufferNetworkModelAtac::outputSummary(ostream& out)
 {
-   FiniteBufferNetworkModel::outputSummary(out);
+   NetworkModel::outputSummary(out);
    outputEventCountSummary(out);
+   outputContentionDelaySummary(out);
 }
 
 void
@@ -1182,6 +1183,51 @@ FiniteBufferNetworkModelAtac::outputEventCountSummary(ostream& out)
          {
             // ReceiveHub-To-Cluster-HTree Links
             out << "    Receive-Hub To Cluster HTree (" << receive_net << ") Traversals:" << endl;
+         }
+      }
+   }
+}
+
+void
+FiniteBufferNetworkModelAtac::outputContentionDelaySummary(ostream& out)
+{
+   out << "  Contention Counters: " << endl;
+  
+   // NetPacket Injector
+   FiniteBufferNetworkModel::outputContentionDelaySummary(out);
+
+   // ENet Router
+   out << "    ENet Router Average Contention Delay: " << _network_node_map[EMESH]->getAverageContentionDelay() << endl;
+   
+   if (_core_id == computeCoreIDWithOpticalHub(computeClusterID(_core_id)))
+   {
+      // Send Hub Router
+      out << "    Send Hub Router Average Contention Delay: " << _network_node_map[SEND_HUB]->getAverageContentionDelay() << endl;
+      // Receive Hub Router
+      out << "    Receive Hub Router Average Contention Delay: " << _network_node_map[RECEIVE_HUB]->getAverageContentionDelay() << endl;
+      
+      if (_receive_net_type == STAR)
+      {
+         // Star Net Router
+         for (SInt32 i = 0; i < _num_receive_nets_per_cluster; i++)
+         {
+            out << "    Star Net Router (" << i << ") Average Contention Delay: " << _network_node_map[STAR_NET_ROUTER_BASE + i]->getAverageContentionDelay() << endl;
+         }
+      }
+   }
+   else
+   {
+      // Send Hub Router
+      out << "    Send Hub Router Average Contention Delay: " << endl;
+      // Receive Hub Router
+      out << "    Receive Hub Router Average Contention Delay: " << endl;
+
+      if (_receive_net_type == STAR)
+      {
+         // Star Net Router
+         for (SInt32 i = 0; i < _num_receive_nets_per_cluster; i++)
+         {
+            out << "    Star Net Router (" << i << ") Average Contention Delay: " << endl;
          }
       }
    }

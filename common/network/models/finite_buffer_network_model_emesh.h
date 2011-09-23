@@ -37,6 +37,8 @@ class FiniteBufferNetworkModelEMesh : public FiniteBufferNetworkModel
 
       // Event Count Summary
       void outputEventCountSummary(ostream& out);
+      // Contention Counters Summary
+      void outputContentionDelaySummary(ostream& out);
 
       // Private Variables
       volatile float _frequency;

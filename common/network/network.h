@@ -119,11 +119,6 @@ public:
    NetworkModel* getNetworkModelFromPacketType(PacketType packet_type);
    PacketType getPacketTypeFromNetworkId(SInt32 network_id);
 
-   // -- Utilities -- //
-   
-   UInt32 getModeledLength(const NetPacket& pkt);
-   bool isModeled(const NetPacket& packet);
-   core_id_t getRequester(const NetPacket& packet);
 
 private:
    NetworkModel * _models[NUM_STATIC_NETWORKS];

@@ -18,15 +18,12 @@ public:
    FiniteBufferNetworkModel(Network* network, SInt32 network_id);
    ~FiniteBufferNetworkModel();
 
-   void enable() { _enabled = true; }
-   void disable() { _enabled = false; }
-
+   // NET_PACKET_INJECTOR
+   static const SInt32 NET_PACKET_INJECTOR = 0;
+   
    // Virtual Functions which are pure in network_model.h
    void reset() { }
    
-   // Output Summary
-   void outputSummary(ostream& out);
-
    // Send Network Packet
    void sendNetPacket(NetPacket* raw_packet, list<NetPacket*>& modeling_packet_list_to_send);
    // Receive Network Packet
@@ -44,31 +41,22 @@ public:
    void setNetworkNode(SInt32 node_index, NetworkNode* network_node)
    { _network_node_map[node_index] = network_node; }
 
-   // Get Serialization Latency
-   SInt32 computeSerializationLatency(const NetPacket* raw_packet);
-
 protected:
-   // If the network model is enabled
-   bool _enabled;
-   // Core Id on which this object is present
-   core_id_t _core_id;
    // Network Nodes that are present on this core: There is a one-to-one mapping here
    map<SInt32, NetworkNode*> _network_node_map;
    // Flow Control Scheme
    FlowControlScheme::Type _flow_control_scheme;
    // Flow Control Packet Type
    PacketType _flow_control_packet_type;
-   // Flit Width
-   SInt32 _flit_width;
    // CORE_INTERFACE port
    static const SInt32 CORE_INTERFACE = -1;
-   // NET_PACKET_INJECTOR
-   static const SInt32 NET_PACKET_INJECTOR = 0;
 
    // Create NetPacket Injector Node
    NetworkNode* createNetPacketInjectorNode(Router::Id ingress_router_id,
          BufferManagementScheme::Type ingress_router_buffer_management_scheme,
          SInt32 ingress_router_buffer_size);
+
+   void outputContentionDelaySummary(ostream& out);
 
 private:
    // Typedefs
@@ -88,8 +76,6 @@ private:
    };
    typedef list<CompletePacket> CompletePacketList;
    
-   // Lock
-   Lock _lock;
    // Sequence Numbers
    UInt32 _sender_sequence_num;
    
@@ -106,12 +92,6 @@ private:
    // Sender Contention Model
    QueueModelSimple* _sender_contention_model;
    
-   // Performance Counters
-   UInt64 _total_packets_received;
-   UInt64 _total_bytes_received;
-   UInt64 _total_packet_latency;
-   UInt64 _total_contention_delay;
-
    // Callback when packet leaves net packet injector
    NetPacketInjectorExitCallback _netPacketInjectorExitCallback;
    void* _netPacketInjectorExitCallbackObj;
@@ -119,9 +99,6 @@ private:
    // Compute the output endpoints->[channel, index] of a particular flit
    virtual void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node) = 0;
 
-   // Process Received Packet to record packet delays
-   void updatePacketStatistics(const NetPacket* pkt, SInt32 zero_load_delay);
-   
    // Receive raw packet containing actual application data (non-modeling packet)
    void receiveRawPacket(NetPacket* raw_packet, list<NetPacket*>& raw_packet_list_to_receive);
    // Receive modeling packet containing timing information (non-raw packet)
@@ -134,9 +111,6 @@ private:
 
    // Utils
    UInt64 computePacketId(core_id_t sender, UInt64 sequence_num);
-
-   // Initialization
-   void initializePerformanceCounters();
 
    // Signal Injector that packet has left the network interface
    UInt64 getNetPacketInjectorExitTime(const list<NetPacket*>& modeling_packet_list);

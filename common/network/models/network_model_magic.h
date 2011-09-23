@@ -1,42 +1,21 @@
-#ifndef NETWORK_MODEL_MAGIC_H
-#define NETWORK_MODEL_MAGIC_H
+#pragma once
 
 #include "network.h"
 #include "core.h"
-#include "lock.h"
 
 class NetworkModelMagic : public NetworkModel
 {
-   private:
-      bool _enabled;
-     
-      Lock _lock;
+public:
+   NetworkModelMagic(Network *net, SInt32 network_id);
+   ~NetworkModelMagic();
 
-      UInt64 _num_packets;
-      UInt64 _num_bytes;
+   volatile float getFrequency() { return 1.0; }
 
-      void initializePerformanceCounters();
+   UInt32 computeAction(const NetPacket& pkt);
+   void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops);
+   void processReceivedPacket(NetPacket& pkt);
 
-   public:
-      NetworkModelMagic(Network *net, SInt32 network_id);
-      ~NetworkModelMagic();
+   void outputSummary(std::ostream &out);
 
-      volatile float getFrequency() { return 1.0; }
-
-      UInt32 computeAction(const NetPacket& pkt);
-      void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops);
-      void processReceivedPacket(NetPacket& pkt);
-
-      void outputSummary(std::ostream &out);
-
-      void enable()
-      { _enabled = true; }
-
-      void disable()
-      { _enabled = false; }
-
-      void reset()
-      { initializePerformanceCounters(); }
+   void reset() {}
 };
-
-#endif /* NETWORK_MODEL_MAGIC_H */

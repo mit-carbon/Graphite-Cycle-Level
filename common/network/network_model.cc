@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 using namespace std;
 
 #include "simulator.h"
@@ -10,15 +11,20 @@ using namespace std;
 #include "finite_buffer_network_model_clos.h"
 #include "finite_buffer_network_model_atac.h"
 #include "finite_buffer_network_model_flip_atac.h"
+#include "network.h"
+#include "memory_manager.h"
+#include "clock_converter.h"
+#include "utils.h"
 #include "log.h"
 
-#include "network.h"
-
-NetworkModel::NetworkModel(Network *network, SInt32 network_id, bool is_finite_buffer):
-   _network(network),
-   _network_id(network_id),
-   _is_finite_buffer(is_finite_buffer)
+NetworkModel::NetworkModel(Network *network, SInt32 network_id, bool is_finite_buffer)
+   : _enabled(false)
+   , _network(network)
+   , _network_id(network_id)
+   , _is_finite_buffer(is_finite_buffer)
 {
+   _core_id = _network->getCore()->getId();
+   
    if (network_id == 0)
       _network_name = "USER_1";
    else if (network_id == 1)
@@ -33,6 +39,9 @@ NetworkModel::NetworkModel(Network *network, SInt32 network_id, bool is_finite_b
       LOG_PRINT_ERROR("Unrecognized Network Num(%u)", network_id);
 
    _tile_width = Sim()->getCfg()->getFloat("general/tile_width");
+
+   // Performance Counters
+   initializePerformanceCounters();
 }
 
 NetworkModel*
@@ -149,5 +158,164 @@ NetworkModel::computeMemoryControllerPositions(UInt32 network_type, SInt32 num_m
       default:
          LOG_PRINT_ERROR("Unrecognized network type(%u)", network_type);
          return make_pair(false, vector<core_id_t>());
+   }
+}
+
+core_id_t
+NetworkModel::getRequester(const NetPacket* packet)
+{
+   // USER network -- (packet.sender)
+   // SHARED_MEM network -- (getRequester(packet))
+   // SYSTEM network -- INVALID_CORE_ID
+   if ((_network_id == STATIC_NETWORK_USER_1) || (_network_id == STATIC_NETWORK_USER_2))
+      return packet->sender;
+   else if ((_network_id == STATIC_NETWORK_MEMORY_1) || (_network_id == STATIC_NETWORK_MEMORY_2))
+      return _network->getCore()->getMemoryManager()->getShmemRequester(packet->data);
+   else // (_network_id == STATIC_NETWORK_SYSTEM)
+      return packet->sender; 
+}
+
+bool
+NetworkModel::isModeled(const NetPacket* packet)
+{
+   // USER network -- (true)
+   // SHARED_MEM network -- (true)
+   // SYSTEM network -- (false)
+   return (_network_id == STATIC_NETWORK_SYSTEM) ? false : true;
+}
+
+SInt32
+NetworkModel::getModeledLength(const NetPacket* packet)
+{
+   SInt32 header_size = 1 + 2 * Config::getSingleton()->getCoreIDLength() + 2;
+   if ((packet->type == SHARED_MEM_1) || (packet->type == SHARED_MEM_2))
+   {
+      // packet_type + sender + receiver + length + shmem_msg.size()
+      // 1 byte for packet_type
+      // log2(core_id) for sender and receiver
+      // 2 bytes for packet length
+      SInt32 data_size = _network->getCore()->getMemoryManager()->getModeledLength(packet->data);
+      return header_size + data_size;
+   }
+   else
+   {
+      return header_size + packet->length;
+   }
+}
+
+SInt32
+NetworkModel::computeSerializationLatency(const NetPacket* raw_packet)
+{
+   assert(raw_packet->is_raw);
+   if (_flit_width == INFINITE_BANDWIDTH)
+      return 1;
+
+   SInt32 packet_length = getModeledLength(raw_packet);
+   return (SInt32) ceil((float) (packet_length * 8) / _flit_width);
+}
+
+void
+NetworkModel::initializePerformanceCounters()
+{
+   // Send
+   _total_packets_sent = 0;
+   _total_flits_sent = 0;
+   _total_bytes_sent = 0;
+   // Broadcasted
+   _total_packets_broadcasted = 0;
+   _total_flits_broadcasted = 0;
+   _total_bytes_broadcasted = 0;
+   // Received
+   _total_packets_received = 0;
+   _total_flits_received = 0;
+   _total_bytes_received = 0;
+   // Delay Counters
+   _total_packet_latency = 0;
+   _total_contention_delay = 0;
+}
+
+void
+NetworkModel::updatePacketSendStatistics(const NetPacket* raw_packet)
+{
+   SInt32 num_flits = computeSerializationLatency(raw_packet);
+   SInt32 num_bytes = getModeledLength(raw_packet);
+
+   // Sent
+   _total_packets_sent ++;
+   _total_flits_sent += num_flits;
+   _total_bytes_sent += num_bytes;
+
+   // Broadcasts
+   if (raw_packet->receiver == NetPacket::BROADCAST)
+   {
+      _total_packets_broadcasted ++;
+      _total_flits_broadcasted += num_flits;
+      _total_bytes_broadcasted += num_bytes;
+   }
+}
+
+void
+NetworkModel::updatePacketReceiveStatistics(const NetPacket* raw_packet, SInt32 zero_load_delay)
+{
+   UInt64 packet_latency = raw_packet->time - raw_packet->start_time;
+   UInt64 contention_delay = packet_latency - zero_load_delay;
+   
+   LOG_ASSERT_ERROR( ((UInt64)zero_load_delay) <= packet_latency,
+                    "[Sender(%i), Receiver(%i), Curr Core(%i)] : Zero Load Delay(%i) > Packet Latency(%llu)",
+                    raw_packet->sender, raw_packet->receiver, _core_id, zero_load_delay, packet_latency);
+   
+
+   SInt32 num_flits = computeSerializationLatency(raw_packet);
+   SInt32 num_bytes = getModeledLength(raw_packet);
+   
+   _total_packets_received ++;
+   _total_flits_received += num_flits;
+   _total_bytes_received += num_bytes;
+   
+   _total_packet_latency += packet_latency;
+   _total_contention_delay += contention_delay;
+}
+
+void
+NetworkModel::outputSummary(ostream& out)
+{
+   // Sent
+   out << "    Total Packets Sent: " << _total_packets_sent << endl;
+   out << "    Total Flits Sent: " << _total_flits_sent << endl;
+   out << "    Total Bytes Sent: " << _total_bytes_sent << endl;
+   // Broadcasted
+   out << "    Total Packets Broadcasted: " << _total_packets_broadcasted << endl;
+   out << "    Total Flits Broadcasted: " << _total_flits_broadcasted << endl;
+   out << "    Total Bytes Broadcasted: " << _total_bytes_broadcasted << endl;
+   // Received
+   out << "    Total Packets Received: " << _total_packets_received << endl;
+   out << "    Total Flits Received: " << _total_flits_received << endl;
+   out << "    Total Bytes Received: " << _total_bytes_received << endl;
+   // Delay Counters
+   if (_total_packets_received > 0)
+   {
+      UInt64 total_contention_delay_in_ns = convertCycleCount(_total_contention_delay, getFrequency(), 1.0);
+      UInt64 total_packet_latency_in_ns = convertCycleCount(_total_packet_latency, getFrequency(), 1.0);
+
+      out << "    Average Packet Length: " << 
+         ((float) _total_bytes_received / _total_packets_received) << endl;
+      
+      out << "    Average Contention Delay (in clock cycles): " << 
+         ((double) _total_contention_delay / _total_packets_received) << endl;
+      out << "    Average Contention Delay (in ns): " << 
+         ((double) total_contention_delay_in_ns / _total_packets_received) << endl;
+      
+      out << "    Average Packet Latency (in clock cycles): " <<
+         ((double) _total_packet_latency / _total_packets_received) << endl;
+      out << "    Average Packet Latency (in ns): " <<
+         ((double) total_packet_latency_in_ns / _total_packets_received) << endl;
+   }
+   else
+   {
+      out << "    Average Packet Length: 0" << endl;
+      out << "    Average Contention Delay (in clock cycles): 0" << endl;
+      out << "    Average Contention Delay (in ns): 0" << endl;
+      out << "    Average Packet Latency (in clock cycles): 0" << endl;
+      out << "    Average Packet Latency (in ns): 0" << endl;
    }
 }

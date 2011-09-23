@@ -1,5 +1,4 @@
-#ifndef NETWORK_MODEL_H
-#define NETWORK_MODEL_H
+#pragma once
 
 class NetPacket;
 class Network;
@@ -25,80 +24,124 @@ class Network;
 // vector.
 class NetworkModel
 {
+public:
+   NetworkModel(Network *network, SInt32 network_id, bool is_finite_buffer = false);
+   virtual ~NetworkModel() { }
+
+   class Hop
+   {
    public:
-      NetworkModel(Network *network, SInt32 network_id, bool is_finite_buffer = false);
-      virtual ~NetworkModel() { }
+      Hop(): 
+         final_dest(INVALID_CORE_ID), 
+         next_dest(INVALID_CORE_ID), 
+         specific(0), 
+         time(0) 
+      {}
+      ~Hop() {}
 
-      class Hop
-      {
-      public:
-         Hop(): 
-            final_dest(INVALID_CORE_ID), 
-            next_dest(INVALID_CORE_ID), 
-            specific(0), 
-            time(0) 
-         {}
-         ~Hop() {}
+      // Final & Next destinations of a packet
+      // 'final_dest' field is used to fill in the 'receiver' field in NetPacket
+      SInt32 final_dest;
+      SInt32 next_dest;
 
-         // Final & Next destinations of a packet
-         // 'final_dest' field is used to fill in the 'receiver' field in NetPacket
-         SInt32 final_dest;
-         SInt32 next_dest;
-
-         // This field may be used by network models to fill in the 'specific' field in NetPacket
-         // In general, specific field can be used by different network models for different functions
-         UInt32 specific;
-         
-         // This field fills in the 'time' field in NetPacket
-         UInt64 time;
-      };
-
-      class RoutingAction
-      {
-      public:
-         enum type_t
-         {
-            RECEIVE = 0x001,
-            FORWARD = 0x010,
-            DROP = 0x100
-         };
-      };
-
-      virtual volatile float getFrequency() = 0;
-
-      virtual UInt32 computeAction(const NetPacket& pkt) { assert(false); return 0; }
-      virtual void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops) { assert(false); }
-      virtual void processReceivedPacket(NetPacket &pkt) { assert(false); }
-
-      virtual void outputSummary(std::ostream &out) = 0;
-
-      virtual void enable() = 0;
-      virtual void disable() = 0;
-      virtual void reset() = 0;
-
-      SInt32 getNetworkId() { return _network_id; }
-      std::string getNetworkName() { return _network_name; }
-
-      bool isFiniteBuffer() { return _is_finite_buffer; }
-      static NetworkModel *createModel(Network* network, SInt32 network_id, UInt32 model_type);
-      static UInt32 parseNetworkType(std::string str);
-
-      static std::pair<bool,SInt32> computeCoreCountConstraints(UInt32 network_type, SInt32 core_count);
-      static std::pair<bool, std::vector<core_id_t> > computeMemoryControllerPositions(UInt32 network_type, SInt32 num_memory_controllers);
-
-   protected:
-      // Tile Width
-      double _tile_width;
-
-      Network *getNetwork() { return _network; }
-
-   private:
-      Network *_network;
+      // This field may be used by network models to fill in the 'specific' field in NetPacket
+      // In general, specific field can be used by different network models for different functions
+      UInt32 specific;
       
-      SInt32 _network_id;
-      std::string _network_name;
+      // This field fills in the 'time' field in NetPacket
+      UInt64 time;
+   };
 
-      bool _is_finite_buffer;
+   class RoutingAction
+   {
+   public:
+      enum type_t
+      {
+         RECEIVE = 0x001,
+         FORWARD = 0x010,
+         DROP = 0x100
+      };
+   };
+
+   virtual volatile float getFrequency() = 0;
+
+   virtual UInt32 computeAction(const NetPacket& pkt) { assert(false); return 0; }
+   virtual void routePacket(const NetPacket &pkt, std::vector<Hop> &nextHops) { assert(false); }
+   virtual void processReceivedPacket(NetPacket &pkt) { assert(false); }
+
+   virtual void outputSummary(std::ostream &out);
+
+   void enable()  { _enabled = true; }
+   void disable() { _enabled = false; }
+   virtual void reset() = 0;
+
+   SInt32 getNetworkId() { return _network_id; }
+   std::string getNetworkName() { return _network_name; }
+
+   // Get Serialization Latency
+   SInt32 computeSerializationLatency(const NetPacket* raw_packet);
+   // Is Packet Modeled
+   bool isModeled(const NetPacket* packet);
+
+   // Update Statistics on Packet Send
+   void updatePacketSendStatistics(const NetPacket* packet);
+   
+   // Is Finite Buffer Network Model
+   bool isFiniteBuffer() { return _is_finite_buffer; }
+   static NetworkModel *createModel(Network* network, SInt32 network_id, UInt32 model_type);
+   static UInt32 parseNetworkType(std::string str);
+
+   static std::pair<bool,SInt32> computeCoreCountConstraints(UInt32 network_type, SInt32 core_count);
+   static std::pair<bool, std::vector<core_id_t> > computeMemoryControllerPositions(UInt32 network_type, SInt32 num_memory_controllers);
+
+protected:
+   // If the network model is enabled
+   bool _enabled;
+   // Core Id on which this object is present
+   core_id_t _core_id;
+   // Flit Width
+   SInt32 _flit_width;
+   // Tile Width
+   double _tile_width;
+
+   static const SInt32 INFINITE_BANDWIDTH = -1;
+
+   // Get pointer to network object
+   Network *getNetwork() { return _network; }
+  
+   // Get Length of Packet sent in hardware
+   SInt32 getModeledLength(const NetPacket* packet);
+   // Get Requester for the packet
+   core_id_t getRequester(const NetPacket* packet);
+
+   // Update Statistics on Packet Receive
+   void updatePacketReceiveStatistics(const NetPacket* pkt, SInt32 zero_load_delay);
+
+private:
+   Network *_network;
+   
+   SInt32 _network_id;
+   std::string _network_name;
+
+   bool _is_finite_buffer;
+   
+   // Performance Counters
+   // Sent
+   UInt64 _total_packets_sent;
+   UInt64 _total_flits_sent;
+   UInt64 _total_bytes_sent;
+   // Broadcasted
+   UInt64 _total_packets_broadcasted;
+   UInt64 _total_flits_broadcasted;
+   UInt64 _total_bytes_broadcasted;
+   // Received
+   UInt64 _total_packets_received;
+   UInt64 _total_flits_received;
+   UInt64 _total_bytes_received;
+   // Delay Counters
+   UInt64 _total_packet_latency;
+   UInt64 _total_contention_delay;
+   
+   // Initialization
+   void initializePerformanceCounters();
 };
-
-#endif // NETWORK_MODEL_H

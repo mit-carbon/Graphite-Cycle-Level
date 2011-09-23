@@ -225,16 +225,18 @@ Network::receivePacketList(const list<NetPacket*>& net_packet_list_to_receive)
 void
 Network::sendPacket(const NetPacket* packet, SInt32 next_hop)
 {
+   NetworkModel* network_model = getNetworkModelFromPacketType(packet->type);
    LOG_PRINT("sendPacket(%p) enter", packet);
    LOG_PRINT("sendPacket(): time(%llu), type(%i), sender(%i), receiver(%i), network_name(%s)",
          packet->time, packet->type, packet->sender, next_hop,
-         getNetworkModelFromPacketType(packet->type)->getNetworkName().c_str());
+         network_model->getNetworkName().c_str());
 
    UnstructuredBuffer* event_args = new UnstructuredBuffer();
    (*event_args) << next_hop << packet;
    EventNetwork* event = new EventNetwork(packet->time, event_args);
+   
    // FIXME: Decide about the event_queue_type
-   EventQueue::Type event_queue_type = ((_enabled) && (isModeled(*packet))) ?
+   EventQueue::Type event_queue_type = ((_enabled) && (network_model->isModeled(packet))) ?
                                        EventQueue::ORDERED : EventQueue::UNORDERED;
    Event::processInOrder(event, next_hop, event_queue_type);
 
@@ -497,18 +499,24 @@ Network::netSend(NetPacket& packet, UInt64 start_time)
       packet.start_time = packet.time;
    }
 
+   // Get network model
+   NetworkModel* network_model = getNetworkModelFromPacketType(packet.type);
+   
+   // Update Packet Send Counters
+   network_model->updatePacketSendStatistics(&packet);
+
+   // Clone Packet
    NetPacket* packet_to_send = packet.clone();
 
-   NetworkModel* model = getNetworkModelFromPacketType(packet_to_send->type);
-   if (model->isFiniteBuffer())
+   if (network_model->isFiniteBuffer())
    {
       LOG_PRINT("Finite Buffer Model");
       // Call FiniteBufferNetworkModel functions
-      FiniteBufferNetworkModel* finite_buffer_model = (FiniteBufferNetworkModel*) model;
+      FiniteBufferNetworkModel* finite_buffer_network_model = (FiniteBufferNetworkModel*) network_model;
       
       // Divide Packet into flits
       list<NetPacket*> net_packet_list_to_send;
-      finite_buffer_model->sendNetPacket(packet_to_send, net_packet_list_to_send);
+      finite_buffer_network_model->sendNetPacket(packet_to_send, net_packet_list_to_send);
      
       // Send out raw packets
       if (packet_to_send->receiver == NetPacket::BROADCAST)
@@ -531,6 +539,7 @@ Network::netSend(NetPacket& packet, UInt64 start_time)
 
       return packet.length;
    }
+
    else // (!model->isFiniteBuffer())
    {
       // Call forwardPacket(packet_to_send)
@@ -557,57 +566,6 @@ SInt32
 Network::netBroadcast(PacketType type, const void *buf, UInt32 len)
 {
    return netSend(NetPacket::BROADCAST, type, buf, len);
-}
-
-// Utilities
-
-core_id_t
-Network::getRequester(const NetPacket& packet)
-{
-   // USER network -- (packet.sender)
-   // SHARED_MEM network -- (getRequester(packet))
-   // SYSTEM network -- INVALID_CORE_ID
-   SInt32 network_id = (getNetworkModelFromPacketType(packet.type))->getNetworkId();
-   if ((network_id == STATIC_NETWORK_USER_1) || (network_id == STATIC_NETWORK_USER_2))
-      return packet.sender;
-   else if ((network_id == STATIC_NETWORK_MEMORY_1) || (network_id == STATIC_NETWORK_MEMORY_2))
-      return getCore()->getMemoryManager()->getShmemRequester(packet.data);
-   else // (network_id == STATIC_NETWORK_SYSTEM)
-      return packet.sender; 
-}
-
-bool
-Network::isModeled(const NetPacket& packet)
-{
-   // USER network -- (true)
-   // SHARED_MEM network -- (true)
-   // SYSTEM network -- (false)
-   SInt32 network_id = (getNetworkModelFromPacketType(packet.type))->getNetworkId();
-   if (network_id == STATIC_NETWORK_SYSTEM)
-      return false;
-   else
-      return true;
-}
-
-// Get Modeled Length
-
-UInt32
-Network::getModeledLength(const NetPacket& pkt)
-{
-   UInt32 header_size = 1 + 2 * Config::getSingleton()->getCoreIDLength() + 2;
-   if ((pkt.type == SHARED_MEM_1) || (pkt.type == SHARED_MEM_2))
-   {
-      // packet_type + sender + receiver + length + shmem_msg.size()
-      // 1 byte for packet_type
-      // log2(core_id) for sender and receiver
-      // 2 bytes for packet length
-      UInt32 data_size = getCore()->getMemoryManager()->getModeledLength(pkt.data);
-      return header_size + data_size;
-   }
-   else
-   {
-      return header_size + pkt.length;
-   }
 }
 
 // -- NetPacket

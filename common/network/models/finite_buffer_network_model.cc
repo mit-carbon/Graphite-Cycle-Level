@@ -11,11 +11,9 @@
 
 FiniteBufferNetworkModel::FiniteBufferNetworkModel(Network* net, SInt32 network_id)
    : NetworkModel(net, network_id, true)
-   , _enabled(false)
    , _sender_sequence_num(0)
    , _netPacketInjectorExitCallback(NULL)
 {
-   _core_id = getNetwork()->getCore()->getId();
    _flow_control_packet_type = getNetwork()->getPacketTypeFromNetworkId(network_id);
 
    // Account for Sender Contention Delay
@@ -25,9 +23,6 @@ FiniteBufferNetworkModel::FiniteBufferNetworkModel(Network* net, SInt32 network_
    _vec_complete_packet_list.resize(Config::getSingleton()->getTotalCores());
    _vec_next_recv_sequence_num_to_be_assigned.resize(Config::getSingleton()->getTotalCores(), 0);
    _vec_next_recv_sequence_num_to_be_processed.resize(Config::getSingleton()->getTotalCores(), 0);
-
-   // Event Counters
-   initializePerformanceCounters();
 }
 
 FiniteBufferNetworkModel::~FiniteBufferNetworkModel()
@@ -38,11 +33,9 @@ FiniteBufferNetworkModel::~FiniteBufferNetworkModel()
 void
 FiniteBufferNetworkModel::sendNetPacket(NetPacket* raw_packet, list<NetPacket*>& modeling_packet_list_to_send)
 {
-   ScopedLock sl(_lock);
-
    LOG_PRINT("sendNetPacket(%i, %p, %u) enter", getNetwork()->getCore()->getId(), raw_packet, _flow_control_scheme);
 
-   assert(getNetwork()->isModeled(*raw_packet));
+   assert(isModeled(raw_packet));
 
    // Increment Sequence Number
    raw_packet->sequence_num = _sender_sequence_num ++;
@@ -86,8 +79,6 @@ void
 FiniteBufferNetworkModel::receiveNetPacket(NetPacket* net_packet,
       list<NetPacket*>& modeling_packet_list_to_send, list<NetPacket*>& raw_packet_list_to_receive)
 {
-   ScopedLock sl(_lock);
-
    LOG_PRINT("receiveNetPacket(%p): Time(%llu), Sender(%i), Receiver(%i), Length(%i), Sequence Num(%llu), Raw(%s) enter",
          net_packet, net_packet->time, net_packet->sender, net_packet->receiver,
          net_packet->length, net_packet->sequence_num, (net_packet->is_raw) ? "YES" : "NO");
@@ -221,7 +212,7 @@ void
 FiniteBufferNetworkModel::receiveRawPacket(NetPacket* raw_packet, list<NetPacket*>& raw_packet_list_to_receive)
 {
    LOG_PRINT("receiveRawPacket(%p) enter", raw_packet);
-   assert(getNetwork()->isModeled(*raw_packet));
+   assert(isModeled(raw_packet));
 
    // 1. Assign a recv_sequence_num to this packet
    UInt32 recv_sequence_num = _vec_next_recv_sequence_num_to_be_assigned[raw_packet->sender] ++;
@@ -400,7 +391,7 @@ FiniteBufferNetworkModel::getReadyPackets(SInt32 sender, list<NetPacket*>& raw_p
          raw_packet->time = max_packet_time;
 
          // Update Packet Statistics
-         updatePacketStatistics(raw_packet, zero_load_delay);
+         updatePacketReceiveStatistics(raw_packet, zero_load_delay);
 
          // Add the packet to the ready packet list
          raw_packet_list_to_receive.push_back(raw_packet);
@@ -422,81 +413,10 @@ FiniteBufferNetworkModel::getReadyPackets(SInt32 sender, list<NetPacket*>& raw_p
    LOG_PRINT("getReadyPackets(%i) exit", sender);
 }
 
-void
-FiniteBufferNetworkModel::updatePacketStatistics(const NetPacket* raw_packet, SInt32 zero_load_delay)
-{
-   assert(getNetwork()->isModeled(*raw_packet));
-
-   UInt64 packet_latency = raw_packet->time - raw_packet->start_time;
-   
-   LOG_ASSERT_ERROR( ((UInt64)zero_load_delay) <= packet_latency,
-                    "[Sender(%i), Receiver(%i), Curr Core(%i)] : Zero Load Delay(%i) > Packet Latency(%llu)",
-                    raw_packet->sender, raw_packet->receiver, _core_id, zero_load_delay, packet_latency);
-   
-   UInt64 contention_delay = packet_latency - zero_load_delay;
-
-   _total_packets_received ++;
-   UInt32 packet_length = getNetwork()->getModeledLength(*raw_packet);
-   _total_bytes_received += packet_length;
-   _total_packet_latency += packet_latency;
-   _total_contention_delay += contention_delay;
-}
-
-void
-FiniteBufferNetworkModel::outputSummary(ostream& out)
-{
-   out << "    Total Bytes Received: " << _total_bytes_received << endl;
-   out << "    Total Packets Received: " << _total_packets_received << endl;
-   if (_total_packets_received > 0)
-   {
-      UInt64 total_contention_delay_in_ns = convertCycleCount(_total_contention_delay, getFrequency(), 1.0);
-      UInt64 total_packet_latency_in_ns = convertCycleCount(_total_packet_latency, getFrequency(), 1.0);
-
-      out << "    Average Packet Length: " << 
-         ((float) _total_bytes_received / _total_packets_received) << endl;
-      
-      out << "    Average Contention Delay (in clock cycles): " << 
-         ((double) _total_contention_delay / _total_packets_received) << endl;
-      out << "    Average Contention Delay (in ns): " << 
-         ((double) total_contention_delay_in_ns / _total_packets_received) << endl;
-      
-      out << "    Average Packet Latency (in clock cycles): " <<
-         ((double) _total_packet_latency / _total_packets_received) << endl;
-      out << "    Average Packet Latency (in ns): " <<
-         ((double) total_packet_latency_in_ns / _total_packets_received) << endl;
-   }
-   else
-   {
-      out << "    Average Packet Length: 0" << endl;
-      out << "    Average Contention Delay (in clock cycles): 0" << endl;
-      out << "    Average Contention Delay (in ns): 0" << endl;
-      out << "    Average Packet Latency (in clock cycles): 0" << endl;
-      out << "    Average Packet Latency (in ns): 0" << endl;
-   }
-}
-
-SInt32
-FiniteBufferNetworkModel::computeSerializationLatency(const NetPacket* raw_packet)
-{
-   assert(raw_packet->is_raw);
-   SInt32 packet_length = getNetwork()->getModeledLength(*raw_packet);
-
-   return (SInt32) ceil((float) (packet_length * 8) / _flit_width);
-}
-
 UInt64
 FiniteBufferNetworkModel::computePacketId(core_id_t sender, UInt64 sender_sequence_num)
 {
    return ( (((UInt64) sender) << 32) + sender_sequence_num );
-}
-
-void
-FiniteBufferNetworkModel::initializePerformanceCounters()
-{
-   _total_packets_received = 0;
-   _total_bytes_received = 0;
-   _total_packet_latency = 0;
-   _total_contention_delay = 0;
 }
 
 UInt64
@@ -526,6 +446,13 @@ FiniteBufferNetworkModel::signalNetPacketInjector(UInt64 time)
    assert(time != UINT64_MAX_);
    if (_netPacketInjectorExitCallback)
       _netPacketInjectorExitCallback(_netPacketInjectorExitCallbackObj, time);
+}
+
+void
+FiniteBufferNetworkModel::outputContentionDelaySummary(ostream& out)
+{
+   // Net Packet Injector
+   out << "    NetPacket Injector Average Contention Delay: " << _network_node_map[NET_PACKET_INJECTOR]->getAverageContentionDelay() << endl;
 }
 
 void

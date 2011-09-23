@@ -372,8 +372,9 @@ FiniteBufferNetworkModelEMesh::computeMemoryControllerPositions(SInt32 num_memor
 void
 FiniteBufferNetworkModelEMesh::outputSummary(ostream& out)
 {
-   FiniteBufferNetworkModel::outputSummary(out);
+   NetworkModel::outputSummary(out);
    outputEventCountSummary(out);
+   outputContentionDelaySummary(out);
 }
 
 void
@@ -387,7 +388,19 @@ FiniteBufferNetworkModelEMesh::outputEventCountSummary(ostream& out)
    for (SInt32 i = 0; i < 5; i++)
    {
       UInt64 crossbar_traversals = (i < node->getNumOutputChannels()) ? node->getTotalCrossbarTraversals(i+1) : 0;
-      out << "    Total Crossbar[" << i+1 << "] Traversals: " << crossbar_traversals << endl;
+      out << "    Crossbar[" << i+1 << "] Traversals: " << crossbar_traversals << endl;
    }
    out << "    Link Traversals: " << node->getTotalOutputLinkUnicasts(Channel::ALL) << endl;
+}
+
+void
+FiniteBufferNetworkModelEMesh::outputContentionDelaySummary(ostream& out)
+{
+   out << "  Contention Counters: " << endl;
+
+   // NetPacket Injector
+   FiniteBufferNetworkModel::outputContentionDelaySummary(out);
+
+   // EMesh Router
+   out << "    EMesh Router Average Contention Delay: " << _network_node_map[EMESH]->getAverageContentionDelay() << endl;
 }

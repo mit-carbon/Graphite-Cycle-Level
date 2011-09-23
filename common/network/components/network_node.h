@@ -56,6 +56,9 @@ public:
    UInt64 getTotalOutputLinkUnicasts(SInt32 link_id_start, SInt32 link_id_end = Channel::INVALID);
    UInt64 getTotalOutputLinkBroadcasts(SInt32 link_id_start, SInt32 link_id_end = Channel::INVALID);
 
+   // Query Contention Counters
+   float getAverageContentionDelay();
+
    // RouterPerformanceModel
    RouterPerformanceModel* getRouterPerformanceModel()
    { return _router_performance_model; }
@@ -64,10 +67,6 @@ public:
       assert(output_channel >= 0 && output_channel < _num_output_channels);
       return _link_performance_model_list[output_channel];
    }
-
-   // Time Normalizer
-   // TimeNormalizer* getTimeNormalizer()
-   // { return _time_normalizer; }
 
 private:
    Router::Id _router_id;
@@ -91,12 +90,10 @@ private:
 
    // Contention Model Counters
    vector<UInt64> _total_contention_delay_counters;
+   vector<UInt64> _total_flits_processed;
 
    // Cached Output Endpoint List - For all the available input channels
    vector< vector<Channel::Endpoint>* > _cached_output_endpoint_list;
-
-   // Time Normalizer
-   // TimeNormalizer* _time_normalizer;
 
    // Number of Input and Output Channels
    SInt32 _num_input_channels;
@@ -116,8 +113,6 @@ private:
 
    // Normalize Time
    void normalizeTime(NetworkMsg* network_msg);
-   // Communicate Progress Rate Info to adjoining router
-   void communicateProgressRateInfo(BufferManagementMsg* buffer_msg);
    // Perform Router and Link Traversal
    void performRouterAndLinkTraversal(NetworkMsg* output_network_msg);
    // Construct NetPackets

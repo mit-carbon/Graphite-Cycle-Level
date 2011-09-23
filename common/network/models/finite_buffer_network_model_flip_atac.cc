@@ -621,8 +621,8 @@ FiniteBufferNetworkModelFlipAtac::getRandNum(UInt32 start, UInt32 end)
 void
 FiniteBufferNetworkModelFlipAtac::outputSummary(ostream& out)
 {
-   FiniteBufferNetworkModel::outputSummary(out);
-     outputEventCountSummary(out);
+   NetworkModel::outputSummary(out);
+   outputEventCountSummary(out);
 }
 
 // print event counts to sim.out file

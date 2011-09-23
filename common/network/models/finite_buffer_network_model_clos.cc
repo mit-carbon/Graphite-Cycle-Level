@@ -514,7 +514,7 @@ FiniteBufferNetworkModelClos::getRandNum(UInt32 start, UInt32 end)
 void
 FiniteBufferNetworkModelClos::outputSummary(ostream& out)
 {
-   FiniteBufferNetworkModel::outputSummary(out);
+   NetworkModel::outputSummary(out);
    outputEventCountSummary(out);
 }
 

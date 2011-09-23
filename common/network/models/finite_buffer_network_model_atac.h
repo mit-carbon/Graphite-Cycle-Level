@@ -153,6 +153,8 @@ class FiniteBufferNetworkModelAtac : public FiniteBufferNetworkModel
     
       // Event Counters Summary 
       void outputEventCountSummary(ostream& out);
+      // Contention Counters Summary
+      void outputContentionDelaySummary(ostream& out);
 
       // Virtual Function in FiniteBufferNetworkModel
       void computeOutputEndpointList(HeadFlit* head_flit, NetworkNode* curr_network_node);

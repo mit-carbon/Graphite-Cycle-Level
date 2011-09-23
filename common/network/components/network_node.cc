@@ -43,15 +43,10 @@ NetworkNode::NetworkNode(Router::Id router_id,
    initializeContentionModelCounters();
 
    // printNode();
-
-   // Time Normalizer
-   // _time_normalizer = TimeNormalizer::create(Config::getSingleton()->getApplicationCores());
 }
 
 NetworkNode::~NetworkNode()
-{
-   // delete _time_normalizer;
-}
+{}
 
 void
 NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& output_net_packet_list)
@@ -130,19 +125,8 @@ NetworkNode::processNetPacket(NetPacket* input_net_packet, list<NetPacket*>& out
    {
       NetworkMsg* output_network_msg = *msg_it;
       
-      if (output_network_msg->_type == NetworkMsg::DATA)
-      {
-         // Account for router(data pipeline) and link delays + update dynamic energy
-         performRouterAndLinkTraversal(output_network_msg);
-      }
-      else if (output_network_msg->_type == NetworkMsg::BUFFER_MANAGEMENT)
-      {
-         // Account for router(credit pipeline) and link delays
-         performRouterAndLinkTraversal(output_network_msg);
-
-         // Set rate of progress info
-         communicateProgressRateInfo((BufferManagementMsg*) output_network_msg);
-      }
+      // Account for router(credit/data pipeline) and link delays + update dynamic energy
+      performRouterAndLinkTraversal(output_network_msg);
 
       // Construct NetPacket and add to list
       constructNetPackets(output_network_msg, output_net_packet_list);
@@ -249,6 +233,10 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
       
       {
          Flit* flit = (Flit*) output_network_msg;
+
+         // Update Contention Model Counters - when zero load delay is not factored in
+         updateContentionModelCounters(flit);
+         
          SInt32 output_channel = flit->_output_endpoint._channel_id;
 
          // Router Performance Model (Data Pipeline delay)
@@ -270,10 +258,6 @@ NetworkNode::performRouterAndLinkTraversal(NetworkMsg* output_network_msg)
 
          // Increment Zero Load Delay
          flit->_zero_load_delay += (_router_performance_model->getDataPipelineDelay() + link_delay);
-
-
-         // Update Contention Model Counters
-         updateContentionModelCounters(flit);
       }
       
       break;
@@ -351,6 +335,7 @@ void
 NetworkNode::initializeContentionModelCounters()
 {
    _total_contention_delay_counters.resize(_num_input_channels, 0);
+   _total_flits_processed.resize(_num_input_channels, 0);
 }
 
 void
@@ -402,7 +387,11 @@ void
 NetworkNode::updateContentionModelCounters(Flit* flit)
 {
    SInt32 input_channel = flit->_input_endpoint._channel_id;
-   _total_contention_delay_counters[input_channel] += (flit->_normalized_time - flit->_normalized_time_at_entry);
+   if (_router_id._index == FiniteBufferNetworkModel::NET_PACKET_INJECTOR)
+      _total_contention_delay_counters[input_channel] += (flit->_normalized_time - flit->_net_packet->start_time);
+   else // (_router_id._index != FiniteBufferNetworkModel::NET_PACKET_INJECTOR)
+      _total_contention_delay_counters[input_channel] += (flit->_normalized_time - flit->_normalized_time_at_entry);
+   _total_flits_processed[input_channel] ++;
 }
 
 UInt64
@@ -474,6 +463,19 @@ NetworkNode::getTotalOutputLinkBroadcasts(SInt32 link_id_start, SInt32 link_id_e
    return total_link_broadcasts;
 }
 
+float
+NetworkNode::getAverageContentionDelay()
+{
+   UInt64 total_contention_delay = 0;
+   UInt64 total_flits_processed = 0;
+   for (SInt32 i = 0; i < _num_input_channels; i++)
+   {
+      total_contention_delay += _total_contention_delay_counters[i];
+      total_flits_processed += _total_flits_processed[i];
+   }
+   return ((float) total_contention_delay) / total_flits_processed;
+}
+
 vector<Channel::Endpoint>*
 NetworkNode::getOutputEndpointList(SInt32 input_channel)
 {
@@ -493,42 +495,26 @@ NetworkNode::normalizeTime(NetworkMsg* network_msg)
 {
    switch (network_msg->_type)
    {
-      case NetworkMsg::DATA:
+   case NetworkMsg::DATA:
 
-         {
-            Flit* flit = (Flit*) network_msg;
-            // Compute normalized time
-            flit->_normalized_time = flit->_net_packet->time; 
-            // _time_normalizer->normalize(flit->_net_packet->time, flit->_requester);
-            // Set the entry time to account for the time spent in the router
-            flit->_normalized_time_at_entry = flit->_normalized_time;
-         }
+      {
+         Flit* flit = (Flit*) network_msg;
+         // Compute normalized time
+         flit->_normalized_time = flit->_net_packet->time; 
+         // _time_normalizer->normalize(flit->_net_packet->time, flit->_requester);
+         // Set the entry time to account for the time spent in the router
+         flit->_normalized_time_at_entry = flit->_normalized_time;
+      }
 
-         break;
+      break;
 
-      case NetworkMsg::BUFFER_MANAGEMENT:
-         
-         {            
-            BufferManagementMsg* buffer_msg = (BufferManagementMsg*) network_msg;
-            // Re-normalize according to average rate of progress
-            UInt64 renormalized_time = buffer_msg->_normalized_time;
-            // _time_normalizer->renormalize(buffer_msg->_normalized_time, buffer_msg->_average_rate_of_progress);
-            buffer_msg->_normalized_time = renormalized_time;
-         }
+   case NetworkMsg::BUFFER_MANAGEMENT:
+      break;
 
-         break;
-
-      default:
-         LOG_PRINT_ERROR("Unrecognized NetworkMsg type(%u)", network_msg->_type);
-         break;
+   default:
+      LOG_PRINT_ERROR("Unrecognized NetworkMsg type(%u)", network_msg->_type);
+      break;
    }
-}
-
-void
-NetworkNode::communicateProgressRateInfo(BufferManagementMsg* buffer_msg)
-{
-   // Set the average rate of progress
-   // buffer_msg->_average_rate_of_progress = _time_normalizer->getAverageRateOfProgress();
 }
 
 void
@@ -707,7 +693,7 @@ NetworkNode::printNetPacket(NetPacket* net_packet, bool is_input_msg)
          if (buffer_msg->_type == BufferManagementScheme::CREDIT)
          {
             CreditMsg* credit_msg = (CreditMsg*) buffer_msg;
-            sstrcat(output_str, ", Credit(%i)", credit_msg->_num_credits);            
+            sstrcat(output_str, ", Credit(%i)", credit_msg->_num_credits);
          }
          else if (buffer_msg->_type == BufferManagementScheme::ON_OFF)
          {
