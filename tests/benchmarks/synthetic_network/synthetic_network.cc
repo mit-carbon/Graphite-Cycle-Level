@@ -28,6 +28,9 @@ SInt32 _broadcast_packet_size = 8;
 UInt64 _total_packets = 10000;
 // Number of cores in the network
 SInt32 _num_cores;
+// Warmup and Measurement Phases
+SInt32 _num_cores_with_warmup_phase_completed = 0;
+SInt32 _num_cores_with_measurement_phase_completed = 0;
 
 // Type of each packet (so as to send on USER_2 network)
 PacketType _packet_type = USER_2;
@@ -45,10 +48,10 @@ int main(int argc, char* argv[])
    printf("\n[SYNTHETIC NETWORK BENCHMARK]: Starting Test\n\n");
 
    CarbonStartSim(argc, argv);
-   debug_printf("Executed CarbonStartSim()\n");
+   log("Executed CarbonStartSim()");
 
    Simulator::__enablePerformanceModels();
-   debug_printf("Enabled Performance Models\n");
+   log("Enabled Performance Models");
    
    // Read Command Line Arguments
    for (SInt32 i = 1; i < argc-1; i += 2)
@@ -80,10 +83,10 @@ int main(int argc, char* argv[])
       }
    }
 
-   debug_printf("Finished parsing command line arguments\n");
+   log("Finished parsing command line arguments");
 
    _num_cores = (SInt32) Config::getSingleton()->getTotalCores();
-   debug_printf("Num Application Cores(%i)\n", _num_cores);
+   log("Num Application Cores(%i)", _num_cores);
 
    // Initialize Synthetic Core Objs
    initializeSyntheticCores();
@@ -174,7 +177,7 @@ void deinitializeSyntheticCores()
 
 void processStartSimulationEvent(Event* event)
 {
-   debug_printf("processStartSimulationEvent\n");
+   log("processStartSimulationEvent");
    for (SInt32 i = 0; i < _num_cores; i++)
    {
       // Push the first events
@@ -273,13 +276,14 @@ void printHelpMessage()
    fprintf(stderr, " and  <arg6> = Total Number of Packets injected into the Network per Core (default 10000)\n");
 }
 
-void debug_printf(const char* fmt, ...)
+void log(const char* fmt, ...)
 {
 #ifdef DEBUG
    va_list ap;
    va_start(ap, fmt);
 
    vfprintf(stderr, fmt, ap);
+   fprintf(stderr, "\n");
    va_end(ap);
 #endif
 }
@@ -292,15 +296,25 @@ SyntheticCore::SyntheticCore(Core* core, const vector<int>& send_vec, const vect
    , _total_flits_sent(0)
    , _total_packets_received(0)
    , _total_flits_received(0)
+   , _total_packet_latency(0)
    , _last_packet_send_time(0)
    , _last_packet_recv_time(0)
+   , _warmup_phase_enabled(false)
+   , _measurement_phase_enabled(false)
+   , _measurement_phase_start_time(0)
+   , _measurement_phase_end_time(0)
+   , _cooldown_phase_enabled(false)
 {
+   // Random Numbers
    _inject_packet_rand_num = new RandNum(0, 1, _core->getId() /* seed */);
    _broadcast_packet_rand_num = new RandNum(0, 1, _core->getId() /* seed */);
 
    NetworkModel* network_model = _core->getNetwork()->getNetworkModelFromPacketType(_packet_type);
-   LOG_ASSERT_ERROR(network_model->isFiniteBuffer(), "Only Finite Buffer Network Models can be used in the [network/user_model_2] configuration option for running this benchmarks");
+   LOG_ASSERT_ERROR(network_model->isFiniteBuffer(), "Only Finite Buffer Network Models can be used in the [network/user_model_2] configuration option for running this benchmark");
    _network_model = (FiniteBufferNetworkModel*) network_model;
+
+   // Start Warmup Phase
+   startWarmupPhase();
 
    // Output Summary
    _core->registerExternalOutputSummaryCallback(::outputSummary, this);
@@ -308,6 +322,10 @@ SyntheticCore::SyntheticCore(Core* core, const vector<int>& send_vec, const vect
 
 SyntheticCore::~SyntheticCore()
 {
+   // End Cooldown Phase
+   endCooldownPhase();
+
+   // Random Numbers
    delete _inject_packet_rand_num;
    delete _broadcast_packet_rand_num;
 
@@ -318,12 +336,11 @@ SyntheticCore::~SyntheticCore()
 void SyntheticCore::netSend(UInt64 net_packet_injector_exit_time)
 {
    LOG_PRINT("Synthetic Core(%i): netSend(%llu)", _core->getId(), net_packet_injector_exit_time);
-   LOG_PRINT("Total Packets Sent(%llu), Total Packets(%llu), Last Packet Send Time(%llu)",
-         _total_packets_sent, _total_packets, _last_packet_send_time);
+   LOG_PRINT("Total Packets Sent(%llu), Last Packet Send Time(%llu)", _total_packets_sent, _last_packet_send_time);
 
-   if (_total_packets_sent == _total_packets)
+   if (_cooldown_phase_enabled)
    {
-      LOG_PRINT("Synthetic Core(%i): All packet sent", _core->getId());
+      log("Synthetic Core(%i): In Cool-Down Phase", _core->getId());
       return;
    }
 
@@ -347,13 +364,13 @@ void SyntheticCore::netSend(UInt64 net_packet_injector_exit_time)
          UInt64 send_time = max<UInt64>(_last_packet_send_time, net_packet_injector_exit_time);
          NetPacket net_packet(send_time, _packet_type, _core->getId(), receiver, packet_size, data);
 
-         // Event Counters
-         _total_packets_sent ++;
-         _total_flits_sent += _network_model->computeSerializationLatency(&net_packet);
-
          // Send out packet
          LOG_PRINT("Sending Out Packet: Time(%llu)", _last_packet_send_time);
          _core->getNetwork()->netSend(net_packet, _last_packet_send_time);
+
+         // Update Event Counters
+         _total_packets_sent ++;
+         _total_flits_sent += _network_model->computeSerializationLatency(&net_packet);
 
          break;
       }
@@ -366,12 +383,264 @@ void SyntheticCore::netRecv(const NetPacket& net_packet)
 
    logNetRecv(net_packet.time);
 
-   // Event Counters
-   LOG_ASSERT_ERROR(_last_packet_recv_time <= net_packet.time, "Last Recv Packet Time(%llu), Curr Packet Time(%llu)",
-                    _last_packet_recv_time, net_packet.time);
-   _last_packet_recv_time = net_packet.time;
-   _total_packets_received ++;
-   _total_flits_received += _network_model->computeSerializationLatency(&net_packet);
+   // Sample Latency
+   UInt64 packet_latency = net_packet.time - net_packet.start_time;
+
+   if (_warmup_phase_enabled)
+   {
+      updateBatchWarmupPhase(net_packet.time, packet_latency);
+   }
+   
+   else if (_measurement_phase_enabled)
+   {
+      LOG_ASSERT_ERROR(_last_packet_recv_time <= net_packet.time,
+                       "Last Recv Packet Time(%llu), Curr Packet Time(%llu)",
+                       _last_packet_recv_time, net_packet.time);
+      _last_packet_recv_time = net_packet.time;
+      
+      // Batch means method for sampling
+      updateBatchMeasurementPhase(net_packet.time, packet_latency);
+      
+      // Event Counters
+      _total_packets_received ++;
+      _total_flits_received += _network_model->computeSerializationLatency(&net_packet);
+      _total_packet_latency += packet_latency;
+   }
+}
+
+// Warmup Phase
+void SyntheticCore::startWarmupPhase()
+{
+   _warmup_phase_enabled = true;
+   _warmup_state = 0;
+
+   _curr_warmup_batch_num = 0;
+   _warmup_batch_list.push_back(Batch());
+}
+
+bool SyntheticCore::endWarmupPhase(UInt64 time)
+{
+   _warmup_phase_enabled = false;
+   _warmup_batch_list.clear();
+
+   _num_cores_with_warmup_phase_completed ++;
+   return (_num_cores_with_warmup_phase_completed == _num_cores);
+}
+
+void SyntheticCore::updateBatchWarmupPhase(UInt64 time, UInt64 sample_latency)
+{
+   Batch& curr_batch = _warmup_batch_list[_curr_warmup_batch_num];
+   curr_batch._total_latency += sample_latency;
+   curr_batch._size ++;
+
+   if (curr_batch._size == _warmup_batch_size)
+   {
+      log("\nCore(%i)", _core->getId());
+      log("Warmup Phase - Batch Num(%i), Batch Size(%i)", _curr_warmup_batch_num, _warmup_batch_size);
+      
+      if (_curr_warmup_batch_num > 0)
+      {
+         bool stationary = checkIfStationary();
+         if (stationary)
+         {
+            log("Ending Warmup Phase");
+            bool global_end_warmup_phase = endWarmupPhase(time);
+            if (global_end_warmup_phase)
+            {
+               log("Globally Ending Warmup Phase");
+               for (SInt32 i = 0; i < _num_cores; i++)
+               {
+                  log("Core(%i): Start Measurement Phase[Time(%llu)]", _core->getId(), time);
+                  SyntheticCore* synthetic_core = _synthetic_core_list[i];
+                  synthetic_core->startMeasurementPhase(time);
+               }
+            }
+         }
+         else // Not Stationary
+         {
+            log("Warmup Phase continues: pushing another batch");
+            _warmup_batch_list.push_back(Batch());
+            _curr_warmup_batch_num ++;
+         }
+      }
+
+      else // First Batch of Numbers
+      {
+         log("First Batch of Numbers: moving to next batch");
+         _warmup_batch_list.push_back(Batch());
+         _curr_warmup_batch_num ++;
+      }
+
+      log("\n");
+   }
+}
+
+// Measurement Phase
+void SyntheticCore::startMeasurementPhase(UInt64 time)
+{
+   _measurement_phase_enabled = true;
+   _measurement_phase_start_time = time;
+
+   _curr_measurement_batch_num = 0;
+   _curr_measurement_batch_size = _batch_size_increment;
+   _measurement_batch_list.resize(_num_measurement_batches, Batch());
+}
+
+bool SyntheticCore::endMeasurementPhase(UInt64 time)
+{
+   _measurement_phase_enabled = false;
+   _measurement_phase_end_time = time;
+   _measurement_batch_list.clear();
+
+   _num_cores_with_measurement_phase_completed ++;
+   return (_num_cores_with_measurement_phase_completed == _num_cores);
+}
+
+void SyntheticCore::updateBatchMeasurementPhase(UInt64 time, UInt64 sample_latency)
+{
+   Batch& curr_batch = _measurement_batch_list[_curr_measurement_batch_num];
+   curr_batch._total_latency += sample_latency;
+   curr_batch._size ++;
+
+   // Update Curr Measurement Batch Num
+   if (curr_batch._size == _curr_measurement_batch_size)
+   {
+      log("Core(%i): Finished measuring batch(%llu), moving onto(%llu)",
+            _core->getId(), _curr_measurement_batch_num, _curr_measurement_batch_num+1);
+      _curr_measurement_batch_num ++;
+   }
+
+   // Check Confidence if samples corresponding to all batches have been received
+   if (_curr_measurement_batch_num == _num_measurement_batches)
+   {
+      log("\nCore(%i)", _core->getId());
+      log("Checking confidence intervals: batch size(%llu)", _curr_measurement_batch_size);
+      bool finished = checkConfidenceIntervals();
+      if (finished)
+      {
+         log("End meaurement phase [Time(%llu)]", time);
+         bool global_end_measurement_phase = endMeasurementPhase(time);
+         if (global_end_measurement_phase)
+         {
+            log("Globally end measurement phase [Time(%llu)]", time);
+            globalStartCooldownPhase();
+         }
+      }
+      else
+      {
+         log("not converged yet, getting next set of batches");
+         _curr_measurement_batch_num = 0;
+         _curr_measurement_batch_size += _batch_size_increment;
+      }
+   }
+}
+
+// Cooldown Phase
+void SyntheticCore::globalStartCooldownPhase()
+{   
+   for (SInt32 i = 0; i < _num_cores; i++)
+   {
+      log("Core(%i): start cooldown phase", _core->getId());
+      SyntheticCore* synthetic_core = _synthetic_core_list[i];
+      synthetic_core->startCooldownPhase();
+   }
+}
+
+void SyntheticCore::startCooldownPhase()
+{
+   _cooldown_phase_enabled = true;
+}
+
+void SyntheticCore::endCooldownPhase()
+{
+   _cooldown_phase_enabled = false;
+}
+
+// Utilities
+bool SyntheticCore::checkIfStationary()
+{
+   log("checkIfStationary() start");
+   Batch& curr_batch = _warmup_batch_list[_curr_warmup_batch_num];
+   double avg_latency_curr_batch = ((double) curr_batch._total_latency) / _warmup_batch_size;
+
+   // Start cooldown phase if average latency is too large
+   if (avg_latency_curr_batch > 5000)
+      globalStartCooldownPhase();
+  
+   if (_warmup_state == 0)
+   {
+      Batch& prev_batch = _warmup_batch_list[_curr_warmup_batch_num-1];
+      double avg_latency_prev_batch = ((double) prev_batch._total_latency) / _warmup_batch_size;
+      _ref_avg_latency = avg_latency_prev_batch;
+   }
+
+   log("Curr Batch Latency(%g), Ref Batch Latency(%g)", avg_latency_curr_batch, _ref_avg_latency);
+
+   double fractional_difference = abs(avg_latency_curr_batch - _ref_avg_latency) / _ref_avg_latency;
+   log("Fractional Difference(%g)", fractional_difference);
+   // Go-back to initial state if fractional difference is too large
+   if (fractional_difference > 0.1)
+   {
+      _warmup_state = 0;
+      return false;
+   }
+
+   if (_warmup_state == 0)
+   {
+      if (avg_latency_curr_batch < _ref_avg_latency)
+         _warmup_state = 1;
+   }
+   else if (_warmup_state >= 1 && _warmup_state < 4)
+   {
+      _warmup_state ++;
+   }
+   else
+   {
+      LOG_PRINT_ERROR("Unrecognized State(%i)", _warmup_state);
+   }
+   
+   log("Warmup state(%i)", _warmup_state);
+   return (_warmup_state == 4) ? true : false;
+}
+
+bool SyntheticCore::checkConfidenceIntervals()
+{
+   log("checkConfidenceIntervals() start");
+   double batch_mean = computeBatchMean();
+   double batch_stddev = computeBatchStdDev(batch_mean);
+   // Average Computed based on Dally et al. (Computer Networks book)
+   // 99% Confidence Interval
+   double t_distribution_val = 2.4;
+   log("Mean(%g), Stddev(%g)", batch_mean, batch_stddev);
+   UInt64 num_samples = _num_measurement_batches * _curr_measurement_batch_size;
+   double error = 2 * batch_stddev * t_distribution_val / sqrt(num_samples);
+   log("error(%g), error/batch_mean(%g)", error, error/batch_mean);
+   if ((error / batch_mean) < 0.01)
+      return true;
+   else
+      return false;
+}
+
+double SyntheticCore::computeBatchMean()
+{
+   UInt64 total_latency = 0;
+   UInt64 num_samples = _num_measurement_batches * _curr_measurement_batch_size;
+   for (SInt32 i = 0; i < (SInt32) _num_measurement_batches; i++)
+      total_latency += _measurement_batch_list[i]._total_latency;
+   return ((double) total_latency) / num_samples;
+}
+
+double SyntheticCore::computeBatchStdDev(double batch_mean)
+{
+   double sum = 0.0;
+   for (SInt32 i = 0; i < (SInt32) _num_measurement_batches; i++)
+   {
+      Batch& curr_batch = _measurement_batch_list[i];
+      double batch_latency = ((double) curr_batch._total_latency) / curr_batch._size;
+      assert(curr_batch._size == _curr_measurement_batch_size);
+      sum += pow(batch_latency - batch_mean, 2);
+   }
+   return sqrt(sum / _num_measurement_batches);
 }
 
 bool SyntheticCore::canInjectPacket()
@@ -386,31 +655,38 @@ bool SyntheticCore::isBroadcastPacket()
 
 void SyntheticCore::logNetSend(UInt64 time)
 {
-   if ((_core->getId() == 0) && ((_total_packets_sent % 100) == 0))
+   if (_core->getId() == 0)
    {
-      debug_printf("Core(0) sending packet(%llu), Time(%llu)\n",
-                   (long long unsigned int) _total_packets_sent, (long long unsigned int) time);
+      // log("Core(0) sending packet[Time(%llu)]", (long long unsigned int) time);
    }
 }
 
 void SyntheticCore::logNetRecv(UInt64 time)
 {
-   if ((_core->getId() == 0) && ((_total_packets_received % 100) == 0))
+   if (_core->getId() == 0)
    {
-      debug_printf("Core(0) receiving packet(%llu), Time(%llu)\n",
-                   (long long unsigned int) _total_packets_received, (long long unsigned int) time);
+      // log("Core(0) receiving packet[Time(%llu)]", (long long unsigned int) time);
    }
 }
 
 void SyntheticCore::outputSummary(ostream& out)
 {
    out << "Synthetic Core Summary: " << endl;
-   out << "    Total Flits Sent: " << _total_flits_sent << endl;
-   out << "    Send Completion Time: " << _last_packet_send_time << endl;
-   out << "    Total Flits Received: " << _total_flits_received << endl;
-   out << "    Recv Completion Time: " << _last_packet_recv_time << endl;
+   
+   // Send
    float offered_throughput = ((float) _total_flits_sent) / _last_packet_send_time;
-   out << "    Offered Throughput: " << offered_throughput << endl;
-   float sustained_throughput = ((float) _total_flits_received) / _last_packet_recv_time;
-   out << "    Sustained Throughput: " << sustained_throughput << endl;
+   double offered_broadcast_load = _fraction_broadcasts * _offered_load * _broadcast_packet_size;
+   double offered_unicast_load = _offered_load * (1 - _fraction_broadcasts) * _unicast_packet_size;
+   out << "    Offered Unicast Load (in flits/clock-cycle): " << offered_unicast_load << endl;
+   out << "    Offered Broadcast Load (in flits/clock-cycle): " << offered_broadcast_load << endl;
+   out << "    Total Offered Load (in flits/clock-cycle): " << offered_unicast_load + offered_broadcast_load << endl;
+
+   // Receive
+   out << "    Total Flits Received: " << _total_flits_received << endl;
+   UInt64 measurement_phase_time = _measurement_phase_end_time - _measurement_phase_start_time;
+   double sustained_throughput = ((double) _total_flits_received) / measurement_phase_time;
+   double average_packet_latency = ((double) _total_packet_latency) / _total_packets_received;
+   out << "    Measurement Phase Time (in clock-cycles): " << measurement_phase_time << endl;
+   out << "    Average Latency (in clock-cycles): " << average_packet_latency << endl;
+   out << "    Sustained Throughput (in flits/clock-cycle): " << sustained_throughput << endl;
 }
