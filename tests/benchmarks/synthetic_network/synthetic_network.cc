@@ -276,6 +276,16 @@ void printHelpMessage()
    fprintf(stderr, " and  <arg6> = Total Number of Packets injected into the Network per Core (default 10000)\n");
 }
 
+void logimp(const char* fmt, ...)
+{
+   va_list ap;
+   va_start(ap, fmt);
+
+   vfprintf(stderr, fmt, ap);
+   fprintf(stderr, "\n");
+   va_end(ap);
+}
+
 void log(const char* fmt, ...)
 {
 #ifdef DEBUG
@@ -448,6 +458,7 @@ void SyntheticCore::updateBatchWarmupPhase(UInt64 time, UInt64 sample_latency)
             if (global_end_warmup_phase)
             {
                log("Globally Ending Warmup Phase");
+               logimp("End Warm-Up Phase, Start Measurement Phase");
                for (SInt32 i = 0; i < _num_cores; i++)
                {
                   log("Core(%i): Start Measurement Phase[Time(%llu)]", _core->getId(), time);
@@ -523,6 +534,7 @@ void SyntheticCore::updateBatchMeasurementPhase(UInt64 time, UInt64 sample_laten
          if (global_end_measurement_phase)
          {
             log("Globally end measurement phase [Time(%llu)]", time);
+            logimp("End Measurement Phase - Start Cool-Down Phase");
             globalStartCooldownPhase();
          }
       }
@@ -565,7 +577,10 @@ bool SyntheticCore::checkIfStationary()
 
    // Start cooldown phase if average latency is too large
    if (avg_latency_curr_batch > 5000)
+   {
+      logimp("Latency Too Large !!  End Warm-Up Phase - Start Cool-Down Phase");
       globalStartCooldownPhase();
+   }
   
    if (_warmup_state == 0)
    {
@@ -578,8 +593,15 @@ bool SyntheticCore::checkIfStationary()
 
    double fractional_difference = abs(avg_latency_curr_batch - _ref_avg_latency) / _ref_avg_latency;
    log("Fractional Difference(%g)", fractional_difference);
+   
+   if (_curr_warmup_batch_num > 20)
+   {
+      logimp("Too Much Time To Warm-Up. Fast-Forward To Measurement Phase");
+      return true;
+   }
+
    // Go-back to initial state if fractional difference is too large
-   if (fractional_difference > 0.1)
+   if (fractional_difference > 0.2)
    {
       _warmup_state = 0;
       return false;
@@ -674,7 +696,6 @@ void SyntheticCore::outputSummary(ostream& out)
    out << "Synthetic Core Summary: " << endl;
    
    // Send
-   float offered_throughput = ((float) _total_flits_sent) / _last_packet_send_time;
    double offered_broadcast_load = _fraction_broadcasts * _offered_load * _broadcast_packet_size;
    double offered_unicast_load = _offered_load * (1 - _fraction_broadcasts) * _unicast_packet_size;
    out << "    Offered Unicast Load (in flits/clock-cycle): " << offered_unicast_load << endl;
@@ -682,11 +703,14 @@ void SyntheticCore::outputSummary(ostream& out)
    out << "    Total Offered Load (in flits/clock-cycle): " << offered_unicast_load + offered_broadcast_load << endl;
 
    // Receive
+   out << "    Total Packets Received: " << _total_packets_received << endl;
    out << "    Total Flits Received: " << _total_flits_received << endl;
    UInt64 measurement_phase_time = _measurement_phase_end_time - _measurement_phase_start_time;
    double sustained_throughput = ((double) _total_flits_received) / measurement_phase_time;
    double average_packet_latency = ((double) _total_packet_latency) / _total_packets_received;
    out << "    Measurement Phase Time (in clock-cycles): " << measurement_phase_time << endl;
+   out << "    Measurement Phase Start Time (in clock-cycles): " << _measurement_phase_start_time << endl;
+   out << "    Measurement Phase End Time (in clock-cycles): " << _measurement_phase_end_time << endl;
    out << "    Average Latency (in clock-cycles): " << average_packet_latency << endl;
    out << "    Sustained Throughput (in flits/clock-cycle): " << sustained_throughput << endl;
 }
