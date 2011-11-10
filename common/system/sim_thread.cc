@@ -57,9 +57,9 @@ void SimThread::run()
       event_queue_manager->processEvents();
    }
 
-   Sim()->getSimThreadManager()->unregisterThread();
-
    LOG_PRINT("Sim thread exiting");
+   
+   Sim()->getSimThreadManager()->unregisterThread();
 }
 
 void SimThread::spawn()

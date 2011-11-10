@@ -64,7 +64,7 @@ EventHeap::processEvents()
 {
    _lock.acquire();
    
-   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]), Size(%u) enter", \
+   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]), Size(%u) enter",
          getEventQueueManager()->getId(), _first_event_time, _heap.size());
    
    while (Sim()->getEventManager()->isReady(_first_event_time))
@@ -92,7 +92,7 @@ EventHeap::processEvents()
       UInt64 next_event_time = (next_event) ? next_event->getTime() : UINT64_MAX_;
       Event::Type next_event_type = (next_event) ? next_event->getType() : Event::INVALID;
 
-      LOG_PRINT("EventHeap(%i): After extractMin(), Next Event (Type[%u],Time[%llu])", \
+      LOG_PRINT("EventHeap(%i): After extractMin(), Next Event (Type[%u],Time[%llu])",
             getEventQueueManager()->getId(), next_event_type, next_event_time);
 
       LOG_ASSERT_ERROR(next_event_time >= event->getTime(), "Next Event Time(%llu), Curr Event Time(%llu)",
@@ -114,7 +114,7 @@ EventHeap::processEvents()
       delete event;
    }
       
-   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]), Size(%u) exit", \
+   LOG_PRINT("EventHeap(%i): processEvents(First Time[%llu]), Size(%u) exit",
          getEventQueueManager()->getId(), _first_event_time, _heap.size());
    
    _lock.release(); 
