@@ -33,10 +33,11 @@ CoreManager::~CoreManager()
       delete *i;
    }
    LOG_PRINT("Deleted all cores");
-   LOG_PRINT("Deleting (%p)", m_core_tls);
    delete m_core_tls;
+   m_core_tls = NULL;
    LOG_PRINT("Deleted m_core_tls");
    delete m_thread_type_tls;
+   m_thread_type_tls = NULL;
    LOG_PRINT("Deleted m_thread_type_tls");
    
    LOG_PRINT("Core Manager dtor end");
@@ -107,7 +108,7 @@ CoreManager::terminateThread()
 Core*
 CoreManager::getCurrentCore()
 {
-    return m_core_tls->getPtr<Core>();
+    return m_core_tls ? m_core_tls->getPtr<Core>() : NULL;
 }
 
 core_id_t
@@ -152,11 +153,11 @@ CoreManager::registerSimThread(core_id_t core_id)
 bool
 CoreManager::amiAppThread()
 {
-    return m_thread_type_tls->getInt() == APP_THREAD;
+    return m_thread_type_tls ? m_thread_type_tls->getInt() == APP_THREAD : false;
 }
 
 bool
 CoreManager::amiSimThread()
 {
-    return m_thread_type_tls->getInt() == SIM_THREAD;
+    return m_thread_type_tls ? m_thread_type_tls->getInt() == SIM_THREAD : false;
 }

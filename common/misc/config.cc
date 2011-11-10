@@ -134,8 +134,7 @@ std::string Config::getOutputFileName() const
 std::string Config::formatOutputFileName(string filename) const
 {
    assert(Simulator::getConfigFile());
-   std::string formated_filename = Simulator::getConfigFile()->getString("general/output_dir",".") + "/" + filename;
-   return formated_filename;
+   return (Simulator::getConfigFile()->getString("general/output_dir",".") + "/" + filename);
 }
 
 void Config::updateCommToCoreMap(UInt32 comm_id, core_id_t core_id)

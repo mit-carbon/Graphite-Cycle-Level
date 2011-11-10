@@ -153,6 +153,7 @@ Simulator::~Simulator()
    delete m_thread_manager;
    LOG_PRINT("Deleted thread_manager");
    delete m_core_manager;
+   m_core_manager = NULL;
    LOG_PRINT("Deleted core_manager");
    delete m_event_manager;
    LOG_PRINT("Deleted event_manager");

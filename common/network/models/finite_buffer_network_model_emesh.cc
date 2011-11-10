@@ -335,35 +335,36 @@ FiniteBufferNetworkModelEMesh::computeMemoryControllerPositions(SInt32 num_memor
    SInt32 emesh_width, emesh_height;
    computeEMeshTopologyParameters(emesh_width, emesh_height);
 
-   vector<core_id_t> core_id_list_along_perimeter;
-
-   for (SInt32 i = 0; i < emesh_width; i++)
-      core_id_list_along_perimeter.push_back(i);
-   
-   for (SInt32 i = 1; i < (emesh_height-1); i++)
-      core_id_list_along_perimeter.push_back((i * emesh_width) + emesh_width-1);
-
-   for (SInt32 i = emesh_width-1; i >= 0; i--)
-      core_id_list_along_perimeter.push_back(((emesh_height-1) * emesh_width) + i);
-
-   for (SInt32 i = emesh_height-2; i >= 1; i--)
-      core_id_list_along_perimeter.push_back(i * emesh_width);
-
-   assert(core_id_list_along_perimeter.size() == (UInt32) (2 * (emesh_width + emesh_height - 2)));
-
-   LOG_ASSERT_ERROR(core_id_list_along_perimeter.size() >= (UInt32) num_memory_controllers,
-         "num cores along perimeter(%u), num memory controllers(%i)",
-         core_id_list_along_perimeter.size(), num_memory_controllers);
-
-   SInt32 spacing_between_memory_controllers = core_id_list_along_perimeter.size() / num_memory_controllers;
-   
-   // core_id_list_with_memory_controllers : list of cores that have memory controllers attached to them
    vector<core_id_t> core_id_list_with_memory_controllers;
+   // Do a greedy mapping here
+   SInt32 memory_controller_mesh_width = (SInt32) floor(sqrt(num_memory_controllers));
+   SInt32 memory_controller_mesh_height = (SInt32) ceil(1.0 * num_memory_controllers / memory_controller_mesh_width);
 
-   for (SInt32 i = 0; i < num_memory_controllers; i++)
+   SInt32 num_computed_memory_controllers = 0;
+   for (SInt32 j = 0; j < (memory_controller_mesh_height) && (num_computed_memory_controllers < num_memory_controllers); j++)
    {
-      SInt32 index = (i * spacing_between_memory_controllers + emesh_width/2) % core_id_list_along_perimeter.size();
-      core_id_list_with_memory_controllers.push_back(core_id_list_along_perimeter[index]);
+      for (SInt32 i = 0; (i < memory_controller_mesh_width) && (num_computed_memory_controllers < num_memory_controllers); i++)
+      {
+         SInt32 size_x = emesh_width / memory_controller_mesh_width;
+         SInt32 size_y = emesh_height / memory_controller_mesh_height;
+         SInt32 base_x = i * size_x;
+         SInt32 base_y = j * size_y;
+
+         if (i == (memory_controller_mesh_width-1))
+         {
+            size_x = emesh_width - ((memory_controller_mesh_width-1) * size_x);
+         }
+         if (j == (memory_controller_mesh_height-1))
+         {
+            size_y = emesh_height - ((memory_controller_mesh_height-1) * size_y);
+         }
+
+         SInt32 pos_x = base_x + size_x/2;
+         SInt32 pos_y = base_y + size_y/2;
+         core_id_t core_id_with_memory_controller = pos_x + pos_y * emesh_width;
+         core_id_list_with_memory_controllers.push_back(core_id_with_memory_controller);
+         num_computed_memory_controllers ++;
+      }
    }
 
    return (make_pair(true, core_id_list_with_memory_controllers));

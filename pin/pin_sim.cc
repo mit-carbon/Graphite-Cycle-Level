@@ -1,8 +1,4 @@
-// Harshad Kasture, Jason Miller, Chris Celio, Charles Gruenwald,
-// Nathan Beckmann, George Kurian, David Wentzlaff, James Psota
-// 10.12.08
-//
-// Carbon Computer Simulator
+// Graphite Simulator
 //
 // This simulator models future multi-core computers with thousands of cores.
 // It runs on today's x86 multicores and will scale as more and more cores

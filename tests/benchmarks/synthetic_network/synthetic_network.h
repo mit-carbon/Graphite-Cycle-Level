@@ -128,4 +128,5 @@ void outputSummary(void* callback_obj, ostream& out);
 
 void printHelpMessage();
 
+void logimp(const char* fmt, ...);
 void log(const char* fmt, ...);
