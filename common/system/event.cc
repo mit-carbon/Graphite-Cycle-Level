@@ -29,7 +29,7 @@ Event::processInOrder(Event* event, core_id_t recv_core_id, EventQueue::Type eve
       return;
    }
 
-   LOG_PRINT("Queueing Event (Type[%u], Time[%llu], Processing Core Id[%i])", \
+   LOG_PRINT("Queueing Event (Type[%u], Time[%llu], Processing Core Id[%i])",
          event->getType(), event->getTime(), recv_core_id);
 
    Sim()->getEventManager()->processEventInOrder(event, recv_core_id, event_queue_type);

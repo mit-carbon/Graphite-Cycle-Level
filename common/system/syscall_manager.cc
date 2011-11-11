@@ -69,6 +69,7 @@ SyscallManager::handleFutexCall(UInt64 curr_time, core_id_t core_id, syscall_arg
    }
 #endif
 
+   // Get the actual value from application memory
    int act_val = *uaddr;
 
 #ifdef KERNEL_LENNY

@@ -8,6 +8,7 @@
 SimplePerformanceModel::SimplePerformanceModel(Core* core, float frequency)
    : PerformanceModel(core, frequency)
    , _last_memory_access_id(0)
+   , _large_data_buffer(NULL)
 {}
 
 SimplePerformanceModel::~SimplePerformanceModel()
@@ -25,7 +26,7 @@ SimplePerformanceModel::handleInstruction(Instruction* instruction,
                                           bool atomic_memory_update,
                                           MemoryAccessList* memory_access_list)
 {
-   LOG_PRINT("handleInstruction(Instruction[%p], atomic_memory_update[%s], memory_access_list[%u])", \
+   LOG_PRINT("handleInstruction(Instruction[%p], atomic_memory_update[%s], memory_access_list[%u])",
          instruction, atomic_memory_update ? "YES" : "NO", memory_access_list->size());
 
    LOG_ASSERT_ERROR(isEnabled(), "Not Enabled Currently");
@@ -41,6 +42,13 @@ SimplePerformanceModel::handleCompletedMemoryAccess(UInt64 time, UInt32 memory_a
 {
    _curr_instruction_status._cycle_count = time;
    _curr_instruction_status._curr_memory_operand_num ++;
+
+   // Delete the large data buffer if it has been used
+   if (_large_data_buffer)
+   {
+      delete [] _large_data_buffer;
+      _large_data_buffer = NULL;
+   }
 
    // Issue memory request to next address
    issueNextMemoryRequest();
@@ -75,13 +83,24 @@ SimplePerformanceModel::issueNextMemoryRequest()
          mem_op_type = Core::WRITE;
       }
 
-      Byte data_buffer[size];
+      Byte* data_buffer;
+      assert(size > 0);
+      if (size <= SCRATCHPAD_SIZE)
+      {
+         data_buffer = _data_buffer;
+      }
+      else // (size > SCRATCHPAD_SIZE)
+      {
+         assert(!_large_data_buffer);
+         _large_data_buffer = new Byte[size];
+         data_buffer = _large_data_buffer;
+      }
 
       UnstructuredBuffer* event_args = new UnstructuredBuffer();
       (*event_args) << getCore()
                     << _last_memory_access_id ++
                     << MemComponent::L1_DCACHE << lock_signal << mem_op_type
-                    << address << (Byte*) data_buffer << size
+                    << address << data_buffer << size
                     << true /* modeled */;
       LOG_PRINT("Event args size(%u)", event_args->size());
       EventInitiateMemoryAccess* event = new EventInitiateMemoryAccess(_curr_instruction_status._cycle_count,

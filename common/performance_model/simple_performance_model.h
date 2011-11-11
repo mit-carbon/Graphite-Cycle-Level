@@ -38,6 +38,9 @@ private:
 
    InstructionStatus _curr_instruction_status;
    UInt32 _last_memory_access_id;
+   static const UInt32 SCRATCHPAD_SIZE = 1024;
+   Byte _data_buffer[SCRATCHPAD_SIZE]; // Only 1 outstanding memory request allowed in the simple core model
+   Byte* _large_data_buffer;
 
    bool issueNextMemoryRequest();
    void completeInstruction();

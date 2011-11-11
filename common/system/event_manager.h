@@ -27,7 +27,7 @@ class EventManager
       // Checks if a particular event is ready
       bool isReady(UInt64 event_time);
 
-      // Chek if there are any more pending events
+      // Check if there are any more pending events
       bool hasEventsPending();
 
       // Create an event and push it onto the processing sim thread's queue

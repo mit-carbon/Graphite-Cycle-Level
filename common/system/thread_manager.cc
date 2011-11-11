@@ -103,7 +103,7 @@ ThreadManager::dequeueThreadSpawnReq()
 {
    ScopedLock sl(_lock);
 
-   LOG_PRINT("getThreadSpawnReq(CoreID[%i],func[%p],arg[%p])", \
+   LOG_PRINT("getThreadSpawnReq(CoreID[%i],func[%p],arg[%p])",
          _curr_thread_spawn_req.core_id, _curr_thread_spawn_req.func, _curr_thread_spawn_req.arg);
    ThreadSpawnRequest req_clone = _curr_thread_spawn_req;
    setCurrThreadSpawnRequest(INVALID_CORE_ID, NULL, NULL);
@@ -129,7 +129,7 @@ ThreadManager::spawnThread(UInt64 time, core_id_t req_core_id, thread_func_t fun
    // Acquire Thread Control Lock
    ScopedLock sl(_lock);
 
-   LOG_PRINT("spawnThread(Time[%llu], req_core_id[%i], func[%p], arg[%p])", \
+   LOG_PRINT("spawnThread(Time[%llu], req_core_id[%i], func[%p], arg[%p])",
          (long long unsigned int) time, req_core_id, func, arg);
 
    // Check that no other thread is being spawned now
