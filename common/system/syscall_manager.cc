@@ -20,7 +20,7 @@ SyscallManager::handleSyscall(UInt64 time, core_id_t core_id, IntPtr syscall_num
    // Acquire Lock
    ScopedLock sl(_lock);
 
-   LOG_PRINT("Syscall: %d from core(%i), Time(%llu)", syscall_number, core_id, time);
+   LOG_PRINT("Syscall: %i from core(%i), Time(%llu)", (int) syscall_number, core_id, time);
 
    switch (syscall_number)
    {
@@ -29,87 +29,66 @@ SyscallManager::handleSyscall(UInt64 time, core_id_t core_id, IntPtr syscall_num
       break;
 
    default:
-      LOG_PRINT_ERROR("Unhandled syscall number: %i from %i", (int) syscall_number, core_id);
+      LOG_PRINT_ERROR("Unhandled syscall number(%i) from %i", (int) syscall_number, core_id);
       break;
    }
 
-   LOG_PRINT("Finished syscall: %d", syscall_number);
+   LOG_PRINT("Finished syscall: %i", syscall_number);
 }
 
 void
 SyscallManager::handleFutexCall(UInt64 curr_time, core_id_t core_id, syscall_args_t args)
 {
-   int *uaddr = (int*) args.arg0;
+   int* addr1 = (int*) args.arg0;
    int op = (int) args.arg1;
-   int val = (int) args.arg2;
-   const struct timespec *timeout = (const struct timespec*) args.arg3;
-   int *uaddr2 = (int*) args.arg4;
+   int val1 = (int) args.arg2;
+   void* timeout = (void*) args.arg3;
+   int* addr2 = (int*) args.arg4;
    int val3 = (int) args.arg5;
 
-   LOG_PRINT("Futex syscall: uaddr(0x%llx), op(%u), val(%u)", uaddr, op, val);
+   LOG_PRINT("Futex syscall: addr1(%#x), op(%u), val1(%i), addr2(%#x), val3(%i)", addr1, op, val1, addr2, val3);
 
    // Right now, we handle only a subset of the functionality
 
-#ifdef KERNEL_LENNY
-   LOG_ASSERT_ERROR((op == FUTEX_WAIT) || (op == (FUTEX_WAIT | FUTEX_PRIVATE_FLAG)) || \
-                    (op == FUTEX_WAKE) || (op == (FUTEX_WAKE | FUTEX_PRIVATE_FLAG)) || \
-                    (op == FUTEX_CMP_REQUEUE) || (op == (FUTEX_CMP_REQUEUE | FUTEX_PRIVATE_FLAG)),
-                    "op = 0x%x", op);
+   LOG_ASSERT_ERROR((op == FUTEX_WAIT)          || (op == (FUTEX_WAIT | FUTEX_PRIVATE_FLAG))       ||
+                    (op == FUTEX_WAKE)          || (op == (FUTEX_WAKE | FUTEX_PRIVATE_FLAG))       ||
+                    (op == FUTEX_WAKE_OP)       || (op == (FUTEX_WAKE_OP | FUTEX_PRIVATE_FLAG))    ||
+                    (op == FUTEX_CMP_REQUEUE)   || (op == (FUTEX_CMP_REQUEUE | FUTEX_PRIVATE_FLAG)),
+                    "op = %#x", op);
+
    if ((op == FUTEX_WAIT) || (op == (FUTEX_WAIT | FUTEX_PRIVATE_FLAG)))
    {
-      LOG_ASSERT_ERROR(!timeout, "timeout(%p)", timeout);
-   }
-#endif
-
-#ifdef KERNEL_ETCH
-   LOG_ASSERT_ERROR(((op == FUTEX_WAIT) || (op == FUTEX_WAKE)), "op = %u", op);
-   if (op == FUTEX_WAIT)
-   {
-      LOG_ASSERT_ERROR(!timeout, "timeout(%p)", timeout);
-   }
-#endif
-
-   // Get the actual value from application memory
-   int act_val = *uaddr;
-
-#ifdef KERNEL_LENNY
-   if ((op == FUTEX_WAIT) || (op == (FUTEX_WAIT | FUTEX_PRIVATE_FLAG)))
-   {
-      futexWait(core_id, uaddr, val, act_val, curr_time); 
+      LOG_ASSERT_ERROR(!timeout, "timeout not-NULL(%p)", timeout);
+      futexWait(core_id, addr1, val1, curr_time); 
    }
    else if ((op == FUTEX_WAKE) || (op == (FUTEX_WAKE | FUTEX_PRIVATE_FLAG)))
    {
-      futexWake(core_id, uaddr, val, curr_time);
+      futexWake(core_id, addr1, val1, curr_time);
+   }
+   else if ((op == FUTEX_WAKE_OP) || (op == (FUTEX_WAKE_OP | FUTEX_PRIVATE_FLAG)))
+   {
+      int val2 = (long int) timeout;
+      futexWakeOp(core_id, addr1, val1, val2, addr2, val3, curr_time);
    }
    else if ((op == FUTEX_CMP_REQUEUE) || (op == (FUTEX_CMP_REQUEUE | FUTEX_PRIVATE_FLAG)))
    {
-      futexCmpRequeue(core_id, uaddr, val, uaddr2, val3, act_val, curr_time);
+      int val2 = (long int) timeout;
+      futexCmpRequeue(core_id, addr1, val1, val2, addr2, val3, curr_time);
    }
-#endif
-   
-#ifdef KERNEL_ETCH
-   if (op == FUTEX_WAIT)
-   {
-      futexWait(core_id, uaddr, val, act_val, curr_time); 
-   }
-   else if (op == FUTEX_WAKE)
-   {
-      futexWake(core_id, uaddr, val, curr_time);
-   }
-#endif
-
 }
 
 // Futex related functions
 void
-SyscallManager::futexWait(core_id_t core_id, int *uaddr, int val, int act_val, UInt64 curr_time)
+SyscallManager::futexWait(core_id_t core_id, int *addr, int val, UInt64 curr_time)
 {
    LOG_PRINT("Futex Wait");
-   SimFutex *sim_futex = &_futexes[(IntPtr) uaddr];
-  
-   if (val != act_val)
+
+   SimFutex *sim_futex = &_futexes[(IntPtr) addr];
+ 
+   int curr_val = *addr;
+   if (val != curr_val)
    {
-      Sim()->getThreadInterface(core_id)->sendSimReply(curr_time, (IntPtr) EWOULDBLOCK);
+      Sim()->getThreadInterface(core_id)->sendSimReply(curr_time, EWOULDBLOCK);
    }
    else
    {
@@ -118,12 +97,142 @@ SyscallManager::futexWait(core_id_t core_id, int *uaddr, int val, int act_val, U
 }
 
 void
-SyscallManager::futexWake(core_id_t core_id, int *uaddr, int val, UInt64 curr_time)
+SyscallManager::futexWake(core_id_t core_id, int *addr, int val, UInt64 curr_time)
 {
    LOG_PRINT("Futex Wake");
-   SimFutex *sim_futex = &_futexes[(IntPtr) uaddr];
+
+   int num_procs_woken_up = __futexWake(addr, val, curr_time);
+   Sim()->getThreadInterface(core_id)->sendSimReply(curr_time, num_procs_woken_up);
+}
+
+void
+SyscallManager::futexWakeOp(core_id_t core_id, int *addr1, int val1, int val2, int* addr2, int val3, UInt64 curr_time)
+{
+   int OP = (val3 >> 28) & 0xf;
+   int CMP = (val3 >> 24) & 0xf;
+   int OPARG = (val3 >> 12) & 0xfff;
+   int CMPARG = (val3) & 0xfff;
+
    int num_procs_woken_up = 0;
 
+   // Get the old value of addr2
+   int oldval = *addr2;
+   
+   int newval = 0;
+   switch (OP)
+   {
+   case FUTEX_OP_SET:
+      newval = OPARG;
+      break;
+
+   case FUTEX_OP_ADD:
+      newval = oldval + OPARG;
+      break;
+
+   case FUTEX_OP_OR:
+      newval = oldval | OPARG;
+      break;
+
+   case FUTEX_OP_ANDN:
+      newval = oldval & (~OPARG);
+      break;
+
+   case FUTEX_OP_XOR:
+      newval = oldval ^ OPARG;
+      break;
+
+   default:
+      LOG_PRINT_ERROR("Futex syscall: FUTEX_WAKE_OP: Unhandled OP(%i)", OP);
+      break;
+   }
+   
+   // Write the newval into addr2
+   *addr2 = newval;
+
+   // Wake upto val1 threads waiting on the first futex
+   num_procs_woken_up += __futexWake(addr1, val1, curr_time);
+
+   bool condition = false;
+   switch (CMP)
+   {
+   case FUTEX_OP_CMP_EQ:
+      condition = (oldval == CMPARG);
+      break;
+
+   case FUTEX_OP_CMP_NE:
+      condition = (oldval != CMPARG);
+      break;
+
+   case FUTEX_OP_CMP_LT:
+      condition = (oldval < CMPARG);
+      break;
+
+   case FUTEX_OP_CMP_LE:
+      condition = (oldval <= CMPARG);
+      break;
+
+   case FUTEX_OP_CMP_GT:
+      condition = (oldval > CMPARG);
+      break;
+
+   case FUTEX_OP_CMP_GE:
+      condition = (oldval >= CMPARG);
+      break;
+
+   default:
+      LOG_PRINT_ERROR("Futex syscall: FUTEX_WAKE_OP: Unhandled CMP(%i)", CMP);
+      break;
+   }
+   
+   // Wake upto val2 threads waiting on the second futex if the condition is true
+   if (condition)
+      num_procs_woken_up += __futexWake(addr2, val2, curr_time);
+
+   // Send reply to the requester
+   Sim()->getThreadInterface(core_id)->sendSimReply(curr_time, num_procs_woken_up);
+}
+
+void
+SyscallManager::futexCmpRequeue(core_id_t core_id, int *addr1, int val1, int val2,
+                                int *addr2, int val3, UInt64 curr_time)
+{
+   LOG_PRINT("Futex CMP_REQUEUE");
+
+   int curr_val = *addr1;
+   if (val3 != curr_val)
+   {
+      Sim()->getThreadInterface(core_id)->sendSimReply(curr_time, EWOULDBLOCK);
+   }
+   else
+   {
+      SimFutex *sim_futex = &_futexes[(IntPtr) addr1];
+      int num_procs_woken_up_or_requeued = 0;
+
+      num_procs_woken_up_or_requeued += __futexWake(addr1, val1, curr_time);
+
+      SimFutex *requeue_futex = &_futexes[(IntPtr) addr2];
+
+      for (int i = 0; i < val2; i++)
+      {
+         core_id_t waiter = sim_futex->dequeueWaiter();
+         if (waiter == INVALID_CORE_ID)
+            break;
+
+         num_procs_woken_up_or_requeued ++;
+
+         requeue_futex->enqueueWaiter(waiter);
+      }
+
+      Sim()->getThreadInterface(core_id)->sendSimReply(curr_time, num_procs_woken_up_or_requeued);
+   }
+}
+
+int
+SyscallManager::__futexWake(int* addr, int val, UInt64 curr_time)
+{
+   SimFutex *sim_futex = &_futexes[(IntPtr) addr];
+
+   int num_procs_woken_up = 0;
    for (int i = 0; i < val; i++)
    {
       core_id_t waiter = sim_futex->dequeueWaiter();
@@ -135,53 +244,9 @@ SyscallManager::futexWake(core_id_t core_id, int *uaddr, int val, UInt64 curr_ti
       Sim()->getThreadInterface(waiter)->sendSimReply(curr_time, 0);
    }
 
-   Sim()->getThreadInterface(core_id)->sendSimReply(curr_time, num_procs_woken_up);
-
+   return num_procs_woken_up;
 }
 
-void
-SyscallManager::futexCmpRequeue(core_id_t core_id, int *uaddr, int val,
-                                int *uaddr2, int val3, int act_val, UInt64 curr_time)
-{
-   LOG_PRINT("Futex CMP_REQUEUE");
-   SimFutex *sim_futex = &_futexes[(IntPtr) uaddr];
-   int num_procs_woken_up = 0;
-
-   if (val3 != act_val)
-   {
-      Sim()->getThreadInterface(core_id)->sendSimReply(curr_time, (IntPtr) EAGAIN);
-   }
-   else
-   {
-      for (int i = 0; i < val; i++)
-      {
-         core_id_t waiter = sim_futex->dequeueWaiter();
-         if (waiter == INVALID_CORE_ID)
-            break;
-
-         num_procs_woken_up ++;
-
-         Sim()->getThreadInterface(waiter)->sendSimReply(curr_time, (IntPtr) 0);
-      }
-
-      SimFutex *requeue_futex = &_futexes[(IntPtr) uaddr2];
-
-      while (true)
-      {
-         // dequeueWaiter changes the thread state to
-         // RUNNING, which is changed back to STALLED 
-         // by enqueueWaiter. Since only the MCP uses this state
-         // this should be okay. 
-         core_id_t waiter = sim_futex->dequeueWaiter();
-         if (waiter == INVALID_CORE_ID)
-            break;
-
-         requeue_futex->enqueueWaiter(waiter);
-      }
-
-      Sim()->getThreadInterface(core_id)->sendSimReply(curr_time, num_procs_woken_up);
-   }
-}
 
 // SimFutex
 SimFutex::SimFutex()

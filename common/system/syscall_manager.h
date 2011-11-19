@@ -50,10 +50,11 @@ private:
    Lock _lock;
 
    // Handling Futexes 
-   void futexWait(core_id_t core_id, int *uaddr, int val, int act_val, UInt64 curr_time);
-   void futexWake(core_id_t core_id, int *uaddr, int val, UInt64 curr_time);
-   void futexCmpRequeue(core_id_t core_id, int *uaddr, int val,
-                        int *uaddr2, int val3, int act_val, UInt64 curr_time);
+   void futexWait(core_id_t core_id, int *addr, int val, UInt64 curr_time);
+   void futexWake(core_id_t core_id, int *addr, int val, UInt64 curr_time);
+   void futexWakeOp(core_id_t core_id, int *addr1, int val1, int val2, int* addr2, int val3, UInt64 curr_time);
+   void futexCmpRequeue(core_id_t core_id, int *addr1, int val1, int val2, int *addr2, int val3, UInt64 curr_time);
+   int __futexWake(int* addr, int val, UInt64 curr_time);
 
    // Handling Futexes
    typedef std::map<IntPtr, SimFutex> FutexMap;
