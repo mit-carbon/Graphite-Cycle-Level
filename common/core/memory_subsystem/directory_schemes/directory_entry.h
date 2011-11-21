@@ -1,44 +1,38 @@
-#ifndef __DIRECTORY_ENTRY_H__
-#define __DIRECTORY_ENTRY_H__
+#pragma once
 
 #include <vector>
+using std::vector;
 
-#include "bit_vector.h"
+#include "fixed_types.h"
 #include "directory_block_info.h"
 
 class DirectoryEntry
 {
-   protected:
-      UInt32 m_max_hw_sharers;
-      UInt32 m_max_num_sharers;
-      core_id_t m_owner_id;
-      IntPtr m_address;
-      BitVector* m_sharers;
-      DirectoryBlockInfo* m_directory_block_info;
+public:
+   DirectoryEntry(SInt32 max_hw_sharers);
+   virtual ~DirectoryEntry();
 
-      std::pair<bool, std::vector<core_id_t> > m_cached_sharers_list;
+   DirectoryBlockInfo* getDirectoryBlockInfo();
 
-   public:
-      DirectoryEntry(UInt32 max_hw_sharers, UInt32 max_num_sharers);
-      virtual ~DirectoryEntry();
+   virtual bool hasSharer(core_id_t sharer_id) = 0;
+   virtual bool addSharer(core_id_t sharer_id) = 0;
+   virtual void removeSharer(core_id_t sharer_id, bool reply_expected = false) = 0;
 
-      DirectoryBlockInfo* getDirectoryBlockInfo();
+   core_id_t getOwner();
+   void setOwner(core_id_t owner_id);
 
-      virtual bool hasSharer(core_id_t sharer_id) = 0;
-      virtual bool addSharer(core_id_t sharer_id) = 0;
-      virtual void removeSharer(core_id_t sharer_id, bool reply_expected = false) = 0;
-      virtual UInt32 getNumSharers() = 0;
+   IntPtr getAddress() { return _address; }
+   void setAddress(IntPtr address) { _address = address; }
 
-      virtual core_id_t getOwner() = 0;
-      virtual void setOwner(core_id_t owner_id) = 0;
+   virtual bool getSharersList(vector<core_id_t>& sharers_list) = 0;
+   virtual core_id_t getOneSharer() = 0;
+   virtual SInt32 getNumSharers() = 0;
 
-      IntPtr getAddress() { return m_address; }
-      void setAddress(IntPtr address) { m_address = address; }
+   virtual UInt32 getLatency() = 0;
 
-      virtual core_id_t getOneSharer() = 0;
-      virtual std::pair<bool, std::vector<core_id_t> >& getSharersList() = 0;
-
-      virtual UInt32 getLatency() = 0;
+protected:
+   IntPtr _address;
+   DirectoryBlockInfo* _directory_block_info;
+   core_id_t _owner_id;
+   SInt32 _max_hw_sharers;
 };
-
-#endif /* __DIRECTORY_ENTRY_H__ */

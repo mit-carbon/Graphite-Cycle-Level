@@ -218,8 +218,10 @@ DramDirectoryCntlr::processNullifyReq(ShmemReq* shmem_req, bool first_call)
 
             // FLUSH_REQ to Owner
             // INV_REQ to all sharers except owner (Also sent to the Owner for sake of convenience)
+            vector<core_id_t> sharers_list;
+            bool all_cores_sharers = directory_entry->getSharersList(sharers_list);
             sendShmemMsg(ShmemMsg::NULLIFY_REQ, ShmemMsg::INV_FLUSH_COMBINED_REQ, address, requester, 
-                  directory_entry->getOwner(), directory_entry->getSharersList());
+                  directory_entry->getOwner(), sharers_list, all_cores_sharers);
          }
          break;
 
@@ -233,8 +235,10 @@ DramDirectoryCntlr::processNullifyReq(ShmemReq* shmem_req, bool first_call)
             LOG_ASSERT_ERROR(directory_entry->getOwner() == INVALID_CORE_ID,
                   "Address(0x%x), State(SHARED), owner(%i)", address, directory_entry->getOwner());
             
+            vector<core_id_t> sharers_list;
+            bool all_cores_sharers = directory_entry->getSharersList(sharers_list);
             sendShmemMsg(ShmemMsg::NULLIFY_REQ, ShmemMsg::INV_REQ, address, requester, 
-                  INVALID_CORE_ID, directory_entry->getSharersList());
+                  INVALID_CORE_ID, sharers_list, all_cores_sharers);
          }
          break;
    
@@ -318,8 +322,10 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, bool first_call
             {
                // FLUSH_REQ to Owner
                // INV_REQ to all sharers except owner (Also sent to the Owner for sake of convenience)
+               vector<core_id_t> sharers_list;
+               bool all_cores_sharers = directory_entry->getSharersList(sharers_list);
                sendShmemMsg(ShmemMsg::EX_REQ, ShmemMsg::INV_FLUSH_COMBINED_REQ, address, requester, 
-                     directory_entry->getOwner(), directory_entry->getSharersList());
+                     directory_entry->getOwner(), sharers_list, all_cores_sharers);
             }
          }
          break;
@@ -351,8 +357,10 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, bool first_call
                // getOneSharer() is a deterministic function
                // FLUSH_REQ to One Sharer (If present)
                // INV_REQ to all other sharers
+               vector<core_id_t> sharers_list;
+               bool all_cores_sharers = directory_entry->getSharersList(sharers_list);
                sendShmemMsg(ShmemMsg::EX_REQ, ShmemMsg::INV_FLUSH_COMBINED_REQ, address, requester,
-                     directory_entry->getOneSharer(), directory_entry->getSharersList());
+                     directory_entry->getOneSharer(), sharers_list, all_cores_sharers);
             }
          }
          break;
@@ -506,11 +514,11 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, bool first_call
 
 void
 DramDirectoryCntlr::sendShmemMsg(ShmemMsg::msg_t requester_msg_type, ShmemMsg::msg_t send_msg_type, IntPtr address,
-      core_id_t requester, core_id_t single_receiver, pair<bool, vector<core_id_t> >& sharers_list_pair)
+      core_id_t requester, core_id_t single_receiver, const vector<core_id_t>& sharers_list, bool all_cores_sharers)
 {
    bool broadcast_inv_req = false;
 
-   if (sharers_list_pair.first == true)
+   if (all_cores_sharers)
    {
       broadcast_inv_req = true;
 
@@ -527,11 +535,11 @@ DramDirectoryCntlr::sendShmemMsg(ShmemMsg::msg_t requester_msg_type, ShmemMsg::m
    else
    {
       // Send Invalidation Request to only a specific set of sharers
-      for (UInt32 i = 0; i < sharers_list_pair.second.size(); i++)
+      for (UInt32 i = 0; i < sharers_list.size(); i++)
       {
          ShmemMsg shmem_msg(send_msg_type, MemComponent::DRAM_DIR, MemComponent::L2_CACHE,
                requester, single_receiver, false, address);
-         getMemoryManager()->sendMsg(sharers_list_pair.second[i], shmem_msg);
+         getMemoryManager()->sendMsg(sharers_list[i], shmem_msg);
       }
    }
 

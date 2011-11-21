@@ -1,35 +1,22 @@
-#ifndef __DIRECTORY_ENTRY_ACKWISE_H__
-#define __DIRECTORY_ENTRY_ACKWISE_H__
+#pragma once
 
-#include "directory_entry.h"
-#include "random.h"
+#include "directory_entry_limited.h"
 
-class DirectoryEntryAckwise : public DirectoryEntry
+class DirectoryEntryAckwise : public DirectoryEntryLimited
 {
-   private:
-      bool m_global_enabled;
-      UInt32 m_num_untracked_sharers;
+public:
+   DirectoryEntryAckwise(SInt32 max_hw_sharers);
+   ~DirectoryEntryAckwise();
+  
+   bool addSharer(core_id_t sharer_id); 
+   void removeSharer(core_id_t sharer_id, bool reply_expected);
 
-   public:
+   bool getSharersList(vector<core_id_t>& sharers_list);
+   SInt32 getNumSharers();
 
-      DirectoryEntryAckwise(UInt32 max_hw_sharers, UInt32 max_num_sharers);
-      ~DirectoryEntryAckwise();
-      
-      bool hasSharer(core_id_t sharer_id);
-      bool addSharer(core_id_t sharer_id);
-      void removeSharer(core_id_t sharer_id, bool reply_expected);
-      UInt32 getNumSharers();
+   UInt32 getLatency();
 
-      core_id_t getOwner();
-      void setOwner(core_id_t owner_id);
-
-      core_id_t getOneSharer();
-      std::pair<bool, std::vector<core_id_t> >& getSharersList();
-
-      UInt32 getLatency();
-
-   private:
-      Random m_rand_num;
+private:
+   bool _global_enabled;
+   SInt32 _num_untracked_sharers;
 };
-
-#endif /* __DIRECTORY_ENTRY_ACKWISE_H__ */

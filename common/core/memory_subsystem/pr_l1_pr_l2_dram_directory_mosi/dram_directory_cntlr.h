@@ -91,7 +91,7 @@ namespace PrL1PrL2DramDirectoryMOSI
          void processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf);
       
-         void sendShmemMsg(ShmemMsg::msg_t requester_msg_type, ShmemMsg::msg_t send_msg_type, IntPtr address, core_id_t requester, core_id_t single_receiver, pair<bool, vector<core_id_t> >& sharers_list_pair);
+         void sendShmemMsg(ShmemMsg::msg_t requester_msg_type, ShmemMsg::msg_t send_msg_type, IntPtr address, core_id_t requester, core_id_t single_receiver, const vector<core_id_t>& sharers_list, bool all_cores_sharers);
          void restartShmemReq(core_id_t sender, ShmemReq* shmem_req, DirectoryState::dstate_t curr_dstate);
 
          // Update Performance Counters
