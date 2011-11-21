@@ -13,6 +13,7 @@ using std::vector;
 
 SimThread::SimThread()
    : m_thread(NULL)
+   , m_terminated(false)
 {}
 
 SimThread::~SimThread()
@@ -26,31 +27,14 @@ void SimThread::run()
 
    // Get the sim thread id
    SInt32 sim_thread_id = Sim()->getSimThreadManager()->registerThread();
-   // Get the core ids' associated with this sim thread id
-   vector<core_id_t>& core_id_list = Sim()->getSimThreadManager()->getCoreIDListFromSimThreadID(sim_thread_id);
-   // Get the cores associated with this sim thread id
-   vector<Network*> network_list;
-   for (vector<core_id_t>::iterator it = core_id_list.begin();
-        it != core_id_list.end(); it++)
-   {
-      network_list.push_back(Sim()->getCoreManager()->getCoreFromID(*it)->getNetwork());
-   }
-   
    // Register the sim thread
-   Sim()->getCoreManager()->registerSimThread(core_id_list.front());
-
-   bool cont = true;
-   // Turn off cont when we receive a quit message
-   Network* net = network_list.front();
-   net->registerAsyncRecvCallback(SIM_THREAD_TERMINATE_THREADS,
-                                  terminateFunc,
-                                  &cont);
+   Sim()->getCoreManager()->registerSimThread(sim_thread_id);
 
    // One EventQueueManager per SimThread
    EventQueueManager* event_queue_manager = Sim()->getEventManager()->getEventQueueManager(sim_thread_id);
-   
+ 
    // Actual work gets done here
-   while(cont)
+   while (!m_terminated)
    {
       // Wait for an event/net_packet
       LOG_PRINT("SimThread: processEvents()");
@@ -58,7 +42,10 @@ void SimThread::run()
    }
 
    LOG_PRINT("Sim thread exiting");
-   
+ 
+   // Unregister the sim thread from the core manager
+   // Sim()->getCoreManager()->unregisterSimThread(sim_thread_id);
+   // Subtract the number of active sim threads from the sim thread manager 
    Sim()->getSimThreadManager()->unregisterThread();
 }
 
@@ -68,8 +55,16 @@ void SimThread::spawn()
    m_thread->run();
 }
 
-void SimThread::terminateFunc(void *vp, NetPacket pkt)
+void SimThread::terminate()
 {
-   bool *pcont = (bool*) vp;
-   *pcont = false;
+   m_terminated = true;
+}
+
+void SimThread::handleTerminationRequest(Event* event)
+{
+   UnstructuredBuffer* event_args = event->getArgs();
+   SimThread* sim_thread;
+   (*event_args) >> sim_thread;
+   LOG_PRINT("Terminate(%p)", sim_thread);
+   sim_thread->terminate();
 }

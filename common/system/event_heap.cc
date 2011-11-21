@@ -28,7 +28,7 @@ EventHeap::~EventHeap()
 void
 EventHeap::push(Event* event, bool is_locked)
 {
-   LOG_PRINT("EventHeap(%i): push(Event[%p],Type[%u],Time[%llu]), is_locked(%s) enter", \
+   LOG_PRINT("EventHeap(%i): push(Event[%p],Type[%u],Time[%llu]), is_locked(%s) enter",
          getEventQueueManager()->getId(), event, event->getType(), event->getTime(), is_locked ? "YES" : "NO");
 
    if (!is_locked)
@@ -55,7 +55,7 @@ EventHeap::push(Event* event, bool is_locked)
    if (!is_locked)
       _lock.release();
    
-   LOG_PRINT("EventHeap(%i): push(Event[%p],Type[%u],Time[%llu]), is_locked(%s) exit", \
+   LOG_PRINT("EventHeap(%i): push(Event[%p],Type[%u],Time[%llu]), is_locked(%s) exit",
          getEventQueueManager()->getId(), event, event->getType(), event->getTime(), is_locked ? "YES" : "NO");
 }
 

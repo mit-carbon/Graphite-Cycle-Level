@@ -8,7 +8,6 @@ enum PacketType
    USER_2,
    SHARED_MEM_1,
    SHARED_MEM_2,
-   SIM_THREAD_TERMINATE_THREADS,
    NUM_PACKET_TYPES
 };
 
@@ -31,8 +30,7 @@ static EStaticNetwork g_type_to_static_network_map[] __attribute__((unused)) =
    STATIC_NETWORK_USER_1,        // USER_1
    STATIC_NETWORK_USER_2,        // USER_2
    STATIC_NETWORK_MEMORY_1,      // SM_1
-   STATIC_NETWORK_MEMORY_2,      // SM_2
-   STATIC_NETWORK_SYSTEM         // ST_TERMINATE_THREADS
+   STATIC_NETWORK_MEMORY_2       // SM_2
 };
 
 #endif

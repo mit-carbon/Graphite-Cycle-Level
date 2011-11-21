@@ -3,7 +3,7 @@
 
 #include "thread.h"
 #include "fixed_types.h"
-#include "network.h"
+#include "event.h"
 
 class SimThread : public Runnable
 {
@@ -12,13 +12,14 @@ public:
    ~SimThread();
 
    void spawn();
+   static void handleTerminationRequest(Event* event);
 
 private:
    void run();
+   void terminate();
 
-   static void terminateFunc(void *vp, NetPacket pkt);
-   
    Thread *m_thread;
+   volatile bool m_terminated;
 };
 
 #endif // SIM_THREAD_H

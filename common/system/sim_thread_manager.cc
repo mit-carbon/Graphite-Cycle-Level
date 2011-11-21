@@ -62,10 +62,13 @@ SimThreadManager::getSimThreadIDFromCoreID(core_id_t core_id)
 void
 SimThreadManager::spawnSimThreads()
 {
+   // Register the exit handler
+   Event::registerHandler(TERMINATE_SIM_THREAD, SimThread::handleTerminationRequest);
+
    UInt32 num_sim_threads = Config::getSingleton()->getTotalSimThreads();
 
    LOG_PRINT("Starting %d threads", num_sim_threads);
-
+   
    m_sim_threads = new SimThread[num_sim_threads];
 
    for (UInt32 i = 0; i < num_sim_threads; i++)
@@ -87,18 +90,16 @@ SimThreadManager::quitSimThreads()
 
    UInt32 num_sim_threads = Config::getSingleton()->getTotalSimThreads();
 
-   // This is something of a hard-wired emulation of Network::netSend
-   // ... not the greatest thing to do, but whatever.
    for (UInt32 i = 0; i < num_sim_threads; i++)
    {
-      NetPacket* pkt = new NetPacket(0, SIM_THREAD_TERMINATE_THREADS, 0, 0, 0, NULL);
-      core_id_t core_id = _sim_thread_id__to__core_id_list__mapping[i].front();
-      pkt->receiver = core_id;
+      // Get a single core id
+      vector<core_id_t>& core_id_list = _sim_thread_id__to__core_id_list__mapping[i];
+      core_id_t core_id = core_id_list.front();
 
       UnstructuredBuffer* event_args = new UnstructuredBuffer();
-      (*event_args) << pkt->receiver << pkt;
-      EventNetwork* event = new EventNetwork(0 /* time */, event_args);
-      Event::processInOrder(event, pkt->receiver, EventQueue::UNORDERED);
+      (*event_args) << &m_sim_threads[i];
+      Event* event = new Event((Event::Type) TERMINATE_SIM_THREAD, 0 /* time */, event_args);
+      Event::processInOrder(event, core_id, EventQueue::UNORDERED);
    }
 
    LOG_PRINT("Waiting for local sim threads to exit.");
@@ -107,6 +108,9 @@ SimThreadManager::quitSimThreads()
       sched_yield();
 
    delete [] m_sim_threads;
+
+   // Unregister the sim thread exit handler
+   Event::unregisterHandler(TERMINATE_SIM_THREAD);
 
    LOG_PRINT("All threads have exited.");
 }

@@ -231,11 +231,9 @@ Network::sendPacket(const NetPacket* packet, SInt32 next_hop)
    UnstructuredBuffer* event_args = new UnstructuredBuffer();
    (*event_args) << next_hop << packet;
    EventNetwork* event = new EventNetwork(packet->time, event_args);
-   
-   // FIXME: Decide about the event_queue_type
-   EventQueue::Type event_queue_type = ((_enabled) && (network_model->isModeled(packet))) ?
-                                       EventQueue::ORDERED : EventQueue::UNORDERED;
-   Event::processInOrder(event, next_hop, event_queue_type);
+  
+   assert(_enabled && network_model->isModeled(packet)); 
+   Event::processInOrder(event, next_hop, EventQueue::ORDERED);
 
    LOG_PRINT("sendPacket(%p) exit", packet);
 }

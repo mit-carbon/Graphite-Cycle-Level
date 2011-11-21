@@ -33,7 +33,7 @@ UnorderedEventQueue::processEvents()
 void
 UnorderedEventQueue::push(Event* event, bool is_locked)
 {
-   LOG_PRINT("UnorderedEventQueue(%i): push(Event[%p],Type[%u],Time[%llu]), is_locked(%s) enter", \
+   LOG_PRINT("UnorderedEventQueue(%i): push(Event[%p],Type[%u],Time[%llu]), is_locked(%s) enter",
          getEventQueueManager()->getId(), event, event->getType(), event->getTime(), is_locked ? "YES" : "NO");
 
    assert(!is_locked);
