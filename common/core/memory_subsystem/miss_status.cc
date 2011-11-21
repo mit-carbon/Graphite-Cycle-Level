@@ -4,7 +4,7 @@
 MissStatus*
 MissStatusMap::get(IntPtr address)
 {
-   LOG_PRINT("MissStatusMap(%p): Address(0x%llx), get()", this, address);
+   LOG_PRINT("MissStatusMap(%p): Address(%#lx), get()", this, address);
    MissStatusInfo::iterator it = _miss_status_info.find(address);
    if (it == _miss_status_info.end())
       return (MissStatus*) NULL;
@@ -17,7 +17,7 @@ MissStatusMap::get(IntPtr address)
 size_t
 MissStatusMap::size(IntPtr address)
 {
-   LOG_PRINT("MissStatusMap(%p): Address(0x%llx), size()", this, address);
+   LOG_PRINT("MissStatusMap(%p): Address(%#lx), size()", this, address);
    MissStatusInfo::iterator it = _miss_status_info.find(address);
    
    if (it == _miss_status_info.end())
@@ -31,7 +31,7 @@ MissStatusMap::size(IntPtr address)
 bool
 MissStatusMap::insert(MissStatus* miss_status)
 {
-   LOG_PRINT("MissStatusMap(%p): Address(0x%llx), insert(), size(%u)", this, miss_status->_address, _miss_status_info.size());
+   LOG_PRINT("MissStatusMap(%p): Address(%#lx), insert(), size(%u)", this, miss_status->_address, _miss_status_info.size());
 
    IntPtr address = miss_status->_address;
    
@@ -56,7 +56,7 @@ MissStatusMap::insert(MissStatus* miss_status)
 MissStatus*
 MissStatusMap::erase(MissStatus* miss_status)
 {
-   LOG_PRINT("MissStatusMap(%p): Address(0x%llx), erase(), size(%u)", \
+   LOG_PRINT("MissStatusMap(%p): Address(%#lx), erase(), size(%u)",
          this, miss_status->_address, _miss_status_info.size());
    
    IntPtr address = miss_status->_address;
@@ -98,6 +98,6 @@ MissStatusMap::print()
    MissStatusInfo::iterator it = _miss_status_info.begin();
    for ( ; it != _miss_status_info.end(); it ++)
    {
-      LOG_PRINT("Address(0x%llx), Size(%u)", (*it).first, ((*it).second)->size());
+      LOG_PRINT("Address(%#lx), Size(%u)", (*it).first, ((*it).second)->size());
    }
 }

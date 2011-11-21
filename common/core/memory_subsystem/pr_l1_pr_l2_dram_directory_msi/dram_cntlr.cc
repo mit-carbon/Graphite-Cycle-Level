@@ -78,6 +78,7 @@ DramCntlr::getDataFromDram(core_id_t sender, ShmemMsg* shmem_msg)
                                requester /* requester */,
                                sender /* receiver */,
                                address,
+                               false /* reply_expected */,
                                data_buf, getCacheBlockSize());
 }
 

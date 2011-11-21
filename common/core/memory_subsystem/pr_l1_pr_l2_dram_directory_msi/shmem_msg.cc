@@ -1,4 +1,7 @@
-#include <string.h>
+#include <cstring>
+#include <cassert>
+#include <sstream>
+using std::ostringstream;
 #include "shmem_msg.h"
 #include "log.h"
 
@@ -10,6 +13,7 @@ namespace PrL1PrL2DramDirectoryMSI
       m_receiver_mem_component(MemComponent::INVALID_MEM_COMPONENT),
       m_requester(INVALID_CORE_ID),
       m_address(INVALID_ADDRESS),
+      m_reply_expected(false),
       m_data_buf(NULL),
       m_data_length(0)
    {}
@@ -19,6 +23,7 @@ namespace PrL1PrL2DramDirectoryMSI
          MemComponent::component_t receiver_mem_component,
          core_id_t requester,
          IntPtr address,
+         bool reply_expected,
          Byte* data_buf,
          UInt32 data_length) :
       m_msg_type(msg_type),
@@ -26,18 +31,20 @@ namespace PrL1PrL2DramDirectoryMSI
       m_receiver_mem_component(receiver_mem_component),
       m_requester(requester),
       m_address(address),
+      m_reply_expected(reply_expected),
       m_data_buf(data_buf),
       m_data_length(data_length)
    {}
 
-   ShmemMsg::ShmemMsg(ShmemMsg* shmem_msg) :
-      m_msg_type(shmem_msg->getMsgType()),
-      m_sender_mem_component(shmem_msg->getSenderMemComponent()),
-      m_receiver_mem_component(shmem_msg->getReceiverMemComponent()),
-      m_requester(shmem_msg->getRequester()),
-      m_address(shmem_msg->getAddress()),
-      m_data_buf(shmem_msg->getDataBuf()),
-      m_data_length(shmem_msg->getDataLength())
+   ShmemMsg::ShmemMsg(const ShmemMsg& shmem_msg) :
+      m_msg_type(shmem_msg.getMsgType()),
+      m_sender_mem_component(shmem_msg.getSenderMemComponent()),
+      m_receiver_mem_component(shmem_msg.getReceiverMemComponent()),
+      m_requester(shmem_msg.getRequester()),
+      m_address(shmem_msg.getAddress()),
+      m_reply_expected(shmem_msg.isReplyExpected()),
+      m_data_buf(shmem_msg.getDataBuf()),
+      m_data_length(shmem_msg.getDataLength())
    {}
 
    ShmemMsg::~ShmemMsg()
@@ -57,7 +64,7 @@ namespace PrL1PrL2DramDirectoryMSI
    }
 
    Byte*
-   ShmemMsg::makeMsgBuf()
+   ShmemMsg::makeMsgBuf() const
    {
       Byte* msg_buf = new Byte[getMsgLen()];
       memcpy(msg_buf, (void*) this, sizeof(*this));
@@ -71,13 +78,39 @@ namespace PrL1PrL2DramDirectoryMSI
    }
 
    UInt32
-   ShmemMsg::getMsgLen()
+   ShmemMsg::getMsgLen() const
    {
+      assert((m_data_buf != NULL) == (m_data_length > 0));
       return (sizeof(*this) + m_data_length);
    }
 
+   ShmemMsg*
+   ShmemMsg::clone() const
+   {
+      assert((m_data_buf != NULL) == (m_data_length > 0));
+      
+      ShmemMsg* cloned_msg = new ShmemMsg(*this);
+      if (m_data_length > 0)
+      {
+         cloned_msg->setDataBuf(new Byte[m_data_length]);
+         memcpy(cloned_msg->getDataBuf(), m_data_buf, m_data_length);
+      }
+      return cloned_msg;
+   }
+
+   void
+   ShmemMsg::release()
+   {
+      assert((m_data_buf != NULL) == (m_data_length > 0));
+      if (m_data_length > 0)
+      {
+         delete [] m_data_buf;
+      }
+      delete this;
+   }
+
    UInt32
-   ShmemMsg::getModeledLength()
+   ShmemMsg::getModeledLength() const
    {
       switch(m_msg_type)
       {

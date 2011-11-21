@@ -37,6 +37,9 @@ namespace PrL1PrL2DramDirectoryMSI
          DramDirectoryCache* m_dram_directory_cache;
          ReqQueueList* m_dram_directory_req_queue_list;
 
+         // Type of directory - (full_map, limited_broadcast, limited_no_broadcast, ackwise, limitless)
+         Directory::DirectoryType m_directory_type;
+
          // Outstanding DRAM requests
          set<IntPtr> m_dram_req_outstanding_set;
          // Inactive Address set

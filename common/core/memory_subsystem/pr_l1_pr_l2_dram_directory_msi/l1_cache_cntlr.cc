@@ -76,9 +76,10 @@ L1CacheCntlr::initiateCacheAccess(MemComponent::component_t mem_component,
                                   Byte* data_buf, UInt32 data_length,
                                   bool modeled)
 {
-   LOG_PRINT("initiateCacheAccess() [Core Id(%i), Memory Access Id(%u), Mem Component(%u), Lock Signal(%u), Mem Op Type(%u), CA-Address(0x%llx), Offset(%u), Data Buf(%p), Data Length(%u), Modeled(%s)]", \
-         getCoreId(), memory_access_id, mem_component, lock_signal, mem_op_type, \
-         ca_address, offset, data_buf, data_length, modeled ? "TRUE" : "FALSE");
+   LOG_PRINT("initiateCacheAccess() [Core Id(%i), Memory Access Id(%u), Mem Component(%u), Lock Signal(%u), "
+             "Mem Op Type(%u), CA-Address(%#lx), Offset(%u), Data Buf(%p), Data Length(%u), Modeled(%s)]",
+             getCoreId(), memory_access_id, mem_component, lock_signal, mem_op_type,
+             ca_address, offset, data_buf, data_length, modeled ? "TRUE" : "FALSE");
   
    if (m_miss_status_maps[mem_component].get(ca_address))
    { 
@@ -119,9 +120,10 @@ L1CacheCntlr::doInitiateCacheAccess(MemComponent::component_t mem_component,
                                     bool modeled,
                                     L1MissStatus* l1_miss_status)
 {
-   LOG_PRINT("Core Id(%i): doInitiateCacheAccess() [Memory Access Id(%u), Mem Component(%u), Lock Signal(%u), Mem Op Type(%u), CA-Address(0x%llx), Offset(%u), Data Buf(%p), Data Length(%u), Modeled(%s)], L1 Miss Status(%p)", \
-         getCoreId(), memory_access_id, mem_component, lock_signal, mem_op_type, \
-         address, offset, data_buf, data_length, modeled ? "TRUE" : "FALSE", l1_miss_status);
+   LOG_PRINT("Core Id(%i): doInitiateCacheAccess() [Memory Access Id(%u), Mem Component(%u), Lock Signal(%u), "
+             "Mem Op Type(%u), CA-Address(%#lx), Offset(%u), Data Buf(%p), Data Length(%u), Modeled(%s)], L1 Miss Status(%p)",
+             getCoreId(), memory_access_id, mem_component, lock_signal, mem_op_type,
+             address, offset, data_buf, data_length, modeled ? "TRUE" : "FALSE", l1_miss_status);
    
    assert((!l1_miss_status) || (l1_miss_status->_access_num == 1) || (l1_miss_status->_access_num == 2));
    bool update_cache_counters = ( (!l1_miss_status) || (l1_miss_status->_access_num == 1) );
@@ -148,7 +150,7 @@ L1CacheCntlr::doInitiateCacheAccess(MemComponent::component_t mem_component,
    }
 
    assert(update_cache_counters);
-   LOG_ASSERT_ERROR(lock_signal != Core::UNLOCK, "Expected to find address(0x%x) in L1 Cache", address);
+   LOG_ASSERT_ERROR(lock_signal != Core::UNLOCK, "Expected to find address(%#lx) in L1 Cache", address);
 
    // Invalidate the cache block before passing the request to L2 Cache
    invalidateCacheBlock(mem_component, address);
@@ -194,7 +196,12 @@ L1CacheCntlr::doInitiateCacheAccess(MemComponent::component_t mem_component,
    l1_miss_status->_access_num ++; 
 
    // Send the request to the L2 Cache
-   ShmemMsg shmem_msg(shmem_msg_type, mem_component, MemComponent::L2_CACHE, getCoreId(), address, NULL, 0);
+   ShmemMsg shmem_msg(shmem_msg_type,
+         mem_component, MemComponent::L2_CACHE,
+         getCoreId(),
+         address,
+         false /* reply_expected */,
+         NULL, 0);
    m_l2_cache_cntlr->handleMsgFromL1Cache(&shmem_msg);
 }
 
@@ -203,8 +210,8 @@ L1CacheCntlr::completeCacheRequest(MemComponent::component_t mem_component,
                                    UInt32 memory_access_id,
                                    L1MissStatus* l1_miss_status)
 {
-   LOG_PRINT("completeCacheRequest(): [Mem Component(%u), Memory Access Id(%u), L1 Miss Status(%p)]", \
-         mem_component, memory_access_id, l1_miss_status);
+   LOG_PRINT("completeCacheRequest(): [Mem Component(%u), Memory Access Id(%u), L1 Miss Status(%p)]",
+             mem_component, memory_access_id, l1_miss_status);
 
    // Send Reply to Core
    UnstructuredBuffer* event_args = new UnstructuredBuffer();
@@ -274,7 +281,6 @@ L1CacheCntlr::operationPermissibleinL1Cache(
       IntPtr address, Core::mem_op_t mem_op_type,
       bool modeled, bool update_cache_counters)
 {
-   // TODO: Verify why this works
    bool cache_hit = false;
    CacheState::cstate_t cstate = getCacheState(mem_component, address);
    
@@ -392,7 +398,7 @@ L1CacheCntlr::releaseLock()
 {
    LOG_PRINT("releaseLock()");
    m_locked = false;
-   m_l2_cache_cntlr->scheduleNextPendingRequest(getShmemPerfModel()->getCycleCount());
+   m_l2_cache_cntlr->scheduleNextPendingRequest(getShmemPerfModel()->getCycleCount()-1);
 }
 
 bool

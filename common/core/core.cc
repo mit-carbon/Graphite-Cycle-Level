@@ -256,7 +256,7 @@ Core::initiateMemoryAccess(UInt64 time,
                            UInt32 bytes,
                            bool modeled)
 {
-   LOG_PRINT("Initiate Memory Access [Core Id(%i), Time(%llu), Mem Component(%u), Lock Signal(%u), Mem Op Type(%u), Address(0x%llx), Data Buffer(%p), Bytes(%u), Modeled(%s)]", \
+   LOG_PRINT("Initiate Memory Access [Core Id(%i), Time(%llu), Mem Component(%u), Lock Signal(%u), Mem Op Type(%u), Address(0x%llx), Data Buffer(%p), Bytes(%u), Modeled(%s)]",
          m_core_id, time, mem_component, lock_signal, mem_op_type, address, data_buffer, bytes, modeled ? "TRUE" : "FALSE");
 
    assert(bytes >= 0);
@@ -290,7 +290,7 @@ Core::completeCacheAccess(UInt64 time, UInt32 memory_access_id)
 void
 Core::continueMemoryAccess(MemoryAccessStatus& memory_access_status)
 {
-   LOG_PRINT("Continue Memory Access [Core Id(%i), Access Id(%u), Bytes Remaining(%u)]", \
+   LOG_PRINT("Continue Memory Access [Core Id(%i), Access Id(%u), Bytes Remaining(%u)]",
          m_core_id, memory_access_status._access_id, memory_access_status._bytes_remaining);
 
    if (memory_access_status._bytes_remaining == 0)

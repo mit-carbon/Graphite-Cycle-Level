@@ -112,12 +112,6 @@ MemoryManager::MemoryManager(Core* core,
 
    LOG_PRINT("Finished Reading Parameters from cfg file");
 
-   if (getCore()->getId() == 0)
-   {
-      LOG_ASSERT_ERROR(directory_type != "limited_broadcast",
-            "Limited Broadcast directory scheme CANNOT be used with the MSI protocol.");
-   }
-
    LOG_PRINT("Starting to calculate memory controller positions");
    std::vector<core_id_t> core_list_with_dram_controllers = getCoreListWithMemoryControllers();
    // if (getCore()->getId() == 0)
@@ -276,8 +270,12 @@ MemoryManager::handleMsgFromNetwork(NetPacket& packet)
    MemComponent::component_t receiver_mem_component = shmem_msg->getReceiverMemComponent();
    MemComponent::component_t sender_mem_component = shmem_msg->getSenderMemComponent();
 
-   LOG_PRINT("Core Id(%i): Got Shmem Msg: type(%i), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), sender(%i), receiver(%i)", 
-         getCore()->getId(), shmem_msg->getMsgType(), shmem_msg->getAddress(), sender_mem_component, receiver_mem_component, sender, packet.receiver);    
+   LOG_PRINT("Core Id(%i): Got Shmem Msg: type(%u), address(%#lx), "
+             "sender_mem_component(%u), receiver_mem_component(%u), "
+             "sender(%i), receiver(%i)", 
+             getCore()->getId(), shmem_msg->getMsgType(), shmem_msg->getAddress(),
+             sender_mem_component, receiver_mem_component,
+             sender, packet.receiver);    
 
    switch (receiver_mem_component)
    {
@@ -340,28 +338,27 @@ MemoryManager::handleMsgFromNetwork(NetPacket& packet)
       break;
    }
 
-   // Delete the allocated Shared Memory Message
-   // First delete 'data_buf' if it is present
    // LOG_PRINT("Finished handling Shmem Msg");
 
-   if (shmem_msg->getDataLength() > 0)
-   {
-      assert(shmem_msg->getDataBuf());
-      delete [] shmem_msg->getDataBuf();
-   }
-   delete shmem_msg;
+   // Delete the allocated Shared Memory Message
+   shmem_msg->release();
 }
 
 void
-MemoryManager::sendMsg(ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, Byte* data_buf, UInt32 data_length)
+MemoryManager::sendMsg(ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, bool reply_expected, Byte* data_buf, UInt32 data_length)
 {
    assert((data_buf == NULL) == (data_length == 0));
-   ShmemMsg shmem_msg(msg_type, sender_mem_component, receiver_mem_component, requester, address, data_buf, data_length);
+   ShmemMsg shmem_msg(msg_type, sender_mem_component, receiver_mem_component, requester, address, reply_expected, data_buf, data_length);
 
    Byte* msg_buf = shmem_msg.makeMsgBuf();
    UInt64 msg_time = getShmemPerfModel()->getCycleCount();
 
-   LOG_PRINT("Core Id(%i): Sending Msg: type(%u), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), requester(%i), sender(%i), receiver(%i)", getCore()->getId(), msg_type, address, sender_mem_component, receiver_mem_component, requester, getCore()->getId(), receiver);
+   LOG_PRINT("Core Id(%i): Sending Msg: type(%u), address(%#lx), "
+             "sender_mem_component(%u), receiver_mem_component(%u), "
+             "requester(%i), sender(%i), receiver(%i)",
+             getCore()->getId(), msg_type, address,
+             sender_mem_component, receiver_mem_component,
+             requester, getCore()->getId(), receiver);
 
    NetPacket packet(msg_time, SHARED_MEM_1,
          getCore()->getId(), receiver,
@@ -376,15 +373,20 @@ MemoryManager::sendMsg(ShmemMsg::msg_t msg_type, MemComponent::component_t sende
 }
 
 void
-MemoryManager::broadcastMsg(ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, IntPtr address, Byte* data_buf, UInt32 data_length)
+MemoryManager::broadcastMsg(ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, IntPtr address, bool reply_expected, Byte* data_buf, UInt32 data_length)
 {
    assert((data_buf == NULL) == (data_length == 0));
-   ShmemMsg shmem_msg(msg_type, sender_mem_component, receiver_mem_component, requester, address, data_buf, data_length);
+   ShmemMsg shmem_msg(msg_type, sender_mem_component, receiver_mem_component, requester, address, reply_expected, data_buf, data_length);
 
    Byte* msg_buf = shmem_msg.makeMsgBuf();
    UInt64 msg_time = getShmemPerfModel()->getCycleCount();
 
-   LOG_PRINT("Core Id(%i): Sending Msg: type(%u), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), requester(%i), sender(%i), receiver(%i)", getCore()->getId(), msg_type, address, sender_mem_component, receiver_mem_component, requester, getCore()->getId(), NetPacket::BROADCAST);
+   LOG_PRINT("Core Id(%i): Broadcasting Msg: type(%u), address(%#lx), "
+             "sender_mem_component(%u), receiver_mem_component(%u), "
+             "requester(%i), sender(%i)",
+             getCore()->getId(), msg_type, address,
+             sender_mem_component, receiver_mem_component,
+             requester, getCore()->getId());
 
    NetPacket packet(msg_time, SHARED_MEM_1,
          getCore()->getId(), NetPacket::BROADCAST,
