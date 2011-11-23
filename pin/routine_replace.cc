@@ -49,35 +49,24 @@ void routineCallback(RTN rtn, void* v)
    {
       RTN_Open(rtn);
 
-      RTN_InsertCall(rtn, IPOINT_BEFORE,
-            AFUNPTR(Simulator::disablePerformanceModels),
-            IARG_END);
-
-      RTN_Close(rtn);
-   }
-
-   // main
-   if (rtn_name == "main")
-   {
-      RTN_Open(rtn);
-
-      // Before main()
       if (Sim()->getCfg()->getBool("general/enable_models_at_startup",true))
       {
          RTN_InsertCall(rtn, IPOINT_BEFORE,
                AFUNPTR(Simulator::enablePerformanceModels),
                IARG_END);
       }
+      else // Ensure that all models are disabled
+      {
+         RTN_InsertCall(rtn, IPOINT_BEFORE,
+               AFUNPTR(Simulator::disablePerformanceModels),
+               IARG_END);
+      }
 
+      // Initialize Barrier
       RTN_InsertCall(rtn, IPOINT_BEFORE,
             AFUNPTR(CarbonInitModels),
             IARG_END);
-
-      // After main()
-      RTN_InsertCall(rtn, IPOINT_AFTER,
-            AFUNPTR(Simulator::disablePerformanceModels),
-            IARG_END);
-
+      
       RTN_Close(rtn);
    }
 
