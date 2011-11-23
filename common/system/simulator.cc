@@ -65,8 +65,6 @@ Simulator::Simulator()
    , m_sync_manager(NULL)
    , m_syscall_manager(NULL)
    , m_boot_time(getTime())
-   , m_start_time(0)
-   , m_stop_time(0)
    , m_shutdown_time(0)
 {
 }
@@ -131,10 +129,7 @@ Simulator::~Simulator()
    // Core Summary
    ofstream os(Config::getSingleton()->getOutputFileName().c_str());
 
-   os << "Simulation timers: " << endl
-      << "start time\t" << (m_start_time - m_boot_time) << endl
-      << "stop time\t" << (m_stop_time - m_boot_time) << endl
-      << "shutdown time\t" << (m_shutdown_time - m_boot_time) << endl;
+   os << "Total Simulation Time: " << (m_shutdown_time - m_boot_time) << endl;
 
    m_core_manager->outputSummary(os);
    os.close();
@@ -171,18 +166,6 @@ Simulator::getThreadInterface(core_id_t core_id)
 }
 
 void
-Simulator::startTimer()
-{
-   m_start_time = getTime();
-}
-
-void
-Simulator::stopTimer()
-{
-   m_stop_time = getTime();
-}
-
-void
 Simulator::enablePerformanceModels()
 {
    LOG_PRINT("Simulator::enablePerformanceModels()");
@@ -200,7 +183,6 @@ void
 Simulator::__enablePerformanceModels()
 {
    LOG_PRINT("Simulator::enablePerformanceModels start");
-   Sim()->startTimer();
    for (UInt32 i = 0; i < Config::getSingleton()->getTotalCores(); i++)
       Sim()->getCoreManager()->getCoreFromID(i)->enablePerformanceModels();
    LOG_PRINT("Simulator::enablePerformanceModels end");
@@ -210,7 +192,6 @@ void
 Simulator::__disablePerformanceModels()
 {
    LOG_PRINT("Simulator::disablePerformanceModels start");
-   Sim()->stopTimer();
    for (UInt32 i = 0; i < Config::getSingleton()->getTotalCores(); i++)
       Sim()->getCoreManager()->getCoreFromID(i)->disablePerformanceModels();
    LOG_PRINT("Simulator::disablePerformanceModels end");

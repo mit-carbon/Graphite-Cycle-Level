@@ -44,9 +44,6 @@ public:
    static void __enablePerformanceModels();
    static void __disablePerformanceModels();
 
-   void startTimer();
-   void stopTimer();
-
    std::string getGraphiteHome() { return _graphite_home; }
 
 private:
@@ -64,8 +61,6 @@ private:
    static Simulator *m_singleton;
 
    UInt64 m_boot_time;
-   UInt64 m_start_time;
-   UInt64 m_stop_time;
    UInt64 m_shutdown_time;
    
    static config::Config *m_config_file;
