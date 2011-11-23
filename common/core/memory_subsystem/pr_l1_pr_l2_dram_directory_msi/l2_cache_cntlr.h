@@ -112,7 +112,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
       // Handle message from Dram Dir
       void handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg);
-      void __handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg);
+      bool __handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg);
       
       // Schedule the Next Pending Request from Dram Directory
       void scheduleNextPendingRequest(UInt64 time);

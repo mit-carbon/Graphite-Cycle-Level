@@ -398,7 +398,7 @@ L1CacheCntlr::releaseLock()
 {
    LOG_PRINT("releaseLock()");
    m_locked = false;
-   m_l2_cache_cntlr->scheduleNextPendingRequest(getShmemPerfModel()->getCycleCount()-1);
+   m_l2_cache_cntlr->scheduleNextPendingRequest(getShmemPerfModel()->getCycleCount());
 }
 
 bool

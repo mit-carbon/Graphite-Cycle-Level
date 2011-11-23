@@ -197,6 +197,8 @@ handleL2CacheAccessReq(Event* event)
    // Set the Time correctly
    l2_cache_cntlr->getShmemPerfModel()->setCycleCount(event->getTime());
 
+   bool handled = true;
+
    switch (shmem_msg->getSenderMemComponent())
    {
    case MemComponent::L1_ICACHE:
@@ -205,7 +207,7 @@ handleL2CacheAccessReq(Event* event)
       break;
    
    case MemComponent::DRAM_DIR:
-      l2_cache_cntlr->__handleMsgFromDramDirectory(sender, shmem_msg);
+      handled = l2_cache_cntlr->__handleMsgFromDramDirectory(sender, shmem_msg);
       break;
 
    default:
@@ -213,8 +215,11 @@ handleL2CacheAccessReq(Event* event)
       break;
    }
 
-   // Release the memory
-   shmem_msg->release();
+   if (handled)
+   {
+      // Release the memory
+      shmem_msg->release();
+   }
 }
 
 void
@@ -227,15 +232,11 @@ L2CacheCntlr::scheduleNextPendingRequest(UInt64 time)
    {
       // Get the L2 Cache Access Req at the front of the list
       pair<core_id_t,ShmemMsg*> blocked_req = m_pending_dram_directory_req_list.front();
-      m_pending_dram_directory_req_list.pop_front();
       
       core_id_t sender = blocked_req.first;
       ShmemMsg* shmem_msg = blocked_req.second;
 
       scheduleRequest(time, sender, shmem_msg);
-     
-      // Release the msg 
-      shmem_msg->release();
    }
 }
 
@@ -252,9 +253,8 @@ L2CacheCntlr::scheduleRequest(UInt64 time, core_id_t sender, ShmemMsg* shmem_msg
    time += queue_delay;
 
    // Push an event to access the L2 Cache from the Directory after cloning the msg
-   ShmemMsg* cloned_shmem_msg = shmem_msg->clone();
    UnstructuredBuffer* event_args = new UnstructuredBuffer();
-   (*event_args) << this << sender << cloned_shmem_msg;
+   (*event_args) << this << sender << shmem_msg;
    Event* event = new Event((Event::Type) L2_CACHE_ACCESS_REQ, time, event_args);
    Event::processInOrder(event, getCoreId(), EventQueue::ORDERED);
 }
@@ -264,8 +264,9 @@ L2CacheCntlr::handleMsgFromL1Cache(ShmemMsg* shmem_msg)
 {
    assert(!isLocked());
 
+   ShmemMsg* cloned_shmem_msg = shmem_msg->clone();
    // Schedule the request according to the processing delays within the L2 Cache
-   scheduleRequest(getShmemPerfModel()->getCycleCount(), getCoreId(), shmem_msg);
+   scheduleRequest(getShmemPerfModel()->getCycleCount(), getCoreId(), cloned_shmem_msg);
 }
 
 void
@@ -353,28 +354,35 @@ L2CacheCntlr::handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg)
    LOG_PRINT("handleMsgFromDramDirectory(Sender[%i], Address[%#lx], Type[%u], Requester[%i])",
          sender, shmem_msg->getAddress(), shmem_msg->getMsgType(), shmem_msg->getRequester());
 
-   if ( (isLocked()) || (!m_pending_dram_directory_req_list.empty()) )
-   {
-      LOG_PRINT("Locked. Cloning Message and pushing it to the waiting list");
-      // Clone the packet and queue it up
-      ShmemMsg* cloned_shmem_msg = shmem_msg->clone();
-      m_pending_dram_directory_req_list.push_back(make_pair(sender,cloned_shmem_msg));
-   }
-   else // If (NOT locked) AND (NO earlier requests pending)
+   ShmemMsg* cloned_shmem_msg = shmem_msg->clone();
+   m_pending_dram_directory_req_list.push_back(make_pair(sender,cloned_shmem_msg));
+   
+   if ( (!isLocked()) && (m_pending_dram_directory_req_list.size() == 1) )
    {
       // Schedule the request according to the processing delays within the L2 Cache
-      scheduleRequest(getShmemPerfModel()->getCycleCount(), sender, shmem_msg);
+      scheduleRequest(getShmemPerfModel()->getCycleCount(), sender, cloned_shmem_msg);
    }
 }
 
 // Called after going through the contention model
-void
+bool
 L2CacheCntlr::__handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg)
 {
    LOG_PRINT("__handleMsgFromDramDirectory(Sender[%i], Address[%#lx], Type[%u], Requester[%i])",
          sender, shmem_msg->getAddress(), shmem_msg->getMsgType(), shmem_msg->getRequester());
 
-   assert(!isLocked());
+   if (isLocked())
+   {
+      LOG_PRINT("Locked. Keeping the msg at the front of the waiting list "
+                "since the private cache hierarchy was locked in between operations");
+      // Was not handled sucessfully
+      return false;
+   }
+
+   // Pop the request from the pending list
+   pair<core_id_t,ShmemMsg*> shmem_req = m_pending_dram_directory_req_list.front();
+   assert(sender == shmem_req.first && shmem_msg == shmem_req.second);
+   m_pending_dram_directory_req_list.pop_front();
 
    // Schedule the next request from the dram directory (if any)
    scheduleNextPendingRequest(getShmemPerfModel()->getCycleCount());
@@ -420,6 +428,9 @@ L2CacheCntlr::__handleMsgFromDramDirectory(core_id_t sender, ShmemMsg* shmem_msg
       delete l2_miss_status;
       LOG_PRINT("Erased L2MissStatus data structure from the map");
    }
+
+   // Was handled sucessfully
+   return true;
 }
 
 void
@@ -539,7 +550,7 @@ L2CacheCntlr::processWbReqFromDramDirectory(core_id_t sender, ShmemMsg* shmem_ms
    CacheState::cstate_t cstate = getCacheState(l2_cache_block_info);
    if (cstate != CacheState::INVALID)
    {
-      assert(cstate == CacheState::MODIFIED);
+      LOG_ASSERT_ERROR(cstate == CacheState::MODIFIED, "Cache State(%u)", cstate);
  
       // Set the Appropriate Cache State in L1 also
       setCacheStateInL1(l2_cache_block_info->getCachedLoc(), address, CacheState::SHARED);
